@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "14292077427",
+    "project_id": "trandia-d06ac",
+    "storage_bucket": "trandia-d06ac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:14292077427:android:3ee0518778e3d760c9d306",
+        "android_client_info": {
+          "package_name": "com.trendia.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhm2d0jnljLoNxqhgXdKFkbUswIfCiEB4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

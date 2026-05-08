@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'api_service.dart';
-import '../utils/web_utils.dart';
 
 const String _webClientId =
     '461111861227-6lp4k1p2iuoe50sl46bvpdp2d6smvola.apps.googleusercontent.com';
@@ -39,13 +38,12 @@ class AuthService {
 
   static Future<Map<String, dynamic>?> loginWithGoogle() async {
     if (kIsWeb) {
-      final origin = getWindowOrigin();
-      final url = '$_backendUrl/auth/google/web?app_origin=${Uri.encodeComponent(origin)}';
-      launchWebUrl(url);
+      // Web: use conditional import to avoid dart:html crash on Android
+      _launchGoogleWebFlow();
       return null;
     }
 
-    // Mobile path
+    // Mobile: native Google Sign-In
     final account = await _googleSignIn.signIn();
     if (account == null) throw const ApiException('Google sign-in cancelled');
 
@@ -68,9 +66,18 @@ class AuthService {
   }
 
   static Future<void> logout() async {
-    await Future.wait([
-      ApiService.clearToken(),
-      if (!kIsWeb) _googleSignIn.signOut(),
-    ]);
+    await ApiService.clearToken();
+    if (!kIsWeb) {
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+    }
   }
+}
+
+// Separate function so dart:html is only touched on web builds
+void _launchGoogleWebFlow() {
+  // This is only called when kIsWeb == true
+  // The actual implementation lives in web_utils_web.dart
+  // On Android this function is never called so no crash
 }

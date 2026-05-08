@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../home/home_screen.dart';
+import '../../services/auth_service.dart';
+import '../../services/api_service.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -13,6 +16,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _emailController    = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword     = true;
+  bool _isLoading           = false;
 
   @override
   void dispose() {
@@ -23,11 +27,73 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+    );
+  }
+
+  Future<void> _handleSignUp() async {
+    final name     = _nameController.text.trim();
+    final username = _usernameController.text.trim();
+    final email    = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (name.isEmpty || username.isEmpty || email.isEmpty || password.isEmpty) {
+      _showError('Please fill in all fields');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await AuthService.signup(
+        name: name,
+        username: username,
+        email: email,
+        password: password,
+      );
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (_) => false,
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Could not connect to server. Check your network.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleGoogleSignUp() async {
+    setState(() => _isLoading = true);
+    try {
+      final result = await AuthService.loginWithGoogle();
+      // On web, result == null because the browser is redirecting away to
+      // Google. The token is picked up in main.dart when it comes back.
+      if (result == null) return;
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (_) => false,
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Google sign-in failed. Try again.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // ── Color Tokens ─────────────────────────────────────────────
     final bgColors = isDark
         ? [const Color(0xFF1F1F22), const Color(0xFF0E0E10), const Color(0xFF050506)]
         : [const Color(0xFFFFFFFF), const Color(0xFFF4F4F5), const Color(0xFFECECEE)];
@@ -64,8 +130,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 28),
-
-                // ── Logo + Heading ────────────────────────────────
                 Center(
                   child: Column(
                     children: [
@@ -77,177 +141,55 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           borderRadius: BorderRadius.circular(13),
                         ),
                         child: Center(
-                          child: Text(
-                            '✦',
-                            style: TextStyle(
-                              color: logoMark,
-                              fontSize: 24,
-                              height: 1.0,
-                            ),
-                          ),
+                          child: Text('✦', style: TextStyle(color: logoMark, fontSize: 24, height: 1.0)),
                         ),
                       ),
                       const SizedBox(height: 18),
-                      Text(
-                        'Create account',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w500,
-                          color: textPrimary,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
+                      Text('Create account', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: textPrimary, letterSpacing: -0.3)),
                       const SizedBox(height: 6),
-                      Text(
-                        'Join the conversation',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: textSecondary,
-                        ),
-                      ),
+                      Text('Join the conversation', style: TextStyle(fontSize: 13, color: textSecondary)),
                     ],
                   ),
                 ),
                 const SizedBox(height: 36),
-
-                // ── Full Name ─────────────────────────────────────
                 _FieldLabel(label: 'Name', color: labelColor),
                 const SizedBox(height: 8),
-                _PillTextField(
-                  controller: _nameController,
-                  hint: 'Your full name',
-                  prefixIcon: Icons.person_outline_rounded,
-                  keyboardType: TextInputType.name,
-                  textInputAction: TextInputAction.next,
-                  inputBg: inputBg,
-                  inputBorder: inputBorder,
-                  iconColor: iconColor,
-                  hintColor: hintColor,
-                  textColor: textPrimary,
-                ),
+                _PillTextField(controller: _nameController, hint: 'Your full name', prefixIcon: Icons.person_outline_rounded, keyboardType: TextInputType.name, textInputAction: TextInputAction.next, inputBg: inputBg, inputBorder: inputBorder, iconColor: iconColor, hintColor: hintColor, textColor: textPrimary),
                 const SizedBox(height: 16),
-
-                // ── Username ──────────────────────────────────────
                 _FieldLabel(label: 'Username', color: labelColor),
                 const SizedBox(height: 8),
-                _PillTextField(
-                  controller: _usernameController,
-                  hint: 'username',
-                  prefixIcon: Icons.alternate_email_rounded,
-                  keyboardType: TextInputType.text,
-                  textInputAction: TextInputAction.next,
-                  inputBg: inputBg,
-                  inputBorder: inputBorder,
-                  iconColor: iconColor,
-                  hintColor: hintColor,
-                  textColor: textPrimary,
-                ),
+                _PillTextField(controller: _usernameController, hint: 'username', prefixIcon: Icons.alternate_email_rounded, keyboardType: TextInputType.text, textInputAction: TextInputAction.next, inputBg: inputBg, inputBorder: inputBorder, iconColor: iconColor, hintColor: hintColor, textColor: textPrimary),
                 const SizedBox(height: 16),
-
-                // ── Email ─────────────────────────────────────────
                 _FieldLabel(label: 'Email', color: labelColor),
                 const SizedBox(height: 8),
-                _PillTextField(
-                  controller: _emailController,
-                  hint: 'you@example.com',
-                  prefixIcon: Icons.mail_outline_rounded,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  inputBg: inputBg,
-                  inputBorder: inputBorder,
-                  iconColor: iconColor,
-                  hintColor: hintColor,
-                  textColor: textPrimary,
-                ),
+                _PillTextField(controller: _emailController, hint: 'you@example.com', prefixIcon: Icons.mail_outline_rounded, keyboardType: TextInputType.emailAddress, textInputAction: TextInputAction.next, inputBg: inputBg, inputBorder: inputBorder, iconColor: iconColor, hintColor: hintColor, textColor: textPrimary),
                 const SizedBox(height: 16),
-
-                // ── Password ──────────────────────────────────────
                 _FieldLabel(label: 'Password', color: labelColor),
                 const SizedBox(height: 8),
-                _PillTextField(
-                  controller: _passwordController,
-                  hint: 'Create a password',
-                  prefixIcon: Icons.lock_outline_rounded,
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.done,
-                  suffixIcon: _obscurePassword
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  onSuffixTap: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                  inputBg: inputBg,
-                  inputBorder: inputBorder,
-                  iconColor: iconColor,
-                  hintColor: hintColor,
-                  textColor: textPrimary,
-                ),
+                _PillTextField(controller: _passwordController, hint: 'Create a password', prefixIcon: Icons.lock_outline_rounded, obscureText: _obscurePassword, textInputAction: TextInputAction.done, suffixIcon: _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, onSuffixTap: () => setState(() => _obscurePassword = !_obscurePassword), inputBg: inputBg, inputBorder: inputBorder, iconColor: iconColor, hintColor: hintColor, textColor: textPrimary),
                 const SizedBox(height: 26),
-
-                // ── Create Account Button ─────────────────────────
-                _PillButton(
-                  label: 'Create account',
-                  bgColor: btnBg,
-                  textColor: btnText,
-                  onTap: () {
-                    // TODO: handle sign up logic
-                  },
-                ),
+                _PillButton(label: _isLoading ? 'Creating account…' : 'Create account', bgColor: btnBg, textColor: btnText, onTap: _isLoading ? null : _handleSignUp),
                 const SizedBox(height: 26),
-
-                // ── OR Divider ────────────────────────────────────
                 _OrDivider(lineColor: dividerColor, textColor: hintColor),
                 const SizedBox(height: 22),
-
-                // ── Continue with Google ──────────────────────────
-                _GoogleButton(
-                  borderColor: inputBorder,
-                  bgColor: inputBg,
-                  textColor: textPrimary,
-                  iconColor: iconColor,
-                  onTap: () {
-                    // TODO: handle Google sign up
-                  },
-                ),
+                _GoogleButton(borderColor: inputBorder, bgColor: inputBg, textColor: textPrimary, iconColor: iconColor, onTap: _isLoading ? null : _handleGoogleSignUp),
                 const SizedBox(height: 32),
-
-                // ── Terms Note ────────────────────────────────────
                 Center(
-                  child: Text(
-                    'By creating an account, you agree to our\nTerms of Service and Privacy Policy.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: textSecondary,
-                      height: 1.6,
-                    ),
-                  ),
+                  child: Text('By creating an account, you agree to our\nTerms of Service and Privacy Policy.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: textSecondary, height: 1.6)),
                 ),
                 const SizedBox(height: 24),
-
-                // ── Sign In Link ──────────────────────────────────
                 Center(
                   child: GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
+                    onTap: _isLoading ? null : () => Navigator.pop(context),
                     behavior: HitTestBehavior.opaque,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: RichText(
                         text: TextSpan(
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: textSecondary,
-                          ),
+                          style: TextStyle(fontSize: 13, color: textSecondary),
                           children: [
                             const TextSpan(text: 'Already have an account?  '),
-                            TextSpan(
-                              text: 'Sign in',
-                              style: TextStyle(
-                                color: textPrimary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                            TextSpan(text: 'Sign in', style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500)),
                           ],
                         ),
                       ),
@@ -270,44 +212,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
 class _FieldLabel extends StatelessWidget {
   const _FieldLabel({required this.label, required this.color});
-
   final String label;
   final Color color;
-
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(left: 6),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: color,
-          letterSpacing: 0.1,
-        ),
-      ),
+      child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: color, letterSpacing: 0.1)),
     );
   }
 }
 
 class _PillTextField extends StatelessWidget {
   const _PillTextField({
-    required this.controller,
-    required this.hint,
-    required this.prefixIcon,
-    required this.inputBg,
-    required this.inputBorder,
-    required this.iconColor,
-    required this.hintColor,
-    required this.textColor,
-    this.obscureText = false,
-    this.suffixIcon,
-    this.onSuffixTap,
-    this.keyboardType,
-    this.textInputAction,
+    required this.controller, required this.hint, required this.prefixIcon,
+    required this.inputBg, required this.inputBorder, required this.iconColor,
+    required this.hintColor, required this.textColor,
+    this.obscureText = false, this.suffixIcon, this.onSuffixTap,
+    this.keyboardType, this.textInputAction,
   });
-
   final TextEditingController controller;
   final String hint;
   final IconData prefixIcon;
@@ -316,67 +239,27 @@ class _PillTextField extends StatelessWidget {
   final VoidCallback? onSuffixTap;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
-  final Color inputBg;
-  final Color inputBorder;
-  final Color iconColor;
-  final Color hintColor;
-  final Color textColor;
+  final Color inputBg, inputBorder, iconColor, hintColor, textColor;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 52,
       child: TextField(
-        controller: controller,
-        obscureText: obscureText,
-        keyboardType: keyboardType,
-        textInputAction: textInputAction,
+        controller: controller, obscureText: obscureText,
+        keyboardType: keyboardType, textInputAction: textInputAction,
         style: TextStyle(fontSize: 14, color: textColor),
         decoration: InputDecoration(
-          filled: true,
-          fillColor: inputBg,
-          hintText: hint,
+          filled: true, fillColor: inputBg, hintText: hint,
           hintStyle: TextStyle(fontSize: 14, color: hintColor),
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 15,
-            horizontal: 20,
-          ),
-          prefixIcon: Padding(
-            padding: const EdgeInsets.only(left: 18, right: 10),
-            child: Icon(prefixIcon, color: iconColor, size: 19),
-          ),
-          prefixIconConstraints: const BoxConstraints(
-            minWidth: 0,
-            minHeight: 0,
-          ),
-          suffixIcon: suffixIcon != null
-              ? GestureDetector(
-                  onTap: onSuffixTap,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 18),
-                    child: Icon(suffixIcon, color: iconColor, size: 19),
-                  ),
-                )
-              : null,
-          suffixIconConstraints: const BoxConstraints(
-            minWidth: 0,
-            minHeight: 0,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(100),
-            borderSide: BorderSide(color: inputBorder, width: 1),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(100),
-            borderSide: BorderSide(color: inputBorder, width: 1),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(100),
-            borderSide: BorderSide(
-              color: inputBorder.withOpacity(0.7),
-              width: 1.5,
-            ),
-          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+          prefixIcon: Padding(padding: const EdgeInsets.only(left: 18, right: 10), child: Icon(prefixIcon, color: iconColor, size: 19)),
+          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+          suffixIcon: suffixIcon != null ? GestureDetector(onTap: onSuffixTap, child: Padding(padding: const EdgeInsets.only(right: 18), child: Icon(suffixIcon, color: iconColor, size: 19))) : null,
+          suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(100), borderSide: BorderSide(color: inputBorder, width: 1)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(100), borderSide: BorderSide(color: inputBorder, width: 1)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(100), borderSide: BorderSide(color: inputBorder.withValues(alpha: 0.7), width: 1.5)),
         ),
       ),
     );
@@ -384,41 +267,18 @@ class _PillTextField extends StatelessWidget {
 }
 
 class _PillButton extends StatelessWidget {
-  const _PillButton({
-    required this.label,
-    required this.bgColor,
-    required this.textColor,
-    required this.onTap,
-  });
-
+  const _PillButton({required this.label, required this.bgColor, required this.textColor, required this.onTap});
   final String label;
-  final Color bgColor;
-  final Color textColor;
-  final VoidCallback onTap;
-
+  final Color bgColor, textColor;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 52,
       child: ElevatedButton(
         onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: bgColor,
-          foregroundColor: textColor,
-          shadowColor: Colors.transparent,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(100),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: textColor,
-          ),
-        ),
+        style: ElevatedButton.styleFrom(backgroundColor: bgColor, foregroundColor: textColor, shadowColor: Colors.transparent, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100))),
+        child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: textColor)),
       ),
     );
   }
@@ -426,88 +286,33 @@ class _PillButton extends StatelessWidget {
 
 class _OrDivider extends StatelessWidget {
   const _OrDivider({required this.lineColor, required this.textColor});
-
-  final Color lineColor;
-  final Color textColor;
-
+  final Color lineColor, textColor;
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Divider(color: lineColor, thickness: 1, height: 1),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Text(
-            'OR',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: textColor,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Divider(color: lineColor, thickness: 1, height: 1),
-        ),
-      ],
-    );
+    return Row(children: [
+      Expanded(child: Divider(color: lineColor, thickness: 1, height: 1)),
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Text('OR', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: textColor, letterSpacing: 1.2))),
+      Expanded(child: Divider(color: lineColor, thickness: 1, height: 1)),
+    ]);
   }
 }
 
 class _GoogleButton extends StatelessWidget {
-  const _GoogleButton({
-    required this.borderColor,
-    required this.bgColor,
-    required this.textColor,
-    required this.iconColor,
-    required this.onTap,
-  });
-
-  final Color borderColor;
-  final Color bgColor;
-  final Color textColor;
-  final Color iconColor;
-  final VoidCallback onTap;
-
+  const _GoogleButton({required this.borderColor, required this.bgColor, required this.textColor, required this.iconColor, required this.onTap});
+  final Color borderColor, bgColor, textColor, iconColor;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 52,
       child: OutlinedButton(
         onPressed: onTap,
-        style: OutlinedButton.styleFrom(
-          backgroundColor: bgColor,
-          foregroundColor: textColor,
-          side: BorderSide(color: borderColor, width: 1),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(100),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'G',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: iconColor,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              'Continue with Google',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: textColor,
-              ),
-            ),
-          ],
-        ),
+        style: OutlinedButton.styleFrom(backgroundColor: bgColor, foregroundColor: textColor, side: BorderSide(color: borderColor, width: 1), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100))),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text('G', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: iconColor)),
+          const SizedBox(width: 10),
+          Text('Continue with Google', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: textColor)),
+        ]),
       ),
     );
   }

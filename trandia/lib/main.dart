@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
@@ -16,15 +15,22 @@ import 'utils/web_utils.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase using the generated firebase_options.dart
+  // Step 1: Initialize Firebase
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    FcmService.listenForTokenRefresh();
+    debugPrint('[Firebase] ✅ Initialized');
   } catch (e) {
-    debugPrint('[Firebase] Init failed (non-fatal): $e');
+    debugPrint('[Firebase] ❌ Init failed: $e');
   }
+
+  // Step 2: Pre-fetch FCM token NOW — before any login/signup happens.
+  // Cached in SharedPreferences so login/signup can read it instantly.
+  await FcmService.initAndCache();
+
+  // Step 3: Listen for future token refreshes
+  FcmService.listenForTokenRefresh();
 
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
@@ -70,9 +76,7 @@ class _SplashRouterState extends State<_SplashRouter> {
   }
 
   Future<void> _route() async {
-    await _requestNotificationPermission();
-
-    // Web Google OAuth redirect — read ?token= from URL
+    // Web Google OAuth redirect
     final params = getUrlSearchParams();
     if (params.containsKey('token')) {
       final token = params['token']!;
@@ -91,15 +95,6 @@ class _SplashRouterState extends State<_SplashRouter> {
       if (!mounted) return;
       _navigateTo(const LoginScreen());
     }
-  }
-
-  Future<void> _requestNotificationPermission() async {
-    try {
-      final status = await Permission.notification.status;
-      if (status.isDenied || status.isProvisional) {
-        await Permission.notification.request();
-      }
-    } catch (_) {}
   }
 
   void _navigateTo(Widget screen) {

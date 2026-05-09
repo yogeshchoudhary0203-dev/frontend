@@ -17,11 +17,10 @@ GoogleSignIn get _googleSignIn {
 }
 
 class AuthService {
-  /// Email + password login.
-  /// Fetches FCM token and sends it so the backend can push notifications.
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
-    final fcmToken = await FcmService.getToken();
+    // Use CACHED token — fast, no permission dialog during login
+    final fcmToken = await FcmService.getCachedToken();
 
     final body = <String, dynamic>{
       'email': email,
@@ -34,15 +33,14 @@ class AuthService {
     return data;
   }
 
-  /// Email + password signup.
-  /// Fetches FCM token and sends it so the backend can send a welcome notification.
   static Future<Map<String, dynamic>> signup({
     required String name,
     required String username,
     required String email,
     required String password,
   }) async {
-    final fcmToken = await FcmService.getToken();
+    // Use CACHED token — fast, no permission dialog during signup
+    final fcmToken = await FcmService.getCachedToken();
 
     final body = <String, dynamic>{
       'name': name,
@@ -57,7 +55,6 @@ class AuthService {
     return data;
   }
 
-  /// Google Sign-In (mobile) or browser redirect (web).
   static Future<Map<String, dynamic>?> loginWithGoogle() async {
     if (kIsWeb) {
       final origin = getWindowOrigin();
@@ -67,7 +64,6 @@ class AuthService {
       return null;
     }
 
-    // Mobile — native Google Sign-In
     final account = await _googleSignIn.signIn();
     if (account == null) throw const ApiException('Google sign-in cancelled');
 
@@ -77,7 +73,8 @@ class AuthService {
       throw const ApiException('Could not get Google ID token from device.');
     }
 
-    final fcmToken = await FcmService.getToken();
+    // Use CACHED token
+    final fcmToken = await FcmService.getCachedToken();
 
     final body = <String, dynamic>{'id_token': idToken};
     if (fcmToken != null) body['fcm_token'] = fcmToken;
@@ -87,7 +84,6 @@ class AuthService {
     return data;
   }
 
-  /// Check if a non-expired JWT is stored locally.
   static Future<bool> isLoggedIn() async {
     try {
       final token = await ApiService.getToken();

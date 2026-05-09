@@ -2,4 +2,5 @@
 <resources>
     <!-- Trandia brand green — used as FCM notification accent color -->
     <color name="notification_color">#00C853</color>
+	<color name="ic_launcher_background">#FFFFFF</color>
 </resources>

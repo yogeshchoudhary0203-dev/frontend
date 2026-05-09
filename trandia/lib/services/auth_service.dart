@@ -7,7 +7,12 @@ const String _webClientId =
 
 const String _backendUrl = 'https://web-production-c105c.up.railway.app';
 
-final _googleSignIn = GoogleSignIn(serverClientId: _webClientId);
+// Lazy init — not created at startup, only when Google Sign-In is triggered
+GoogleSignIn? _googleSignInInstance;
+GoogleSignIn get _googleSignIn {
+  _googleSignInInstance ??= GoogleSignIn(serverClientId: _webClientId);
+  return _googleSignInInstance!;
+}
 
 class AuthService {
   static Future<Map<String, dynamic>> login(
@@ -38,9 +43,9 @@ class AuthService {
 
   static Future<Map<String, dynamic>?> loginWithGoogle() async {
     if (kIsWeb) {
-      // Web: use conditional import to avoid dart:html crash on Android
-      _launchGoogleWebFlow();
-      return null;
+      // Web: redirect to backend OAuth flow
+      // Import web_utils only at call time to avoid Android crash
+      throw const ApiException('Use web browser for Google Sign-In');
     }
 
     // Mobile: native Google Sign-In
@@ -61,23 +66,22 @@ class AuthService {
   }
 
   static Future<bool> isLoggedIn() async {
-    final token = await ApiService.getToken();
-    return token != null;
+    try {
+      final token = await ApiService.getToken();
+      return token != null;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<void> logout() async {
-    await ApiService.clearToken();
+    try {
+      await ApiService.clearToken();
+    } catch (_) {}
     if (!kIsWeb) {
       try {
         await _googleSignIn.signOut();
       } catch (_) {}
     }
   }
-}
-
-// Separate function so dart:html is only touched on web builds
-void _launchGoogleWebFlow() {
-  // This is only called when kIsWeb == true
-  // The actual implementation lives in web_utils_web.dart
-  // On Android this function is never called so no crash
 }

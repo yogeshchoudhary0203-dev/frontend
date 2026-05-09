@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'services/auth_service.dart';
@@ -38,10 +39,16 @@ class _SplashRouterState extends State<_SplashRouter> {
   @override
   void initState() {
     super.initState();
-    _route();
+    // FIX: addPostFrameCallback ensures Navigator is fully ready before we
+    // attempt any navigation. Without this, Navigator.pushReplacement can
+    // throw a silent exception in release mode (no red screen — app just closes).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _route());
   }
 
   Future<void> _route() async {
+    // Request notification permission on first launch (Android 13+ / API 33+)
+    await _requestNotificationPermission();
+
     try {
       final loggedIn = await AuthService.isLoggedIn();
       if (!mounted) return;
@@ -49,6 +56,17 @@ class _SplashRouterState extends State<_SplashRouter> {
     } catch (e) {
       if (!mounted) return;
       _navigateTo(const LoginScreen());
+    }
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    try {
+      final status = await Permission.notification.status;
+      if (status.isDenied || status.isProvisional) {
+        await Permission.notification.request();
+      }
+    } catch (_) {
+      // Permission request failure should never block app startup
     }
   }
 

@@ -15,7 +15,8 @@ dependencies:
   http: ^1.2.2
   shared_preferences: ^2.3.2
   google_sign_in: ^6.2.2
-  web: ^1.1.0        # replaces dart:html for Flutter web in Dart 3.4+
+  permission_handler: ^11.3.1
+  web: ^1.1.0   # only used in web_utils_web.dart via conditional export — safe for Android
 
 dev_dependencies:
   flutter_test:

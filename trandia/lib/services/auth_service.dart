@@ -36,6 +36,7 @@ class AuthService {
     
     final granted = await FcmService.requestPermissionIfNeeded();
     if (granted) {
+      await Future.delayed(const Duration(seconds: 1));
       FcmService.showNotification(
         title: "Welcome back, $firstName ✦", 
         body: "Great to have you back. Your feed is right where you left it."
@@ -69,6 +70,7 @@ class AuthService {
     
     final granted = await FcmService.requestPermissionIfNeeded();
     if (granted) {
+      await Future.delayed(const Duration(seconds: 1));
       FcmService.showNotification(
         title: "Welcome to Trandia ✦", 
         body: "Hi $firstName, you're all set. Explore conversations and connect with people."
@@ -110,6 +112,7 @@ class AuthService {
     
     final granted = await FcmService.requestPermissionIfNeeded();
     if (granted) {
+      await Future.delayed(const Duration(seconds: 1));
       FcmService.showNotification(
         title: "Welcome to Trandia ✦", 
         body: "Hi $firstName, you're all set. Explore conversations and connect with people."

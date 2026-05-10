@@ -175,6 +175,13 @@ class FcmService {
       debugPrint('[FCM]    notification: ${msg.notification?.title}');
       debugPrint('[FCM]    data: ${msg.data}');
 
+      // Ignore 'welcome' type to prevent duplicates, as we trigger it locally 
+      // exactly 1 second after permission is granted.
+      if (msg.data['type'] == 'welcome') {
+        debugPrint('[FCM] 🛡️ Ignoring backend welcome push (shown locally).');
+        return;
+      }
+
       final title = msg.notification?.title
           ?? msg.data['title'] as String?
           ?? 'Trandia';

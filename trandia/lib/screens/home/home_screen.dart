@@ -7,78 +7,51 @@ import '../auth/login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _user;
-  bool _loading = true;
+  bool  _loading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-
-    // ── FCM permission + token sync ────────────────────────────────────────
-    // This is the CORRECT place to request POST_NOTIFICATIONS permission:
-    //   (a) Activity is fully in RESUMED state — dialog shows properly
-    //   (b) Permission covers both FCM and local notifications (Android 13+)
-    //   (c) Token is synced with backend after permission is granted
-    //
-    // Using addPostFrameCallback to ensure the first frame has rendered
-    // before showing the permission dialog — better UX.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initNotifications();
-    });
-
-    FcmService.startForegroundListener(); // no-op if already registered
-
+    FcmService.startForegroundListener();
     _fetchMe();
-  }
 
-  Future<void> _initNotifications() async {
-    // Request permission + sync token — both FCM and local notifications
-    await FcmService.requestPermissionAndSyncToken();
-    // Backup: also request local notification permission explicitly
-    await FcmService.requestLocalPermissionIfNeeded();
+    // Run AFTER first frame — Activity is fully RESUMED here.
+    // Order matters:
+    //   1. requestPermissionAndSyncToken() → ask user, get permission, sync token
+    //   2. showPending()                   → show queued welcome notification
+    //      (guaranteed: permission confirmed BEFORE notification fires)
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final granted = await FcmService.requestPermissionAndSyncToken();
+      if (granted) {
+        await FcmService.showPending();
+      }
+    });
   }
 
   Future<void> _fetchMe() async {
     try {
       final data = await ApiService.get('/users/me', requiresAuth: true);
       if (!mounted) return;
-      setState(() {
-        _user = data;
-        _loading = false;
-      });
+      setState(() { _user = data; _loading = false; });
     } on ApiException catch (e) {
       if (!mounted) return;
-      if (e.message.contains('Session expired')) {
-        _pushToLogin();
-        return;
-      }
-      setState(() {
-        _error = e.message;
-        _loading = false;
-      });
+      if (e.message.contains('Session expired')) { _pushToLogin(); return; }
+      setState(() { _error = e.message; _loading = false; });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _error = 'Could not load profile. Check your connection.';
-        _loading = false;
-      });
+      setState(() { _error = 'Could not load profile. Check your connection.'; _loading = false; });
     }
   }
 
-  void _pushToLogin() {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (_) => false,
-    );
-  }
+  void _pushToLogin() => Navigator.pushAndRemoveUntil(
+        context, MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
 
   Future<void> _handleLogout() async {
     await AuthService.logout();
@@ -87,50 +60,32 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Trandia ✦'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: _handleLogout,
-          ),
-        ],
-      ),
-      body: _buildBody(),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: const Text('Trandia ✦'),
+          actions: [
+            IconButton(icon: const Icon(Icons.logout), tooltip: 'Sign out', onPressed: _handleLogout),
+          ],
+        ),
+        body: _buildBody(),
+      );
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
 
     if (_error != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.redAccent)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    _loading = true;
-                    _error = null;
-                  });
-                  _fetchMe();
-                },
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(_error!, textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.redAccent)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () { setState(() { _loading = true; _error = null; }); _fetchMe(); },
+              child: const Text('Retry'),
+            ),
+          ]),
         ),
       );
     }
@@ -143,43 +98,32 @@ class _HomeScreenState extends State<HomeScreen> {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (picture != null)
-              CircleAvatar(
-                radius: 40,
-                backgroundImage: CachedNetworkImageProvider(picture),
-                onBackgroundImageError: (_, __) {},
-              )
-            else
-              CircleAvatar(
-                radius: 40,
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                  style: const TextStyle(fontSize: 28),
-                ),
-              ),
-            const SizedBox(height: 16),
-            Text(name,
-                style: const TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.w600)),
-            if (username.isNotEmpty)
-              Text('@$username',
-                  style:
-                      const TextStyle(fontSize: 14, color: Colors.grey)),
-            const SizedBox(height: 4),
-            Text(email,
-                style:
-                    const TextStyle(fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 40),
-            OutlinedButton.icon(
-              onPressed: _handleLogout,
-              icon: const Icon(Icons.logout, size: 18),
-              label: const Text('Sign out'),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          if (picture != null)
+            CircleAvatar(
+              radius: 40,
+              backgroundImage: CachedNetworkImageProvider(picture),
+              onBackgroundImageError: (_, __) {},
+            )
+          else
+            CircleAvatar(
+              radius: 40,
+              child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: const TextStyle(fontSize: 28)),
             ),
-          ],
-        ),
+          const SizedBox(height: 16),
+          Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+          if (username.isNotEmpty)
+            Text('@$username', style: const TextStyle(fontSize: 14, color: Colors.grey)),
+          const SizedBox(height: 4),
+          Text(email, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+          const SizedBox(height: 40),
+          OutlinedButton.icon(
+            onPressed: _handleLogout,
+            icon: const Icon(Icons.logout, size: 18),
+            label: const Text('Sign out'),
+          ),
+        ]),
       ),
     );
   }

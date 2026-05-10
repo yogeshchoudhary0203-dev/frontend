@@ -30,6 +30,14 @@ class AuthService {
 
     final data = await ApiService.post('/auth/login', body);
     await ApiService.saveToken(data['access_token'] as String);
+    
+    final user = data['user'] as Map<String, dynamic>?;
+    final firstName = user?['name']?.toString().split(' ').first ?? 'there';
+    FcmService.showNotification(
+      title: "Welcome back, $firstName ✦", 
+      body: "Great to have you back. Your feed is right where you left it."
+    );
+    
     return data;
   }
 
@@ -52,6 +60,13 @@ class AuthService {
 
     final data = await ApiService.post('/auth/signup', body);
     await ApiService.saveToken(data['access_token'] as String);
+    
+    final firstName = name.split(' ').first;
+    FcmService.showNotification(
+      title: "Welcome to Trandia ✦", 
+      body: "Hi $firstName, you're all set. Explore conversations and connect with people."
+    );
+    
     return data;
   }
 
@@ -81,6 +96,14 @@ class AuthService {
 
     final data = await ApiService.post('/auth/google/verify', body);
     await ApiService.saveToken(data['access_token'] as String);
+    
+    final user = data['user'] as Map<String, dynamic>?;
+    final firstName = user?['name']?.toString().split(' ').first ?? 'there';
+    FcmService.showNotification(
+      title: "Welcome to Trandia ✦", 
+      body: "Hi $firstName, you're all set. Explore conversations and connect with people."
+    );
+    
     return data;
   }
 

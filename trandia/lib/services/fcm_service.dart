@@ -5,7 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-const _kChannelId   = 'trandia_ch1';
+const _kChannelId   = 'trandia_ch2';
 const _kChannelName = 'Trandia';
 const _kChannelDesc = 'Trandia notifications';
 const _kTokenKey    = 'fcm_token';
@@ -73,7 +73,6 @@ class FcmService {
               AndroidFlutterLocalNotificationsPlugin>();
 
       if (androidPlugin != null) {
-        await androidPlugin.deleteNotificationChannel(_kChannelId);
         await androidPlugin.createNotificationChannel(channel);
         debugPrint('[FCM] ✅ Channel created: $_kChannelId');
         // NOTE: requestNotificationsPermission() is intentionally NOT called

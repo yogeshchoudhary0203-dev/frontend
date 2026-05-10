@@ -5,42 +5,43 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-const _kChannelId    = 'trandia_welcome';
-const _kChannelName  = 'Trandia Notifications';
-const _kChannelDesc  = 'Welcome and activity notifications from Trandia';
-const _kTokenKey     = 'fcm_token';
-const _kJwtKey       = 'auth_token';
-const _kBackendUrl   = 'https://web-production-c105c.up.railway.app';
+const _kChannelId  = 'trandia_welcome';
+const _kChannelName = 'Trandia Notifications';
+const _kChannelDesc = 'Welcome and activity notifications from Trandia';
+const _kTokenKey   = 'fcm_token';
+const _kJwtKey     = 'auth_token';
+const _kBackendUrl = 'https://web-production-c105c.up.railway.app';
 
-final _localNotif = FlutterLocalNotificationsPlugin();
+final localNotif = FlutterLocalNotificationsPlugin();
 
-const _androidChannel = AndroidNotificationChannel(
+const androidChannel = AndroidNotificationChannel(
   _kChannelId,
   _kChannelName,
   description: _kChannelDesc,
-  importance: Importance.high,
+  importance: Importance.max,   // MAX so it shows as heads-up popup
   playSound: true,
   enableVibration: true,
+  showBadge: true,
 );
 
 class FcmService {
-  /// Call ONCE in main() before runApp().
+
   static Future<void> initAndCache() async {
     if (kIsWeb) return;
     await _setupChannel();
     await _fetchAndCacheToken();
-    _listenForeground();
+    // NOTE: foreground listener is now started from HomeScreen via
+    // FcmService.startForegroundListener() so it runs AFTER navigation completes.
   }
 
-  // ── Android notification channel + local notif init ──────────────────────
   static Future<void> _setupChannel() async {
     try {
-      await _localNotif
+      await localNotif
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(_androidChannel);
+          ?.createNotificationChannel(androidChannel);
 
-      await _localNotif.initialize(
+      await localNotif.initialize(
         const InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
           iOS: DarwinInitializationSettings(
@@ -50,60 +51,108 @@ class FcmService {
           ),
         ),
       );
-      debugPrint('[FCM] ✅ Channel ready: $_kChannelId');
+      debugPrint('[FCM] ✅ Channel ready (Importance.max): $_kChannelId');
     } catch (e) {
       debugPrint('[FCM] _setupChannel error: $e');
     }
   }
 
-  // ── Fetch token + sync with backend if changed ────────────────────────────
   static Future<void> _fetchAndCacheToken() async {
     try {
       final messaging = FirebaseMessaging.instance;
 
-      // iOS: show notifications even when app is in foreground
       await messaging.setForegroundNotificationPresentationOptions(
         alert: true, badge: true, sound: true,
       );
 
       final settings = await messaging.requestPermission(
         alert: true, badge: true, sound: true,
+        provisional: false,
       );
+
       if (settings.authorizationStatus == AuthorizationStatus.denied) {
-        debugPrint('[FCM] Permission denied');
+        debugPrint('[FCM] ❌ Permission denied');
         return;
       }
 
-      // KEY FIX: Do NOT call deleteToken() on app startup.
-      // deleteToken() was called every launch → invalidated current token →
-      // backend had dead token → notifications "sent" but never received.
-      // Just call getToken() — FCM returns same valid token if unchanged.
+      // Do NOT call deleteToken() — it invalidates the token every launch
+      // causing backend to have a dead token and notifications never arrive.
       final newToken = await messaging.getToken();
       if (newToken == null || newToken.isEmpty) {
         debugPrint('[FCM] ⚠️ Token null — check google-services.json');
         return;
       }
 
-      final prefs       = await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
       final cachedToken = prefs.getString(_kTokenKey);
 
       if (cachedToken == newToken) {
-        // Token unchanged — no action needed
-        debugPrint('[FCM] ✅ Token valid (unchanged): ${newToken.substring(0, 20)}...');
+        debugPrint('[FCM] ✅ Token unchanged: ${newToken.substring(0, 20)}...');
         return;
       }
 
-      // Token changed (fresh install / FCM rotation) — save + tell backend
       await prefs.setString(_kTokenKey, newToken);
-      debugPrint('[FCM] 🔄 New token cached: ${newToken.substring(0, 20)}...');
+      debugPrint('[FCM] 🆕 New token: ${newToken.substring(0, 20)}...');
       await _syncTokenWithBackend(newToken, prefs);
     } catch (e) {
       debugPrint('[FCM] _fetchAndCacheToken error: $e');
     }
   }
 
-  /// If user is already logged in, push the updated FCM token to backend.
-  /// This keeps notifications working without requiring a re-login.
+  /// Start listening for foreground messages.
+  /// Call this from HomeScreen.initState() — AFTER navigation is complete.
+  /// This way the 3-second delayed notification from backend lands here
+  /// instead of during the login→home navigation transition.
+  static void startForegroundListener() {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('[FCM] 📩 onMessage fired: ${message.notification?.title}');
+      _showLocalNotification(message);
+    });
+    debugPrint('[FCM] ✅ Foreground listener active');
+  }
+
+  static void _showLocalNotification(RemoteMessage message) {
+    final n = message.notification;
+    if (n == null) {
+      debugPrint('[FCM] ⚠️ message.notification is null — data-only message');
+      return;
+    }
+
+    final title = n.title ?? 'Trandia';
+    final body  = n.body  ?? '';
+
+    debugPrint('[FCM] Showing local notification: $title');
+
+    localNotif.show(
+      // Use a fixed ID so duplicate notifications replace each other
+      title.hashCode.abs() % 10000,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _kChannelId,
+          _kChannelName,
+          channelDescription: _kChannelDesc,
+          importance: Importance.max,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+          color: const Color(0xFF00C853),
+          playSound: true,
+          enableVibration: true,
+          // Heads-up notification (shows over other apps)
+          fullScreenIntent: false,
+          styleInformation: BigTextStyleInformation(body),
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          interruptionLevel: InterruptionLevel.active,
+        ),
+      ),
+    );
+  }
+
   static Future<void> _syncTokenWithBackend(
       String token, SharedPreferences prefs) async {
     try {
@@ -112,62 +161,21 @@ class FcmService {
         debugPrint('[FCM] Not logged in — token will be sent on next login');
         return;
       }
+      final resp = await http.put(
+        Uri.parse('$_kBackendUrl/users/me/fcm-token'),
+        headers: {
+          'Authorization': 'Bearer $jwt',
+          'Content-Type': 'application/json',
+        },
+        body: '{"fcm_token": "$token"}',
+      ).timeout(const Duration(seconds: 10));
 
-      final resp = await http
-          .put(
-            Uri.parse('$_kBackendUrl/users/me/fcm-token'),
-            headers: {
-              'Authorization': 'Bearer $jwt',
-              'Content-Type': 'application/json',
-            },
-            body: '{"fcm_token": "$token"}',
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (resp.statusCode == 200) {
-        debugPrint('[FCM] ✅ Token synced with backend');
-      } else {
-        debugPrint('[FCM] Backend sync failed: ${resp.statusCode}');
-      }
+      debugPrint('[FCM] Backend sync: ${resp.statusCode}');
     } catch (e) {
-      debugPrint('[FCM] _syncTokenWithBackend error (non-fatal): $e');
+      debugPrint('[FCM] _syncTokenWithBackend error: $e');
     }
   }
 
-  // ── Foreground notification display ──────────────────────────────────────
-  // FCM suppresses the system tray when app is open — show manually.
-  static void _listenForeground() {
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      final n = message.notification;
-      if (n == null) return;
-      debugPrint('[FCM] 📩 Foreground: ${n.title}');
-
-      _localNotif.show(
-        n.hashCode,
-        n.title,
-        n.body,
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            _kChannelId, _kChannelName,
-            channelDescription: _kChannelDesc,
-            importance: Importance.high,
-            priority: Priority.high,
-            icon: '@mipmap/ic_launcher',
-            color: const Color(0xFF00C853),
-            playSound: true,
-            enableVibration: true,
-          ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-          ),
-        ),
-      );
-    });
-  }
-
-  // ── Token refresh listener ────────────────────────────────────────────────
   static void listenForTokenRefresh() {
     if (kIsWeb) return;
     try {
@@ -182,7 +190,6 @@ class FcmService {
     }
   }
 
-  // ── Public helpers ────────────────────────────────────────────────────────
   static Future<String?> getCachedToken() async {
     if (kIsWeb) return null;
     try {

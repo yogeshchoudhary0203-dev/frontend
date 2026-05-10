@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
+import '../../services/fcm_service.dart';
 import '../auth/login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,6 +20,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+
+    // FIX: Start foreground notification listener HERE — after navigation is
+    // complete. If started in main() or during login, the 3-second delayed
+    // notification from backend arrives mid-navigation and onMessage fires
+    // before flutter_local_notifications can show it. Starting it here
+    // guarantees the app is stable and visible when the notification arrives.
+    FcmService.startForegroundListener();
+
     _fetchMe();
   }
 
@@ -112,10 +121,10 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final name = _user?['name'] as String? ?? 'User';
+    final name     = _user?['name']     as String? ?? 'User';
     final username = _user?['username'] as String? ?? '';
-    final email = _user?['email'] as String? ?? '';
-    final picture = _user?['picture'] as String?;
+    final email    = _user?['email']    as String? ?? '';
+    final picture  = _user?['picture']  as String?;
 
     return Center(
       child: Padding(
@@ -123,10 +132,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // FIX: Replaced raw NetworkImage with CachedNetworkImageProvider.
-            // NetworkImage has no disk or memory cache — it re-fetches the image
-            // on every widget rebuild. CachedNetworkImage caches to memory + disk,
-            // eliminating redundant network calls and speeding up rendering.
             if (picture != null)
               CircleAvatar(
                 radius: 40,
@@ -143,14 +148,16 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             const SizedBox(height: 16),
             Text(name,
-                style:
-                    const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                style: const TextStyle(
+                    fontSize: 22, fontWeight: FontWeight.w600)),
             if (username.isNotEmpty)
               Text('@$username',
-                  style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                  style:
+                      const TextStyle(fontSize: 14, color: Colors.grey)),
             const SizedBox(height: 4),
             Text(email,
-                style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                style:
+                    const TextStyle(fontSize: 13, color: Colors.grey)),
             const SizedBox(height: 40),
             OutlinedButton.icon(
               onPressed: _handleLogout,

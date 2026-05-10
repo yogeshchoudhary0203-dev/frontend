@@ -13,7 +13,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _user;
-  bool  _loading = true;
+  bool    _loading = true;
   String? _error;
 
   @override
@@ -21,16 +21,38 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     FcmService.startForegroundListener();
     _fetchMe();
+    _handleNotificationPermissionAndShow();
+  }
 
-    // Run AFTER first frame — Activity is fully RESUMED here.
-    // Order matters:
-    //   1. requestPermissionAndSyncToken() → ask user, get permission, sync token
-    //   2. showPending()                   → show queued welcome notification
-    //      (guaranteed: permission confirmed BEFORE notification fires)
+  // ── Notification: permission check → show ─────────────────────────────────
+  //
+  // Strategy (zero delay for returning users):
+  //
+  //   Step 1 — Check permission WITHOUT dialog (instant, no network).
+  //             If already granted → show notification RIGHT NOW.
+  //             This covers the 99% case (returning users) with ~0ms delay.
+  //
+  //   Step 2 — If not yet granted → wait for first frame (Activity RESUMED),
+  //             then show the system dialog.
+  //             After user taps Allow → show notification.
+  //
+  Future<void> _handleNotificationPermissionAndShow() async {
+    // Step 1: instant check — no dialog, no network
+    final alreadyGranted = await FcmService.isPermissionGranted();
+
+    if (alreadyGranted) {
+      // Permission confirmed — show immediately, no waiting
+      await FcmService.showPendingIfAny();
+      // Sync token in background (don't block notification)
+      FcmService.requestPermission(); // re-uses existing grant, just syncs token
+      return;
+    }
+
+    // Step 2: first-time user — wait for frame then request
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final granted = await FcmService.requestPermissionAndSyncToken();
+      final granted = await FcmService.requestPermission();
       if (granted) {
-        await FcmService.showPending();
+        await FcmService.showPendingIfAny();
       }
     });
   }
@@ -46,12 +68,18 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() { _error = e.message; _loading = false; });
     } catch (_) {
       if (!mounted) return;
-      setState(() { _error = 'Could not load profile. Check your connection.'; _loading = false; });
+      setState(() {
+        _error = 'Could not load profile. Check your connection.';
+        _loading = false;
+      });
     }
   }
 
   void _pushToLogin() => Navigator.pushAndRemoveUntil(
-        context, MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
 
   Future<void> _handleLogout() async {
     await AuthService.logout();
@@ -64,7 +92,10 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           title: const Text('Trandia ✦'),
           actions: [
-            IconButton(icon: const Icon(Icons.logout), tooltip: 'Sign out', onPressed: _handleLogout),
+            IconButton(
+                icon: const Icon(Icons.logout),
+                tooltip: 'Sign out',
+                onPressed: _handleLogout),
           ],
         ),
         body: _buildBody(),
@@ -78,11 +109,15 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(_error!, textAlign: TextAlign.center,
+            Text(_error!,
+                textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.redAccent)),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () { setState(() { _loading = true; _error = null; }); _fetchMe(); },
+              onPressed: () {
+                setState(() { _loading = true; _error = null; });
+                _fetchMe();
+              },
               child: const Text('Retry'),
             ),
           ]),
@@ -108,15 +143,20 @@ class _HomeScreenState extends State<HomeScreen> {
           else
             CircleAvatar(
               radius: 40,
-              child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                  style: const TextStyle(fontSize: 28)),
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: const TextStyle(fontSize: 28),
+              ),
             ),
           const SizedBox(height: 16),
-          Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+          Text(name,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
           if (username.isNotEmpty)
-            Text('@$username', style: const TextStyle(fontSize: 14, color: Colors.grey)),
+            Text('@$username',
+                style: const TextStyle(fontSize: 14, color: Colors.grey)),
           const SizedBox(height: 4),
-          Text(email, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+          Text(email,
+              style: const TextStyle(fontSize: 13, color: Colors.grey)),
           const SizedBox(height: 40),
           OutlinedButton.icon(
             onPressed: _handleLogout,

@@ -1,79 +1,26 @@
 {
   "project_info": {
-    "project_number": "63649672249",
-    "project_id": "trandia-cc314",
-    "storage_bucket": "trandia-cc314.firebasestorage.app"
+    "project_number": "14292077427",
+    "project_id": "trandia-d06ac",
+    "storage_bucket": "trandia-d06ac.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:63649672249:android:639830f154815e58c171e8",
-        "android_client_info": {
-          "package_name": "com.example.trandia"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "63649672249-jd932c8h4vvs28tuhp1t0sl8395qvcup.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyAaet8LDil0lyki0gWY7eDB1rX_kv1W9pM"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "63649672249-jd932c8h4vvs28tuhp1t0sl8395qvcup.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "63649672249-lvi9qesrl3f6v9okb2q0vsccu5fofobs.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.example.trandia"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:63649672249:android:712b363b870ac4e6c171e8",
+        "mobilesdk_app_id": "1:14292077427:android:3ee0518778e3d760c9d306",
         "android_client_info": {
           "package_name": "com.trendia.app"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "63649672249-jd932c8h4vvs28tuhp1t0sl8395qvcup.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAaet8LDil0lyki0gWY7eDB1rX_kv1W9pM"
+          "current_key": "AIzaSyAhm2d0jnljLoNxqhgXdKFkbUswIfCiEB4"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "63649672249-jd932c8h4vvs28tuhp1t0sl8395qvcup.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "63649672249-lvi9qesrl3f6v9okb2q0vsccu5fofobs.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.example.trandia"
-              }
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

@@ -50,19 +50,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBKfzz8cpuP6MR_0GvuyKNefKIrFEPpe6o',
-    appId: '1:63649672249:web:a680dc0e39300758c171e8',
-    messagingSenderId: '63649672249',
-    projectId: 'trandia-cc314',
-    authDomain: 'trandia-cc314.firebaseapp.com',
-    storageBucket: 'trandia-cc314.firebasestorage.app',
+    apiKey: 'AIzaSyDc9Nmex0C6QQNrg4k6uw2HhKz7GEVpkF4',
+    appId: '1:14292077427:web:3c2c9511487d9e44c9d306',
+    messagingSenderId: '14292077427',
+    projectId: 'trandia-d06ac',
+    authDomain: 'trandia-d06ac.firebaseapp.com',
+    storageBucket: 'trandia-d06ac.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAaet8LDil0lyki0gWY7eDB1rX_kv1W9pM',
-    appId: '1:63649672249:android:712b363b870ac4e6c171e8',
-    messagingSenderId: '63649672249',
-    projectId: 'trandia-cc314',
-    storageBucket: 'trandia-cc314.firebasestorage.app',
+    apiKey: 'AIzaSyAhm2d0jnljLoNxqhgXdKFkbUswIfCiEB4',
+    appId: '1:14292077427:android:3ee0518778e3d760c9d306',
+    messagingSenderId: '14292077427',
+    projectId: 'trandia-d06ac',
+    storageBucket: 'trandia-d06ac.firebasestorage.app',
   );
 }

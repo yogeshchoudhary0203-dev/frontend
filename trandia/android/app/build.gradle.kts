@@ -34,7 +34,7 @@ android {
         //    and Android drops every incoming notification without any log.
         //  • requestNotificationsPermission() (API 33) is a no-op below API 21.
         // Setting it explicitly to 21 aligns with every dependency's minimum.
-        minSdk = 21
+        minSdk = flutter.minSdkVersion
 
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

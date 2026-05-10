@@ -21,12 +21,26 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
-    // FIX: Start foreground notification listener HERE — after navigation is
-    // complete. If started in main() or during login, the 3-second delayed
-    // notification from backend arrives mid-navigation and onMessage fires
-    // before flutter_local_notifications can show it. Starting it here
-    // guarantees the app is stable and visible when the notification arrives.
-    FcmService.startForegroundListener();
+    // BUG FIX #2 — Request Android 13+ POST_NOTIFICATIONS permission here,
+    // NOT in main() before runApp().
+    //
+    // Before runApp() the Android Activity has not yet reached its RESUMED
+    // state. On Android 13+ (API 33), the POST_NOTIFICATIONS permission dialog
+    // is shown via ActivityCompat.requestPermissions(), which requires a
+    // foreground Activity.  Calling it from main() caused the dialog to fail
+    // silently: it returned null without ever prompting the user, so local
+    // notifications were permanently denied on first install.
+    //
+    // HomeScreen.initState() is the first place where:
+    //  (a) the user has already seen a screen (so the request is contextual),
+    //  (b) the Activity is definitely in RESUMED state,
+    //  (c) the local-notification plugin is fully initialised (_initialized=true).
+    //
+    // startForegroundListener() below is now a no-op because main() already
+    // registered the onMessage listener.  We keep the call so the _listenerActive
+    // guard is exercised and the log line confirms the listener is alive.
+    FcmService.requestPermissionIfNeeded();
+    FcmService.startForegroundListener(); // no-op if already registered in main()
 
     _fetchMe();
   }

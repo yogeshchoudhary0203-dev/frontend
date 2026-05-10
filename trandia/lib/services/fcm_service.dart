@@ -22,6 +22,10 @@ bool _listenerActive = false;
 class FcmService {
 
   // ── Step 1: Call from main() before runApp ───────────────────────────────
+  // Initialises the local-notification plugin and fetches + caches the FCM
+  // token.  Does NOT request Android 13+ permission here — that must happen
+  // via requestPermissionIfNeeded() once the Activity is fully resumed (i.e.
+  // from HomeScreen.initState).
   static Future<void> initAndCache() async {
     if (kIsWeb) return;
     await _initLocalNotifications();
@@ -32,15 +36,6 @@ class FcmService {
   static Future<void> _initLocalNotifications() async {
     if (_initialized) return;
     try {
-      // ────────────────────────────────────────────────────────────────────
-      // FIX 1: initialize() MUST come first.
-      //
-      // The old code called createNotificationChannel() BEFORE initialize().
-      // resolvePlatformSpecificImplementation() returns null until initialize()
-      // has run, so the channel was never created. Android 8+ silently drops
-      // notifications for an unknown channel — this was the root cause of
-      // "backend sent OK but nothing appears on device".
-      // ────────────────────────────────────────────────────────────────────
       final bool? ok = await flutterLocalNotificationsPlugin.initialize(
         const InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -55,27 +50,15 @@ class FcmService {
         },
       );
 
-      // ────────────────────────────────────────────────────────────────────
-      // FIX 2: Don't use strict (ok == true).
-      //
-      // On some Android versions initialize() returns null even on success.
-      // (ok == true) kept _initialized = false forever, causing every
-      // showNotification() call to re-init but still work — masking the bug
-      // while creating unnecessary overhead. Use (ok != false) instead.
-      // ────────────────────────────────────────────────────────────────────
+      // ok can be null on some Android versions even when init succeeded.
       _initialized = ok != false;
       debugPrint('[FCM] LocalNotifications init: $ok | _initialized=$_initialized');
 
-      // ────────────────────────────────────────────────────────────────────
-      // FIX 3: Create channel AFTER initialize().
-      //
-      // resolvePlatformSpecificImplementation() now returns the real Android
-      // plugin object. Also delete the old channel before recreating it —
-      // Android permanently caches a channel's importance/sound settings once
-      // created. If the previous broken code created it with wrong settings
-      // (or it was created as "Miscellaneous" as a fallback), deleting it
-      // forces Android to apply the correct Importance.high on next create.
-      // ────────────────────────────────────────────────────────────────────
+      // ── Channel creation AFTER initialize() ─────────────────────────────
+      // resolvePlatformSpecificImplementation() returns null until initialize()
+      // runs. We also delete the old channel first so Android applies the new
+      // Importance.high settings — Android permanently caches channel settings
+      // once a channel is created.
       const channel = AndroidNotificationChannel(
         _kChannelId,
         _kChannelName,
@@ -90,25 +73,39 @@ class FcmService {
               AndroidFlutterLocalNotificationsPlugin>();
 
       if (androidPlugin != null) {
-        // Delete stale channel (no-op if it doesn't exist yet)
         await androidPlugin.deleteNotificationChannel(_kChannelId);
-        // Recreate with correct importance:high settings
         await androidPlugin.createNotificationChannel(channel);
-        debugPrint('[FCM] ✅ Channel recreated: $_kChannelId');
-
-        // ────────────────────────────────────────────────────────────────
-        // FIX 4: Request Android 13+ local notification permission.
-        //
-        // flutter_local_notifications v14+ manages POST_NOTIFICATIONS state
-        // independently from FirebaseMessaging.requestPermission(). Without
-        // this explicit call the plugin considers local notifications blocked
-        // on Android 13+ even if the FCM permission was already granted.
-        // ────────────────────────────────────────────────────────────────
-        final bool? granted = await androidPlugin.requestNotificationsPermission();
-        debugPrint('[FCM] Android 13+ local notification permission: $granted');
+        debugPrint('[FCM] ✅ Channel created: $_kChannelId');
+        // NOTE: requestNotificationsPermission() is intentionally NOT called
+        // here.  Before runApp() the Android Activity is not yet in its
+        // RESUMED state, so the POST_NOTIFICATIONS dialog silently fails on
+        // Android 13+ (API 33).  The permission is requested from
+        // HomeScreen.initState() via requestPermissionIfNeeded() instead.
       }
     } catch (e, st) {
       debugPrint('[FCM] ❌ _initLocalNotifications: $e\n$st');
+    }
+  }
+
+  // ── BUG FIX #2 — Android 13+ local-notification permission ──────────────
+  // Call this from HomeScreen.initState() (or any widget that is definitely
+  // visible on screen with a resumed Activity).  Calling it from main()
+  // before runApp() caused the dialog to silently fail on Android 13+,
+  // leaving local-notification permission permanently denied and preventing
+  // foreground notification display.
+  static Future<void> requestPermissionIfNeeded() async {
+    if (kIsWeb) return;
+    try {
+      final androidPlugin = flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        final bool? granted =
+            await androidPlugin.requestNotificationsPermission();
+        debugPrint('[FCM] Android 13+ local notification permission: $granted');
+      }
+    } catch (e) {
+      debugPrint('[FCM] requestPermissionIfNeeded error: $e');
     }
   }
 
@@ -152,9 +149,18 @@ class FcmService {
     }
   }
 
-  // ── Step 2: Call from HomeScreen.initState() ─────────────────────────────
-  // Registers onMessage ONCE. The 3-second delayed notification from backend
-  // arrives after navigation completes — this listener catches it.
+  // ── BUG FIX #3 — Foreground listener now registered in main() ────────────
+  // Previously this was only called from HomeScreen.initState().  If the
+  // 3-second delayed notification from the backend arrived during the brief
+  // navigation transition (before HomeScreen was fully initialised), onMessage
+  // fired with no subscriber and the message was silently dropped — the
+  // notification never appeared even though Railway logs showed a successful
+  // FCM send.
+  //
+  // Now called from main() right after FcmService.initAndCache() so the
+  // listener is ALWAYS active from the moment Firebase is ready.  The
+  // _listenerActive guard prevents double-registration if HomeScreen also
+  // calls this method.
   static void startForegroundListener() {
     if (_listenerActive) {
       debugPrint('[FCM] Listener already active — skip');
@@ -261,7 +267,7 @@ class FcmService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final t = prefs.getString(_kTokenKey);
-      debugPrint('[FCM] getCachedToken: ${t != null ? "${t.substring(0,20)}..." : "NULL"}');
+      debugPrint('[FCM] getCachedToken: ${t != null ? "${t.substring(0, 20)}..." : "NULL"}');
       return t;
     } catch (e) {
       return null;

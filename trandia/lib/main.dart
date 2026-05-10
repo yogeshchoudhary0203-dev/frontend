@@ -23,10 +23,6 @@ Future<void> _bgHandler(RemoteMessage message) async {
 }
 
 // ── Global navigator key ──────────────────────────────────────────────────
-// BUG FIX: Required so notification tap handlers (_handleNotificationTap)
-// can navigate from outside any widget's BuildContext — i.e. from the
-// onMessageOpenedApp and getInitialMessage callbacks that fire before or
-// outside the widget tree.
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
@@ -44,17 +40,34 @@ void main() async {
   // 2. Background message handler (must be registered before runApp)
   FirebaseMessaging.onBackgroundMessage(_bgHandler);
 
-  // 3. Init local notifications + fetch FCM token
+  // 3. Init local notifications channel + fetch FCM token.
+  //    Note: Android 13+ POST_NOTIFICATIONS permission is intentionally NOT
+  //    requested here. Before runApp() the Activity is not yet in its RESUMED
+  //    state, so the permission dialog silently fails on Android 13+.  The
+  //    permission is requested from HomeScreen.initState() instead via
+  //    FcmService.requestPermissionIfNeeded().
   await FcmService.initAndCache();
 
-  // 4. Token refresh listener
+  // 4. BUG FIX #3 — Register onMessage listener HERE in main(), not only in
+  //    HomeScreen.initState().
+  //
+  //    Root cause of "notification sent but not received on device":
+  //    The backend sends the FCM message 3 seconds after login/signup.
+  //    Navigation from LoginScreen → HomeScreen can take 300–800 ms on
+  //    mid-range devices.  In the gap between the API response returning and
+  //    HomeScreen.initState() completing, onMessage had no subscriber.
+  //    If the message arrived in that window (possible if Railway was warm and
+  //    the 3s delay was shorter than the round-trip), it was silently dropped.
+  //
+  //    Registering here means the listener is active from the first frame.
+  //    The _listenerActive guard in startForegroundListener() prevents double-
+  //    registration if HomeScreen also calls the method (it becomes a no-op).
+  FcmService.startForegroundListener();
+
+  // 5. Token refresh listener
   FcmService.listenForTokenRefresh();
 
-  // 5. BUG FIX: Register onMessageOpenedApp BEFORE runApp.
-  //    This fires when the user TAPS a notification while the app is in the
-  //    BACKGROUND (not terminated). Previously this was never listened to,
-  //    so tapping a background notification brought the app to foreground
-  //    but did nothing — no navigation, no in-app action.
+  // 6. Handle notification tap when app was in BACKGROUND (not terminated).
   FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
 
   FlutterError.onError = (d) => FlutterError.presentError(d);
@@ -67,12 +80,9 @@ void main() async {
 
 /// Handles a notification tap regardless of whether the app was in
 /// background (onMessageOpenedApp) or terminated (getInitialMessage).
-/// Extend this as Trandia grows: deep-link into DMs, post, profile, etc.
 void _handleNotificationTap(RemoteMessage message) {
   debugPrint('[FCM] Notification tapped: ${message.data}');
   final type = message.data['type'] as String?;
-  // Currently only one notification type exists. Add routing logic here
-  // as more notification types (new_message, new_like, etc.) are added.
   switch (type) {
     case 'welcome':
     // Already on HomeScreen — nothing extra to do.
@@ -92,11 +102,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    // BUG FIX: Handle notification tap from TERMINATED state.
-    // getInitialMessage() returns the RemoteMessage that caused the app to
-    // open from a terminated state (user tapped notification in system tray).
-    // Previously this was never called — tapping such a notification simply
-    // opened the app to whatever screen was active, with no action taken.
+    // Handle notification tap from TERMINATED state.
     _checkInitialMessage();
   }
 

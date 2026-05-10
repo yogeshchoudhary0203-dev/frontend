@@ -7,9 +7,6 @@ const String _prodUrl = 'https://web-production-c105c.up.railway.app';
 
 String get _baseUrl => _prodUrl;
 
-// BUG FIX: Added a global request timeout.
-// Without this, if Railway is sleeping or Google/FCM is slow, every HTTP
-// call hangs indefinitely, making the app appear completely frozen.
 const Duration _kTimeout = Duration(seconds: 15);
 
 class ApiService {
@@ -52,16 +49,25 @@ class ApiService {
           'Could not connect to server. Check your network.');
     }
 
-    // BUG FIX: Handle 401 explicitly.
-    // Previously a 401 response was treated as a generic ApiException.
-    // Now we clear the stored token so the user is effectively logged out
-    // and can re-authenticate instead of being stuck in a broken state.
     if (response.statusCode == 401) {
       await clearToken();
       throw const ApiException('Session expired. Please sign in again.');
     }
 
-    final data = jsonDecode(response.body);
+    // BUG FIX: jsonDecode had no try-catch.
+    // Railway returns an HTML 502/503 page (not JSON) when the app is cold-
+    // starting or crashing. Without this guard, jsonDecode throws a
+    // FormatException that bypasses all ApiException handlers and shows the
+    // user a raw Dart crash message. Now it maps to a clean error string.
+    final dynamic data;
+    try {
+      data = jsonDecode(response.body);
+    } catch (_) {
+      throw ApiException(
+          'Server returned an unexpected response (HTTP ${response.statusCode}). '
+          'Please try again.');
+    }
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data as Map<String, dynamic>;
     }
@@ -92,13 +98,21 @@ class ApiService {
           'Could not connect to server. Check your network.');
     }
 
-    // BUG FIX: Same 401 handling as post() above.
     if (response.statusCode == 401) {
       await clearToken();
       throw const ApiException('Session expired. Please sign in again.');
     }
 
-    final data = jsonDecode(response.body);
+    // BUG FIX: same as post() — guard against non-JSON responses.
+    final dynamic data;
+    try {
+      data = jsonDecode(response.body);
+    } catch (_) {
+      throw ApiException(
+          'Server returned an unexpected response (HTTP ${response.statusCode}). '
+          'Please try again.');
+    }
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data as Map<String, dynamic>;
     }

@@ -16,8 +16,8 @@ const _kBackendUrl  = 'https://web-production-c105c.up.railway.app';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
-bool _initialized        = false;
-bool _listenerActive     = false;
+bool _initialized    = false;
+bool _listenerActive = false;
 
 class FcmService {
 
@@ -32,25 +32,15 @@ class FcmService {
   static Future<void> _initLocalNotifications() async {
     if (_initialized) return;
     try {
-      // Create Android O+ notification channel
-      const channel = AndroidNotificationChannel(
-        _kChannelId,
-        _kChannelName,
-        description: _kChannelDesc,
-        importance: Importance.high,
-        playSound: true,
-        enableVibration: true,
-      );
-
-      final androidPlugin = flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
-
-      if (androidPlugin != null) {
-        await androidPlugin.createNotificationChannel(channel);
-        debugPrint('[FCM] ✅ Channel created: $_kChannelId');
-      }
-
+      // ────────────────────────────────────────────────────────────────────
+      // FIX 1: initialize() MUST come first.
+      //
+      // The old code called createNotificationChannel() BEFORE initialize().
+      // resolvePlatformSpecificImplementation() returns null until initialize()
+      // has run, so the channel was never created. Android 8+ silently drops
+      // notifications for an unknown channel — this was the root cause of
+      // "backend sent OK but nothing appears on device".
+      // ────────────────────────────────────────────────────────────────────
       final bool? ok = await flutterLocalNotificationsPlugin.initialize(
         const InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -65,8 +55,58 @@ class FcmService {
         },
       );
 
-      _initialized = ok == true;
+      // ────────────────────────────────────────────────────────────────────
+      // FIX 2: Don't use strict (ok == true).
+      //
+      // On some Android versions initialize() returns null even on success.
+      // (ok == true) kept _initialized = false forever, causing every
+      // showNotification() call to re-init but still work — masking the bug
+      // while creating unnecessary overhead. Use (ok != false) instead.
+      // ────────────────────────────────────────────────────────────────────
+      _initialized = ok != false;
       debugPrint('[FCM] LocalNotifications init: $ok | _initialized=$_initialized');
+
+      // ────────────────────────────────────────────────────────────────────
+      // FIX 3: Create channel AFTER initialize().
+      //
+      // resolvePlatformSpecificImplementation() now returns the real Android
+      // plugin object. Also delete the old channel before recreating it —
+      // Android permanently caches a channel's importance/sound settings once
+      // created. If the previous broken code created it with wrong settings
+      // (or it was created as "Miscellaneous" as a fallback), deleting it
+      // forces Android to apply the correct Importance.high on next create.
+      // ────────────────────────────────────────────────────────────────────
+      const channel = AndroidNotificationChannel(
+        _kChannelId,
+        _kChannelName,
+        description: _kChannelDesc,
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+      );
+
+      final androidPlugin = flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      if (androidPlugin != null) {
+        // Delete stale channel (no-op if it doesn't exist yet)
+        await androidPlugin.deleteNotificationChannel(_kChannelId);
+        // Recreate with correct importance:high settings
+        await androidPlugin.createNotificationChannel(channel);
+        debugPrint('[FCM] ✅ Channel recreated: $_kChannelId');
+
+        // ────────────────────────────────────────────────────────────────
+        // FIX 4: Request Android 13+ local notification permission.
+        //
+        // flutter_local_notifications v14+ manages POST_NOTIFICATIONS state
+        // independently from FirebaseMessaging.requestPermission(). Without
+        // this explicit call the plugin considers local notifications blocked
+        // on Android 13+ even if the FCM permission was already granted.
+        // ────────────────────────────────────────────────────────────────
+        final bool? granted = await androidPlugin.requestNotificationsPermission();
+        debugPrint('[FCM] Android 13+ local notification permission: $granted');
+      }
     } catch (e, st) {
       debugPrint('[FCM] ❌ _initLocalNotifications: $e\n$st');
     }
@@ -146,7 +186,7 @@ class FcmService {
     required String body,
     int id = 42,
   }) async {
-    // Re-init if needed
+    // Re-init if needed (defensive)
     if (!_initialized) {
       debugPrint('[FCM] Not initialized — re-initializing...');
       await _initLocalNotifications();

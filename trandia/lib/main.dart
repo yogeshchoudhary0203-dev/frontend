@@ -13,70 +13,60 @@ import 'services/api_service.dart';
 import 'services/fcm_service.dart';
 import 'utils/web_utils.dart';
 
-/// Background message handler — must be a top-level function.
-/// Called when a notification arrives while the app is terminated or in background.
-/// On Android this runs in a separate isolate — keep it minimal.
+/// MUST be top-level. Runs in a separate isolate when app is terminated/background.
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Firebase must be initialized even in background isolate
+Future<void> _bgHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('[FCM] Background message: ${message.notification?.title}');
+  // Android auto-shows notification when app is background/terminated
+  // because the message has a notification payload — no manual show needed.
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Step 1: Initialize Firebase
+  // 1. Firebase
   try {
     await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+        options: DefaultFirebaseOptions.currentPlatform);
     debugPrint('[Firebase] ✅ Initialized');
   } catch (e) {
-    debugPrint('[Firebase] ❌ Init failed: $e');
+    debugPrint('[Firebase] ❌ $e');
   }
 
-  // Step 2: Register background message handler
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  // 2. Background message handler (must be registered before runApp)
+  FirebaseMessaging.onBackgroundMessage(_bgHandler);
 
-  // Step 3: Create notification channel + fetch FCM token + setup foreground handler
+  // 3. Init local notifications + fetch FCM token
   await FcmService.initAndCache();
 
-  // Step 4: Listen for token refreshes
+  // 4. Token refresh listener
   FcmService.listenForTokenRefresh();
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-  };
+  FlutterError.onError = (d) => FlutterError.presentError(d);
 
   runZonedGuarded(
     () => runApp(const MyApp()),
-    (Object error, StackTrace stack) {
-      debugPrint('[UNCAUGHT] $error\n$stack');
-    },
+    (e, st) => debugPrint('[UNCAUGHT] $e\n$st'),
   );
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Trandia',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const _SplashRouter(),
-    );
-  }
+  Widget build(BuildContext context) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'Trandia',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          useMaterial3: true,
+        ),
+        home: const _SplashRouter(),
+      );
 }
 
 class _SplashRouter extends StatefulWidget {
   const _SplashRouter();
-
   @override
   State<_SplashRouter> createState() => _SplashRouterState();
 }
@@ -92,35 +82,26 @@ class _SplashRouterState extends State<_SplashRouter> {
     // Web Google OAuth redirect
     final params = getUrlSearchParams();
     if (params.containsKey('token')) {
-      final token = params['token']!;
-      await ApiService.saveToken(token);
+      await ApiService.saveToken(params['token']!);
       clearUrlSearchParams();
       if (!mounted) return;
-      _navigateTo(const HomeScreen());
+      _go(const HomeScreen());
       return;
     }
-
     try {
-      final loggedIn = await AuthService.isLoggedIn();
+      final ok = await AuthService.isLoggedIn();
       if (!mounted) return;
-      _navigateTo(loggedIn ? const HomeScreen() : const LoginScreen());
-    } catch (e) {
+      _go(ok ? const HomeScreen() : const LoginScreen());
+    } catch (_) {
       if (!mounted) return;
-      _navigateTo(const LoginScreen());
+      _go(const LoginScreen());
     }
   }
 
-  void _navigateTo(Widget screen) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => screen),
-    );
-  }
+  void _go(Widget w) => Navigator.pushReplacement(
+      context, MaterialPageRoute(builder: (_) => w));
 
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
-  }
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
 }

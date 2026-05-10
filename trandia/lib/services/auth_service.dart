@@ -33,10 +33,15 @@ class AuthService {
     
     final user = data['user'] as Map<String, dynamic>?;
     final firstName = user?['name']?.toString().split(' ').first ?? 'there';
-    FcmService.showNotification(
-      title: "Welcome back, $firstName ✦", 
-      body: "Great to have you back. Your feed is right where you left it."
-    );
+    
+    final granted = await FcmService.requestPermissionIfNeeded();
+    if (granted) {
+      await Future.delayed(const Duration(seconds: 1));
+      FcmService.showNotification(
+        title: "Welcome back, $firstName ✦", 
+        body: "Great to have you back. Your feed is right where you left it."
+      );
+    }
     
     return data;
   }
@@ -62,10 +67,15 @@ class AuthService {
     await ApiService.saveToken(data['access_token'] as String);
     
     final firstName = name.split(' ').first;
-    FcmService.showNotification(
-      title: "Welcome to Trandia ✦", 
-      body: "Hi $firstName, you're all set. Explore conversations and connect with people."
-    );
+    
+    final granted = await FcmService.requestPermissionIfNeeded();
+    if (granted) {
+      await Future.delayed(const Duration(seconds: 1));
+      FcmService.showNotification(
+        title: "Welcome to Trandia ✦", 
+        body: "Hi $firstName, you're all set. Explore conversations and connect with people."
+      );
+    }
     
     return data;
   }
@@ -99,10 +109,15 @@ class AuthService {
     
     final user = data['user'] as Map<String, dynamic>?;
     final firstName = user?['name']?.toString().split(' ').first ?? 'there';
-    FcmService.showNotification(
-      title: "Welcome to Trandia ✦", 
-      body: "Hi $firstName, you're all set. Explore conversations and connect with people."
-    );
+    
+    final granted = await FcmService.requestPermissionIfNeeded();
+    if (granted) {
+      await Future.delayed(const Duration(seconds: 1));
+      FcmService.showNotification(
+        title: "Welcome to Trandia ✦", 
+        body: "Hi $firstName, you're all set. Explore conversations and connect with people."
+      );
+    }
     
     return data;
   }

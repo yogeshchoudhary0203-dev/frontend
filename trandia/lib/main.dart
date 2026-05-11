@@ -14,9 +14,9 @@ import 'services/fcm_service.dart';
 import 'utils/web_utils.dart';
 
 @pragma('vm:entry-point')
-Future<void> _bgHandler(RemoteMessage message) async {
+Future<void> _bgMessageHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  debugPrint('[FCM] Background: ${message.notification?.title}');
+  debugPrint('[FCM] background: ${message.notification?.title}');
 }
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -27,52 +27,51 @@ void main() async {
   // 1. Firebase
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    debugPrint('[Firebase] ✅ Initialized');
+    debugPrint('[Firebase] ✅ initialized');
   } catch (e) {
     debugPrint('[Firebase] ❌ $e');
   }
 
-  // 2. Background handler (must be before runApp)
-  FirebaseMessaging.onBackgroundMessage(_bgHandler);
+  // 2. Background FCM handler — must register before runApp
+  FirebaseMessaging.onBackgroundMessage(_bgMessageHandler);
 
-  // 3. Init local notification plugin + channel ONLY.
-  //    NO permission request here — Android 13+ needs Activity RESUMED.
+  // 3. Init local notifications + channel + cache FCM token eagerly
   await FcmService.init();
 
-  // 4. Foreground listener active from start — no messages missed
+  // 4. Foreground message listener — active before any screen loads
   FcmService.startForegroundListener();
 
   // 5. Token refresh listener
   FcmService.listenForTokenRefresh();
 
-  // 6. Background tap handler
+  // 6. Background notification tap
   FirebaseMessaging.onMessageOpenedApp.listen(
-    (msg) => debugPrint('[FCM] Tapped (background): ${msg.data}'),
+    (msg) => debugPrint('[FCM] opened from background: ${msg.data}'),
   );
 
   FlutterError.onError = (d) => FlutterError.presentError(d);
   runZonedGuarded(
-    () => runApp(const MyApp()),
+    () => runApp(const TrandiaApp()),
     (e, st) => debugPrint('[UNCAUGHT] $e\n$st'),
   );
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+class TrandiaApp extends StatefulWidget {
+  const TrandiaApp({super.key});
   @override
-  State<MyApp> createState() => _MyAppState();
+  State<TrandiaApp> createState() => _TrandiaAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _TrandiaAppState extends State<TrandiaApp> {
   @override
   void initState() {
     super.initState();
-    _checkInitialMessage();
+    _checkInitialNotification();
   }
 
-  Future<void> _checkInitialMessage() async {
+  Future<void> _checkInitialNotification() async {
     final msg = await FirebaseMessaging.instance.getInitialMessage();
-    if (msg != null) debugPrint('[FCM] App opened from terminated: ${msg.data}');
+    if (msg != null) debugPrint('[FCM] app opened from terminated: ${msg.data}');
   }
 
   @override
@@ -102,6 +101,7 @@ class _SplashRouterState extends State<_SplashRouter> {
   }
 
   Future<void> _route() async {
+    // Web OAuth redirect — pick up token from URL
     final params = getUrlSearchParams();
     if (params.containsKey('token')) {
       await ApiService.saveToken(params['token']!);

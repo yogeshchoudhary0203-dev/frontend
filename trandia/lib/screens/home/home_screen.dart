@@ -19,41 +19,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Foreground FCM message listener
     FcmService.startForegroundListener();
+
+    // Fetch user profile
     _fetchMe();
-    _handleNotificationPermissionAndShow();
-  }
 
-  // ── Notification: permission check → show ─────────────────────────────────
-  //
-  // Strategy (zero delay for returning users):
-  //
-  //   Step 1 — Check permission WITHOUT dialog (instant, no network).
-  //             If already granted → show notification RIGHT NOW.
-  //             This covers the 99% case (returning users) with ~0ms delay.
-  //
-  //   Step 2 — If not yet granted → wait for first frame (Activity RESUMED),
-  //             then show the system dialog.
-  //             After user taps Allow → show notification.
-  //
-  Future<void> _handleNotificationPermissionAndShow() async {
-    // Step 1: instant check — no dialog, no network
-    final alreadyGranted = await FcmService.isPermissionGranted();
-
-    if (alreadyGranted) {
-      // Permission confirmed — show immediately, no waiting
-      await FcmService.showPendingIfAny();
-      // Sync token in background (don't block notification)
-      FcmService.requestPermission(); // re-uses existing grant, just syncs token
-      return;
-    }
-
-    // Step 2: first-time user — wait for frame then request
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final granted = await FcmService.requestPermission();
-      if (granted) {
-        await FcmService.showPendingIfAny();
-      }
+    // Notification setup — runs after first frame so Activity is fully
+    // RESUMED. This is the ONLY place permission is requested.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FcmService.setupForHomeScreen();
     });
   }
 
@@ -93,9 +69,10 @@ class _HomeScreenState extends State<HomeScreen> {
           title: const Text('Trandia ✦'),
           actions: [
             IconButton(
-                icon: const Icon(Icons.logout),
-                tooltip: 'Sign out',
-                onPressed: _handleLogout),
+              icon: const Icon(Icons.logout),
+              tooltip: 'Sign out',
+              onPressed: _handleLogout,
+            ),
           ],
         ),
         body: _buildBody(),

@@ -43,7 +43,7 @@ class FcmService {
     try {
       await _plugin.initialize(
         const InitializationSettings(
-          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+          android: AndroidInitializationSettings('@mipmap/launcher_icon'),
           iOS: DarwinInitializationSettings(
             requestAlertPermission: false,
             requestBadgePermission: false,
@@ -173,7 +173,7 @@ class FcmService {
             channelDescription: _kChannelDesc,
             importance: Importance.max,
             priority: Priority.max,
-            icon: '@mipmap/ic_launcher',
+            icon: '@mipmap/launcher_icon',
             playSound: true,
             enableVibration: true,
             autoCancel: true,
@@ -264,7 +264,7 @@ class FcmService {
         alert: true, badge: true, sound: true,
       );
 
-      final granted =
+      bool granted =
           s.authorizationStatus == AuthorizationStatus.authorized ||
           s.authorizationStatus == AuthorizationStatus.provisional;
 
@@ -272,7 +272,10 @@ class FcmService {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       if (android != null) {
-        await android.requestNotificationsPermission();
+        final result = await android.requestNotificationsPermission();
+        if (result == true) {
+          granted = true;
+        }
       }
 
       return granted;

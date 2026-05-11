@@ -20,43 +20,53 @@ class AuthService {
 
   // ── Firebase Email Verification Signup ─────────────────────────────────────
 
-  static Future<User> initiateFirebaseSignup({
+  /// Step 1: Create Firebase user + send verification email
+  static Future<String> initiateFirebaseSignup({
     required String email,
     required String password,
   }) async {
     final credential = await FirebaseAuth.instance
         .createUserWithEmailAndPassword(email: email, password: password);
-    final user = credential.user!;
-    await user.sendEmailVerification();
-    return user;
+    await credential.user!.sendEmailVerification();
+    return email;
   }
 
+  /// Step 2: Check if email is verified (no force refresh to avoid errors)
   static Future<bool> checkEmailVerified() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return false;
-    await user.reload();
-    return FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return false;
+      await user.reload(); // refresh from Firebase server
+      return FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
+  /// Step 3: Complete signup — get Firebase ID token (email_verified=true) and send to backend
   static Future<Map<String, dynamic>> completeSignup({
+    required String email,
     required String name,
     required String username,
     required String password,
   }) async {
+    // Get the current Firebase user (whose email is now verified)
     final firebaseUser = FirebaseAuth.instance.currentUser;
     if (firebaseUser == null) {
-      throw const ApiException('Session expired. Please signup again.');
+      throw const ApiException('Session expired. Please sign up again.');
     }
 
-    if (!firebaseUser.emailVerified) {
-      throw const ApiException(
-          'Email not verified yet. Please check your inbox.');
+    // Reload to ensure email_verified is true in the token
+    await firebaseUser.reload();
+    final freshUser = FirebaseAuth.instance.currentUser;
+    if (freshUser == null || !freshUser.emailVerified) {
+      throw const ApiException('Email not verified. Please click the link in your inbox.');
     }
 
-    // Force refresh the token to get latest emailVerified status
-    final idToken = await firebaseUser.getIdToken(true);
-    if (idToken == null || idToken.isEmpty) {
-      throw const ApiException('Could not get auth token. Please try again.');
+    // Get fresh ID token — this will have email_verified = true
+    final idToken = await freshUser.getIdToken(true); // forceRefresh=true
+    if (idToken == null) {
+      throw const ApiException('Could not get verification token. Please try again.');
     }
 
     final fcmToken = await FcmService.getCachedToken();
@@ -72,7 +82,8 @@ class AuthService {
     final data = await ApiService.post('/auth/signup', body);
     await ApiService.saveToken(data['access_token'] as String);
 
-    // Sign out from Firebase — our app uses its own JWT
+    // Clean up Firebase user (no longer needed after backend account creation)
+    try { await FirebaseAuth.instance.currentUser?.delete(); } catch (_) {}
     try { await FirebaseAuth.instance.signOut(); } catch (_) {}
 
     final firstName = name.split(' ').first;
@@ -155,9 +166,7 @@ class AuthService {
         return false;
       }
       return true;
-    } catch (_) {
-      return false;
-    }
+    } catch (_) { return false; }
   }
 
   static bool _isTokenExpired(String token) {
@@ -165,14 +174,11 @@ class AuthService {
       final parts = token.split('.');
       if (parts.length != 3) return true;
       final normalized = base64Url.normalize(parts[1]);
-      final payload =
-          jsonDecode(utf8.decode(base64Url.decode(normalized))) as Map;
+      final payload = jsonDecode(utf8.decode(base64Url.decode(normalized))) as Map;
       final exp = payload['exp'] as int?;
       if (exp == null) return true;
       return DateTime.now().millisecondsSinceEpoch ~/ 1000 >= (exp - 30);
-    } catch (_) {
-      return true;
-    }
+    } catch (_) { return true; }
   }
 
   static Future<void> logout() async {

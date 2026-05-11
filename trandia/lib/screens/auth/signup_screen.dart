@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'otp_verification_screen.dart';
 import '../home/home_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
@@ -47,17 +48,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await AuthService.signup(
+      // Step 1: Send OTP — does NOT create account yet
+      await AuthService.initiateSignup(
         name: name,
         username: username,
         email: email,
         password: password,
       );
+
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
+
+      // Step 2: Navigate to OTP verification screen
+      Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-        (_) => false,
+        MaterialPageRoute(
+          builder: (_) => OtpVerificationScreen(email: email, name: name),
+        ),
       );
     } on ApiException catch (e) {
       _showError(e.message);
@@ -72,8 +78,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = true);
     try {
       final result = await AuthService.loginWithGoogle();
-      // On web, result == null because the browser is redirecting away to
-      // Google. The token is picked up in main.dart when it comes back.
+      // On web, result == null because the browser is redirecting to Google.
       if (result == null) return;
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -141,13 +146,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           borderRadius: BorderRadius.circular(13),
                         ),
                         child: Center(
-                          child: Text('✦', style: TextStyle(color: logoMark, fontSize: 24, height: 1.0)),
+                          child: Text('✦',
+                              style: TextStyle(
+                                  color: logoMark, fontSize: 24, height: 1.0)),
                         ),
                       ),
                       const SizedBox(height: 18),
-                      Text('Create account', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: textPrimary, letterSpacing: -0.3)),
+                      Text('Create account',
+                          style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w500,
+                              color: textPrimary,
+                              letterSpacing: -0.3)),
                       const SizedBox(height: 6),
-                      Text('Join the conversation', style: TextStyle(fontSize: 13, color: textSecondary)),
+                      Text('Join the conversation',
+                          style: TextStyle(fontSize: 13, color: textSecondary)),
                     ],
                   ),
                 ),
@@ -168,14 +181,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 const SizedBox(height: 8),
                 _PillTextField(controller: _passwordController, hint: 'Create a password', prefixIcon: Icons.lock_outline_rounded, obscureText: _obscurePassword, textInputAction: TextInputAction.done, suffixIcon: _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, onSuffixTap: () => setState(() => _obscurePassword = !_obscurePassword), inputBg: inputBg, inputBorder: inputBorder, iconColor: iconColor, hintColor: hintColor, textColor: textPrimary),
                 const SizedBox(height: 26),
-                _PillButton(label: _isLoading ? 'Creating account…' : 'Create account', bgColor: btnBg, textColor: btnText, onTap: _isLoading ? null : _handleSignUp),
+                _PillButton(
+                  label: _isLoading ? 'Sending OTP…' : 'Continue',
+                  bgColor: btnBg,
+                  textColor: btnText,
+                  onTap: _isLoading ? null : _handleSignUp,
+                ),
                 const SizedBox(height: 26),
                 _OrDivider(lineColor: dividerColor, textColor: hintColor),
                 const SizedBox(height: 22),
                 _GoogleButton(borderColor: inputBorder, bgColor: inputBg, textColor: textPrimary, iconColor: iconColor, onTap: _isLoading ? null : _handleGoogleSignUp),
                 const SizedBox(height: 32),
                 Center(
-                  child: Text('By creating an account, you agree to our\nTerms of Service and Privacy Policy.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: textSecondary, height: 1.6)),
+                  child: Text(
+                    'By creating an account, you agree to our\nTerms of Service and Privacy Policy.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 11, color: textSecondary, height: 1.6),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Center(
@@ -186,10 +209,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: RichText(
                         text: TextSpan(
-                          style: TextStyle(fontSize: 13, color: textSecondary),
+                          style:
+                              TextStyle(fontSize: 13, color: textSecondary),
                           children: [
-                            const TextSpan(text: 'Already have an account?  '),
-                            TextSpan(text: 'Sign in', style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500)),
+                            const TextSpan(
+                                text: 'Already have an account?  '),
+                            TextSpan(
+                                text: 'Sign in',
+                                style: TextStyle(
+                                    color: textPrimary,
+                                    fontWeight: FontWeight.w500)),
                           ],
                         ),
                       ),
@@ -218,7 +247,12 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(left: 6),
-      child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: color, letterSpacing: 0.1)),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: color,
+              letterSpacing: 0.1)),
     );
   }
 }
@@ -252,14 +286,32 @@ class _PillTextField extends StatelessWidget {
         decoration: InputDecoration(
           filled: true, fillColor: inputBg, hintText: hint,
           hintStyle: TextStyle(fontSize: 14, color: hintColor),
-          contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-          prefixIcon: Padding(padding: const EdgeInsets.only(left: 18, right: 10), child: Icon(prefixIcon, color: iconColor, size: 19)),
-          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-          suffixIcon: suffixIcon != null ? GestureDetector(onTap: onSuffixTap, child: Padding(padding: const EdgeInsets.only(right: 18), child: Icon(suffixIcon, color: iconColor, size: 19))) : null,
-          suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(100), borderSide: BorderSide(color: inputBorder, width: 1)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(100), borderSide: BorderSide(color: inputBorder, width: 1)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(100), borderSide: BorderSide(color: inputBorder.withValues(alpha: 0.7), width: 1.5)),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+          prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 18, right: 10),
+              child: Icon(prefixIcon, color: iconColor, size: 19)),
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 0, minHeight: 0),
+          suffixIcon: suffixIcon != null
+              ? GestureDetector(
+                  onTap: onSuffixTap,
+                  child: Padding(
+                      padding: const EdgeInsets.only(right: 18),
+                      child: Icon(suffixIcon, color: iconColor, size: 19)))
+              : null,
+          suffixIconConstraints:
+              const BoxConstraints(minWidth: 0, minHeight: 0),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(100),
+              borderSide: BorderSide(color: inputBorder, width: 1)),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(100),
+              borderSide: BorderSide(color: inputBorder, width: 1)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(100),
+              borderSide: BorderSide(
+                  color: inputBorder.withValues(alpha: 0.7), width: 1.5)),
         ),
       ),
     );
@@ -267,7 +319,11 @@ class _PillTextField extends StatelessWidget {
 }
 
 class _PillButton extends StatelessWidget {
-  const _PillButton({required this.label, required this.bgColor, required this.textColor, required this.onTap});
+  const _PillButton(
+      {required this.label,
+      required this.bgColor,
+      required this.textColor,
+      required this.onTap});
   final String label;
   final Color bgColor, textColor;
   final VoidCallback? onTap;
@@ -277,8 +333,18 @@ class _PillButton extends StatelessWidget {
       height: 52,
       child: ElevatedButton(
         onPressed: onTap,
-        style: ElevatedButton.styleFrom(backgroundColor: bgColor, foregroundColor: textColor, shadowColor: Colors.transparent, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100))),
-        child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: textColor)),
+        style: ElevatedButton.styleFrom(
+            backgroundColor: bgColor,
+            foregroundColor: textColor,
+            shadowColor: Colors.transparent,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(100))),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: textColor)),
       ),
     );
   }
@@ -291,14 +357,26 @@ class _OrDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(children: [
       Expanded(child: Divider(color: lineColor, thickness: 1, height: 1)),
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Text('OR', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: textColor, letterSpacing: 1.2))),
+      Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Text('OR',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: textColor,
+                  letterSpacing: 1.2))),
       Expanded(child: Divider(color: lineColor, thickness: 1, height: 1)),
     ]);
   }
 }
 
 class _GoogleButton extends StatelessWidget {
-  const _GoogleButton({required this.borderColor, required this.bgColor, required this.textColor, required this.iconColor, required this.onTap});
+  const _GoogleButton(
+      {required this.borderColor,
+      required this.bgColor,
+      required this.textColor,
+      required this.iconColor,
+      required this.onTap});
   final Color borderColor, bgColor, textColor, iconColor;
   final VoidCallback? onTap;
   @override
@@ -307,11 +385,24 @@ class _GoogleButton extends StatelessWidget {
       height: 52,
       child: OutlinedButton(
         onPressed: onTap,
-        style: OutlinedButton.styleFrom(backgroundColor: bgColor, foregroundColor: textColor, side: BorderSide(color: borderColor, width: 1), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100))),
+        style: OutlinedButton.styleFrom(
+            backgroundColor: bgColor,
+            foregroundColor: textColor,
+            side: BorderSide(color: borderColor, width: 1),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(100))),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text('G', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: iconColor)),
+          Text('G',
+              style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: iconColor)),
           const SizedBox(width: 10),
-          Text('Continue with Google', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: textColor)),
+          Text('Continue with Google',
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: textColor)),
         ]),
       ),
     );

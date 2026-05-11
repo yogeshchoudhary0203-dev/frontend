@@ -19,7 +19,6 @@ class AuthService {
 
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
-
     final fcmToken = await FcmService.getCachedToken();
     final body = <String, dynamic>{'email': email, 'password': password};
     if (fcmToken != null) body['fcm_token'] = fcmToken;
@@ -27,47 +26,72 @@ class AuthService {
     final data = await ApiService.post('/auth/login', body);
     await ApiService.saveToken(data['access_token'] as String);
 
-    // Queue notification — HomeScreen will show it AFTER permission confirmed
     final user      = data['user'] as Map<String, dynamic>?;
     final firstName = user?['name']?.toString().split(' ').first ?? 'there';
     FcmService.queueWelcome(
       title: 'Welcome back, $firstName ✦',
       body:  'Great to have you back. Your feed is right where you left it.',
     );
-
     return data;
   }
 
-  static Future<Map<String, dynamic>> signup({
+  // ── Email Signup Step 1: Send OTP ─────────────────────────────────────────
+
+  /// Validates form data and triggers OTP email.
+  /// Returns {"message": "...", "email": "..."} on success.
+  /// Throws [ApiException] on failure.
+  static Future<Map<String, dynamic>> initiateSignup({
     required String name,
     required String username,
     required String email,
     required String password,
   }) async {
-
     final fcmToken = await FcmService.getCachedToken();
     final body = <String, dynamic>{
-      'name': name, 'username': username,
-      'email': email, 'password': password,
+      'name': name,
+      'username': username,
+      'email': email,
+      'password': password,
     };
     if (fcmToken != null) body['fcm_token'] = fcmToken;
 
-    final data = await ApiService.post('/auth/signup', body);
+    return await ApiService.post('/auth/signup/initiate', body);
+  }
+
+  // ── Email Signup Step 2: Verify OTP & Create Account ─────────────────────
+
+  /// Verifies the OTP and creates the account.
+  /// Returns full auth response (token + user) on success.
+  static Future<Map<String, dynamic>> verifyEmailOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final data = await ApiService.post('/auth/signup/verify', {
+      'email': email,
+      'otp': otp,
+    });
     await ApiService.saveToken(data['access_token'] as String);
 
-    // Queue notification — HomeScreen will show it AFTER permission confirmed
-    final firstName = name.split(' ').first;
+    final user      = data['user'] as Map<String, dynamic>?;
+    final firstName = user?['name']?.toString().split(' ').first ?? 'there';
     FcmService.queueWelcome(
       title: 'Welcome to Trandia ✦',
       body:  'Hi $firstName, you\'re all set. Explore and connect with people.',
     );
-
     return data;
   }
 
+  // ── Resend OTP ────────────────────────────────────────────────────────────
+
+  static Future<void> resendOtp(String email) async {
+    await ApiService.post('/auth/signup/resend', {'email': email});
+  }
+
+  // ── Google Auth ───────────────────────────────────────────────────────────
+
   static Future<Map<String, dynamic>?> loginWithGoogle() async {
     if (kIsWeb) {
-      final origin     = getWindowOrigin();
+      final origin      = getWindowOrigin();
       final redirectUrl =
           '$_backendUrl/auth/google/web?app_origin=${Uri.encodeComponent(origin)}';
       launchWebUrl(redirectUrl);
@@ -94,9 +118,10 @@ class AuthService {
       title: 'Welcome to Trandia ✦',
       body:  'Hi $firstName, you\'re all set. Explore and connect with people.',
     );
-
     return data;
   }
+
+  // ── Session ───────────────────────────────────────────────────────────────
 
   static Future<bool> isLoggedIn() async {
     try {

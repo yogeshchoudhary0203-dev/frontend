@@ -543,17 +543,7 @@ class _GlassCard extends StatelessWidget {
               colors: t.cardFill,
             ),
           ),
-          child: Stack(children: [
-            Positioned(
-              top: 0,
-              left: 24,
-              right: 24,
-              child: Container(
-                  height: 1.2,
-                  color: t.innerHi.withValues(alpha: 0.7)),
-            ),
-            child,
-          ]),
+          child: child,
         ),
       ),
     );
@@ -592,15 +582,6 @@ class _GlassChip extends StatelessWidget {
                     : const [Color(0x59FFFFFF), Color(0x1AFFFFFF)],
               ),
             ),
-            child: Stack(children: [
-              Positioned(
-                top: 0,
-                left: 16,
-                right: 16,
-                child: Container(
-                    height: 1, color: t.innerHi.withValues(alpha: 0.6)),
-              ),
-            ]),
           ),
         ),
       ),
@@ -636,18 +617,9 @@ class _GlassMark extends StatelessWidget {
                   : const [Color(0x80FFFFFF), Color(0x33FFFFFF)],
             ),
           ),
-          child: Stack(children: [
-            Positioned(
-              top: 0,
-              left: 10,
-              right: 10,
-              child: Container(
-                  height: 1, color: t.innerHi.withValues(alpha: 0.7)),
-            ),
-            Center(
-              child: Icon(Icons.auto_awesome, size: 28, color: t.fg),
-            ),
-          ]),
+          child: Center(
+            child: Icon(Icons.auto_awesome, size: 28, color: t.fg),
+          ),
         ),
       ),
     );
@@ -722,52 +694,43 @@ class _GlassField extends StatelessWidget {
               colors: t.fieldFill,
             ),
           ),
-          child: Stack(children: [
-            Positioned(
-              top: 0,
-              left: 18,
-              right: 18,
-              child: Container(
-                  height: 1, color: t.innerHi.withValues(alpha: 0.7)),
-            ),
-            TextField(
-              controller: controller,
-              obscureText: obscureText,
-              keyboardType: keyboardType,
-              textInputAction: textInputAction,
-              style: TextStyle(fontSize: 15, color: t.fg),
-              cursorColor: t.fg,
-              decoration: InputDecoration(
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 15),
-                hintText: hint,
-                hintStyle: TextStyle(fontSize: 15, color: t.placeholder),
-                prefixIcon: Padding(
-                  padding: const EdgeInsets.only(left: 18, right: 12),
-                  child: Icon(prefixIcon, color: t.muted, size: 20),
-                ),
-                prefixIconConstraints:
-                    const BoxConstraints(minWidth: 0, minHeight: 0),
-                suffixIcon: suffixIcon != null
-                    ? GestureDetector(
-                        onTap: onSuffixTap,
-                        child: Padding(
-                          padding:
-                              const EdgeInsets.only(right: 18, left: 8),
-                          child: Icon(suffixIcon,
-                              color: t.muted, size: 20),
-                        ),
-                      )
-                    : null,
-                suffixIconConstraints:
-                    const BoxConstraints(minWidth: 0, minHeight: 0),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: false,
+          child: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            style: TextStyle(fontSize: 15, color: t.fg),
+            cursorColor: t.fg,
+            textAlignVertical: TextAlignVertical.center,
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.only(top: 15, bottom: 15, right: 16),
+              hintText: hint,
+              hintStyle: TextStyle(fontSize: 15, color: t.placeholder),
+              prefixIcon: Padding(
+                padding: const EdgeInsets.only(left: 18, right: 12),
+                child: Icon(prefixIcon, color: t.muted, size: 20),
               ),
+              prefixIconConstraints:
+                  const BoxConstraints(minWidth: 0, minHeight: 0),
+              suffixIcon: suffixIcon != null
+                  ? GestureDetector(
+                      onTap: onSuffixTap,
+                      child: Padding(
+                        padding:
+                            const EdgeInsets.only(right: 18, left: 8),
+                        child: Icon(suffixIcon,
+                            color: t.muted, size: 20),
+                      ),
+                    )
+                  : null,
+              suffixIconConstraints:
+                  const BoxConstraints(minWidth: 0, minHeight: 0),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
             ),
-          ]),
+          ),
         ),
       ),
     );
@@ -810,29 +773,17 @@ class _PrimaryPillButton extends StatelessWidget {
                 colors: t.btnFill,
               ),
             ),
-            child: Stack(children: [
-              Positioned(
-                top: 0,
-                left: 18,
-                right: 18,
-                child: Container(
-                  height: 1.2,
-                  color: Colors.white
-                      .withValues(alpha: t.dark ? 0.85 : 0.32),
+            child: Center(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                  color: t.btnFg,
                 ),
               ),
-              Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                    color: t.btnFg,
-                  ),
-                ),
-              ),
-            ]),
+            ),
           ),
         ),
       ),
@@ -899,34 +850,24 @@ class _GooglePillButton extends StatelessWidget {
                       : const [Color(0x80FFFFFF), Color(0x38FFFFFF)],
                 ),
               ),
-              child: Stack(children: [
-                Positioned(
-                  top: 0,
-                  left: 18,
-                  right: 18,
-                  child: Container(
-                      height: 1,
-                      color: t.innerHi.withValues(alpha: 0.7)),
-                ),
-                Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const _GoogleGlyph(size: 20),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Continue with Google',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.2,
-                          color: t.fg,
-                        ),
+              child: Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const _GoogleGlyph(size: 20),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Continue with Google',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.2,
+                        color: t.fg,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ]),
+              ),
             ),
           ),
         ),

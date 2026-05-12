@@ -63,20 +63,20 @@ class _TrandiaIsland extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 22),
+      height: 37,
+      width: 124, // Approximate width of iPhone Dynamic Island
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(100),
+        borderRadius: BorderRadius.circular(22), // Authentic Dynamic Island radius
       ),
       child: Center(
         child: AnimatedDefaultTextStyle(
           duration: const Duration(milliseconds: 300),
           style: TextStyle(
             color: textColor,
-            fontSize: 15,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.3,
+            letterSpacing: -0.2,
             decoration: TextDecoration.none,
           ),
           child: const Text('Trandia'),

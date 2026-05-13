@@ -2,10 +2,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-const double _kBtnSize   = 64.0;
-const double _kNavWidth  = _kBtnSize;
-const double _kItemH     = 52.0;
-const double _kNavGap    = 6.0; // visible but minimal gap
+const double _kBtnSize  = 64.0;
+const double _kNavWidth = _kBtnSize;
+const double _kItemH    = 52.0;
+const double _kNavGap   = 6.0;
+const double _kIconSize = 24.0; // same for both msg icon & navbar icons
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,7 +16,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
-  bool _navOpen = false;
+  bool _navOpen   = false;
   int  _activeNav = 0;
 
   late AnimationController _navCtrl;
@@ -27,17 +28,12 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _navCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 280),
-    );
+        vsync: this, duration: const Duration(milliseconds: 280));
     _navFade  = CurvedAnimation(parent: _navCtrl, curve: Curves.easeOut);
-    _navScale = Tween<double>(begin: 0.88, end: 1.0).animate(
-      CurvedAnimation(parent: _navCtrl, curve: Curves.easeOutBack),
-    );
-    _navSlide = Tween<Offset>(
-      begin: const Offset(0, 0.12),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _navCtrl, curve: Curves.easeOutCubic));
+    _navScale = Tween<double>(begin: 0.88, end: 1.0)
+        .animate(CurvedAnimation(parent: _navCtrl, curve: Curves.easeOutBack));
+    _navSlide = Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _navCtrl, curve: Curves.easeOutCubic));
   }
 
   @override
@@ -63,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen>
       extendBodyBehindAppBar: true,
       extendBody: true,
       body: Stack(children: [
-        // ── Background
+        // Background
         Positioned.fill(child: Container(
           decoration: BoxDecoration(
             gradient: RadialGradient(
@@ -81,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen>
           child: Container(color: (isDark ? Colors.black : Colors.white).withOpacity(0.1)),
         )),
 
-        // ── Content
+        // Content
         SafeArea(child: Stack(children: [
 
           // Trandia Island
@@ -89,18 +85,23 @@ class _HomeScreenState extends State<HomeScreen>
             child: Padding(padding: const EdgeInsets.only(top: 8),
               child: _TrandiaIsland(background: islandBg, textColor: islandText))),
 
-          // Message icon — clean stroke only, no box
+          // ── Message icon top-right ──
           Align(alignment: Alignment.topRight,
-            child: Padding(padding: const EdgeInsets.only(top: 8, right: 14),
+            child: Padding(padding: const EdgeInsets.only(top: 10, right: 16),
               child: GestureDetector(
                 onTap: () {},
                 child: SizedBox(
-                  width: 44, height: 44,
-                  child: CustomPaint(painter: _MsgIconPainter(isDark: isDark)),
+                  width: 36, height: 36,   // smaller tap container
+                  child: Center(
+                    child: CustomPaint(
+                      size: const Size(_kIconSize, _kIconSize),
+                      painter: _EnvelopeIconPainter(isDark: isDark),
+                    ),
+                  ),
                 ),
               ))),
 
-          // Vertical navbar (above button)
+          // ── Vertical navbar ──
           Positioned(
             bottom: 30 + _kBtnSize + _kNavGap,
             right: 20,
@@ -118,14 +119,12 @@ class _HomeScreenState extends State<HomeScreen>
                         activeIndex: _activeNav,
                         onTap: (i) => setState(() => _activeNav = i),
                       ),
-                    ),
-                  ),
-                ),
+                    ))),
               ),
             ),
           ),
 
-          // Infinity button
+          // ── Infinity button ──
           Positioned(
             bottom: 30, right: 20,
             child: _InfinityBtn(isDark: isDark, isOpen: _navOpen, onTap: _toggleNav),
@@ -136,67 +135,49 @@ class _HomeScreenState extends State<HomeScreen>
   }
 }
 
-// ═══════════════════════════════════════════════════
-//  MESSAGE ICON — clean minimal stroke, no box
-// ═══════════════════════════════════════════════════
-class _MsgIconPainter extends CustomPainter {
+// ══════════════════════════════════════════════════════
+//  ENVELOPE / MAIL ICON  (matches image 1)
+//  Rounded rect body + V-fold lines, stroke style
+// ══════════════════════════════════════════════════════
+class _EnvelopeIconPainter extends CustomPainter {
   final bool isDark;
-  const _MsgIconPainter({required this.isDark});
+  const _EnvelopeIconPainter({required this.isDark});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c  = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final cx = size.width  / 2;
-    final cy = size.height / 2 - 1;
+    final color = isDark ? Colors.white : const Color(0xFF2A2A2A);
+    final w = size.width;
+    final h = size.height;
 
     final p = Paint()
-      ..color = c.withOpacity(0.88)
+      ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.7
+      ..strokeWidth = 1.8
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    // Bubble outline — smooth rounded rect
-    const bw = 20.0; // half-width
-    const bh = 13.0; // half-height
-    const r  = 5.0;
+    // Rounded rect body
+    final body = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0.9, 1.5, w - 1.8, h - 3.0),
+      const Radius.circular(3.5),
+    );
+    canvas.drawRRect(body, p);
 
-    final bubble = Path()
-      ..moveTo(cx - bw + r, cy - bh)
-      ..lineTo(cx + bw - r, cy - bh)
-      ..quadraticBezierTo(cx + bw, cy - bh, cx + bw, cy - bh + r)
-      ..lineTo(cx + bw, cy + bh - r - 3)
-      ..quadraticBezierTo(cx + bw, cy + bh - 3, cx + bw - r, cy + bh - 3)
-      ..lineTo(cx + 3, cy + bh - 3)
-      // small curved tail
-      ..quadraticBezierTo(cx + 1, cy + bh - 3, cx - 2, cy + bh + 4)
-      ..quadraticBezierTo(cx - 5, cy + bh - 3, cx - bw + r + 2, cy + bh - 3)
-      ..lineTo(cx - bw + r, cy + bh - 3)
-      ..quadraticBezierTo(cx - bw, cy + bh - 3, cx - bw, cy + bh - r - 3)
-      ..lineTo(cx - bw, cy - bh + r)
-      ..quadraticBezierTo(cx - bw, cy - bh, cx - bw + r, cy - bh)
-      ..close();
-
-    canvas.drawPath(bubble, p);
-
-    // Two inner lines
-    final thin = Paint()
-      ..color = c.withOpacity(0.45)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.3
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(Offset(cx - 8, cy - 3), Offset(cx + 8, cy - 3), thin);
-    canvas.drawLine(Offset(cx - 8, cy + 3), Offset(cx + 3, cy + 3), thin);
+    // V-fold: left-top corner → center-top-area → right-top corner
+    final fold = Path()
+      ..moveTo(0.9 + 3.5, 1.5)          // top-left corner of body
+      ..lineTo(w / 2, h * 0.52)          // center fold point
+      ..lineTo(w - 0.9 - 3.5, 1.5);     // top-right corner of body
+    canvas.drawPath(fold, p);
   }
 
   @override
-  bool shouldRepaint(_MsgIconPainter o) => o.isDark != isDark;
+  bool shouldRepaint(_EnvelopeIconPainter o) => o.isDark != isDark;
 }
 
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 //  VERTICAL PILL NAVBAR
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 class _VerticalNav extends StatelessWidget {
   final bool isDark;
   final int  activeIndex;
@@ -205,9 +186,9 @@ class _VerticalNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final navH         = 5 * _kItemH + 12.0;
-    final glass        = (isDark ? Colors.white : Colors.black).withOpacity(0.08);
-    final border       = (isDark ? Colors.white : Colors.black).withOpacity(0.16);
+    final navH   = 5 * _kItemH + 12.0;
+    final glass  = (isDark ? Colors.white : Colors.black).withOpacity(0.08);
+    final border = (isDark ? Colors.white : Colors.black).withOpacity(0.16);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(_kNavWidth / 2),
@@ -246,13 +227,16 @@ class _VerticalNav extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: active
-                              ? (isDark ? Colors.white.withOpacity(0.18) : Colors.black.withOpacity(0.12))
+                              ? (isDark
+                                  ? Colors.white.withOpacity(0.18)
+                                  : Colors.black.withOpacity(0.12))
                               : Colors.transparent,
                         ),
                         child: Center(
                           child: CustomPaint(
-                            size: const Size(22, 22),
-                            painter: _NavIcon(index: i, isDark: isDark, active: active),
+                            size: const Size(_kIconSize, _kIconSize),
+                            painter: _NavIconPainter(
+                                index: i, isDark: isDark, active: active),
                           ),
                         ),
                       ),
@@ -268,120 +252,142 @@ class _VerticalNav extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════
-//  NAV ICONS — modern minimal
-// ═══════════════════════════════════════════════════
-class _NavIcon extends CustomPainter {
+// ══════════════════════════════════════════════════════
+//  NAV ICON PAINTERS  (exact match to reference images)
+// ══════════════════════════════════════════════════════
+class _NavIconPainter extends CustomPainter {
   final int index;
   final bool isDark;
   final bool active;
-  const _NavIcon({required this.index, required this.isDark, required this.active});
+  const _NavIconPainter(
+      {required this.index, required this.isDark, required this.active});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final base = isDark ? Colors.white : Colors.black;
-    final c    = active ? base : base.withOpacity(0.50);
-    final sw   = active ? 1.7 : 1.5;
+    final base = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final col  = active ? base : base.withOpacity(0.52);
 
-    final p = Paint()
-      ..color = c
+    final stroke = Paint()
+      ..color = col
       ..style = PaintingStyle.stroke
-      ..strokeWidth = sw
+      ..strokeWidth = 1.7
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    final fp = Paint()..color = c..style = PaintingStyle.fill;
+    final fill = Paint()
+      ..color = col
+      ..style = PaintingStyle.fill;
 
-    final w = size.width;
-    final h = size.height;
+    final w  = size.width;
+    final h  = size.height;
     final cx = w / 2;
     final cy = h / 2;
 
     switch (index) {
 
-      // 0 — HOME: clean house with rounded roof peak
+      // ── 0: HOME — filled solid house (image 2) ──────────────────────
       case 0:
+        // Roof triangle (filled)
         final roof = Path()
-          ..moveTo(cx, 1.5)
-          ..lineTo(w - 2, h * 0.46)
-          ..lineTo(1, h * 0.46);
-        canvas.drawPath(roof, p..strokeJoin = StrokeJoin.round);
-        // walls
-        canvas.drawLine(Offset(1, h * 0.46), Offset(1, h - 1), p);
-        canvas.drawLine(Offset(w - 2, h * 0.46), Offset(w - 2, h - 1), p);
-        canvas.drawLine(Offset(1, h - 1), Offset(w - 2, h - 1), p);
-        // door
-        final door = RRect.fromRectAndRadius(
-          Rect.fromLTWH(cx - 2.8, h * 0.60, 5.5, h - 1 - h * 0.60),
+          ..moveTo(cx, 1.0)
+          ..lineTo(w, h * 0.46)
+          ..lineTo(0, h * 0.46)
+          ..close();
+        canvas.drawPath(roof, fill);
+
+        // Body (filled rectangle)
+        final body = Rect.fromLTWH(w * 0.15, h * 0.46, w * 0.70, h * 0.54);
+        canvas.drawRect(body, fill);
+
+        // Door cutout (punch out with background color)
+        final doorC = isDark ? const Color(0xFF1C1C1F) : const Color(0xFFF8F8FA);
+        final door  = RRect.fromRectAndRadius(
+          Rect.fromLTWH(cx - w * 0.14, h * 0.66, w * 0.28, h * 0.34),
           const Radius.circular(1.5),
         );
-        canvas.drawRRect(door, p);
+        canvas.drawRRect(door, Paint()..color = doorC..style = PaintingStyle.fill);
         break;
 
-      // 1 — SHOTS: rounded play square
+      // ── 1: SHOTS — circle + rounded-corner play triangle (image 3) ──
       case 1:
-        final box = RRect.fromRectAndRadius(
-          Rect.fromLTWH(1, 1, w - 2, h - 2),
-          const Radius.circular(4),
-        );
-        canvas.drawRRect(box, p);
+        // Outer circle stroke
+        canvas.drawCircle(Offset(cx, cy), w / 2 - 1.0, stroke);
+        // Rounded play triangle (filled)
+        const offset = 1.5;
         final tri = Path()
-          ..moveTo(cx - 2.5, cy - 4)
-          ..lineTo(cx + 5, cy)
-          ..lineTo(cx - 2.5, cy + 4)
+          ..moveTo(cx - 3.5 + offset, cy - 5.5)
+          ..lineTo(cx + 6.0 + offset, cy)
+          ..lineTo(cx - 3.5 + offset, cy + 5.5)
           ..close();
-        canvas.drawPath(tri, fp);
-        break;
-
-      // 2 — ADD: clean plus in thin circle
-      case 2:
-        canvas.drawCircle(Offset(cx, cy), w / 2 - 1.5, p);
-        canvas.drawLine(Offset(cx, cy - 5), Offset(cx, cy + 5), p);
-        canvas.drawLine(Offset(cx - 5, cy), Offset(cx + 5, cy), p);
-        break;
-
-      // 3 — SEARCH: magnifying glass, clean
-      case 3:
-        canvas.drawCircle(Offset(cx - 1.5, cy - 1.5), 5.8, p);
-        final handle = Paint()
-          ..color = c
+        canvas.drawPath(tri, Paint()
+          ..color = col
           ..style = PaintingStyle.stroke
-          ..strokeWidth = sw + 0.3
-          ..strokeCap = StrokeCap.round;
+          ..strokeWidth = 1.7
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round);
+        break;
+
+      // ── 2: ADD — rounded square + plus (image 5) ────────────────────
+      case 2:
+        // Rounded square
+        final box = RRect.fromRectAndRadius(
+          Rect.fromLTWH(0.8, 0.8, w - 1.6, h - 1.6),
+          const Radius.circular(5.5),
+        );
+        canvas.drawRRect(box, stroke);
+        // Plus arms
+        canvas.drawLine(Offset(cx, cy - 5.5), Offset(cx, cy + 5.5), stroke);
+        canvas.drawLine(Offset(cx - 5.5, cy), Offset(cx + 5.5, cy), stroke);
+        break;
+
+      // ── 3: SEARCH — magnifying glass (image 4) ──────────────────────
+      case 3:
+        const r = 6.2;
+        final ox = cx - 2.5;
+        final oy = cy - 2.5;
+        // Glass circle
+        canvas.drawCircle(Offset(ox, oy), r, stroke);
+        // Handle — thick & rounded
         canvas.drawLine(
-          Offset(cx + 2.5, cy + 2.5),
-          Offset(w - 1.5, h - 1.5),
-          handle,
+          Offset(ox + r * 0.68, oy + r * 0.68),
+          Offset(w - 1.2, h - 1.2),
+          Paint()
+            ..color = col
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.2
+            ..strokeCap = StrokeCap.round,
         );
         break;
 
-      // 4 — PROFILE: head + arc shoulders
+      // ── 4: PROFILE — head circle + body dome (image 6) ──────────────
       case 4:
-        // Head circle
-        canvas.drawCircle(Offset(cx, h * 0.32), h * 0.17, p);
-        // Shoulders
-        final path = Path()
-          ..moveTo(0.5, h - 1)
-          ..cubicTo(0.5, h * 0.62, cx * 0.6, h * 0.56, cx, h * 0.56)
-          ..cubicTo(cx + cx * 0.6, h * 0.56, w - 0.5, h * 0.62, w - 0.5, h - 1);
-        canvas.drawPath(path, p);
+        // Head (filled circle)
+        canvas.drawCircle(Offset(cx, h * 0.30), h * 0.185, fill);
+        // Body (filled half-ellipse / dome)
+        final bodyRect = Rect.fromCenter(
+          center: Offset(cx, h * 0.825),
+          width: w * 0.72,
+          height: h * 0.50,
+        );
+        canvas.drawArc(bodyRect, 3.14159, 3.14159, true, fill); // top half arc
         break;
     }
   }
 
   @override
-  bool shouldRepaint(_NavIcon o) =>
+  bool shouldRepaint(_NavIconPainter o) =>
       o.index != index || o.isDark != isDark || o.active != active;
 }
 
-// ═══════════════════════════════════════════════════
-//  INFINITY BUTTON — no glow, clean glass
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
+//  INFINITY BUTTON — glass, no glow
+// ══════════════════════════════════════════════════════
 class _InfinityBtn extends StatefulWidget {
   final bool isDark;
   final bool isOpen;
   final VoidCallback onTap;
-  const _InfinityBtn({required this.isDark, required this.isOpen, required this.onTap});
+  const _InfinityBtn(
+      {required this.isDark, required this.isOpen, required this.onTap});
 
   @override
   State<_InfinityBtn> createState() => _InfinityBtnState();
@@ -395,7 +401,8 @@ class _InfinityBtnState extends State<_InfinityBtn>
   @override
   void initState() {
     super.initState();
-    _ctrl  = AnimationController(vsync: this, duration: const Duration(milliseconds: 140));
+    _ctrl  = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 140));
     _scale = Tween<double>(begin: 1.0, end: 0.93)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
@@ -414,8 +421,8 @@ class _InfinityBtnState extends State<_InfinityBtn>
       builder: (_, __) => Transform.scale(
         scale: _scale.value,
         child: GestureDetector(
-          onTapDown: (_) => _ctrl.forward(),
-          onTapUp:   (_) { _ctrl.reverse(); widget.onTap(); },
+          onTapDown:   (_) => _ctrl.forward(),
+          onTapUp:     (_) { _ctrl.reverse(); widget.onTap(); },
           onTapCancel: () => _ctrl.reverse(),
           child: ClipOval(
             child: BackdropFilter(
@@ -426,7 +433,6 @@ class _InfinityBtnState extends State<_InfinityBtn>
                   shape: BoxShape.circle,
                   color: glass,
                   border: Border.all(color: border, width: 0.9),
-                  // subtle shadow only, NO glow
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.22),
@@ -435,8 +441,7 @@ class _InfinityBtnState extends State<_InfinityBtn>
                   ],
                 ),
                 child: CustomPaint(
-                  painter: _InfinityPainter(color: iconC),
-                ),
+                    painter: _InfinityPainter(color: iconC)),
               ),
             ),
           ),
@@ -446,9 +451,9 @@ class _InfinityBtnState extends State<_InfinityBtn>
   }
 }
 
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 //  INFINITY PAINTER — smooth lemniscate
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 class _InfinityPainter extends CustomPainter {
   final Color color;
   const _InfinityPainter({required this.color});
@@ -457,16 +462,15 @@ class _InfinityPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cx = size.width  / 2;
     final cy = size.height / 2;
-    const a  = 13.0; // horizontal reach
-    const b  =  7.0; // vertical reach
+    const a  = 13.0;
+    const b  =  7.0;
 
-    // Smooth lemniscate via 4 cubic segments
     final path = Path()
       ..moveTo(cx, cy)
-      ..cubicTo(cx + a * 0.5, cy - b,  cx + a,      cy - b,  cx + a, cy)
-      ..cubicTo(cx + a,       cy + b,  cx + a * 0.5, cy + b,  cx, cy)
-      ..cubicTo(cx - a * 0.5, cy - b,  cx - a,       cy - b,  cx - a, cy)
-      ..cubicTo(cx - a,       cy + b,  cx - a * 0.5, cy + b,  cx, cy);
+      ..cubicTo(cx + a * 0.5, cy - b, cx + a, cy - b, cx + a, cy)
+      ..cubicTo(cx + a, cy + b, cx + a * 0.5, cy + b, cx, cy)
+      ..cubicTo(cx - a * 0.5, cy - b, cx - a, cy - b, cx - a, cy)
+      ..cubicTo(cx - a, cy + b, cx - a * 0.5, cy + b, cx, cy);
 
     canvas.drawPath(path, Paint()
       ..style = PaintingStyle.stroke
@@ -480,39 +484,45 @@ class _InfinityPainter extends CustomPainter {
   bool shouldRepaint(_InfinityPainter o) => o.color != color;
 }
 
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 //  ORB
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 class _Orb extends StatelessWidget {
   final Color color; final double size;
   final double? top, bottom, left, right;
-  const _Orb({required this.color, required this.size, this.top, this.bottom, this.left, this.right});
+  const _Orb(
+      {required this.color, required this.size,
+        this.top, this.bottom, this.left, this.right});
 
   @override
   Widget build(BuildContext context) => Positioned(
     top: top, bottom: bottom, left: left, right: right,
     child: Container(width: size, height: size,
       decoration: BoxDecoration(shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [color, color.withOpacity(0)]))));
+        gradient: RadialGradient(
+            colors: [color, color.withOpacity(0)]))));
 }
 
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 //  TRANDIA ISLAND
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 class _TrandiaIsland extends StatelessWidget {
   final Color background, textColor;
-  const _TrandiaIsland({required this.background, required this.textColor});
+  const _TrandiaIsland(
+      {required this.background, required this.textColor});
 
   @override
   Widget build(BuildContext context) => AnimatedContainer(
     duration: const Duration(milliseconds: 300),
     curve: Curves.easeInOut,
     height: 37, width: 124,
-    decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(22)),
+    decoration: BoxDecoration(
+        color: background, borderRadius: BorderRadius.circular(22)),
     child: Center(
       child: AnimatedDefaultTextStyle(
         duration: const Duration(milliseconds: 300),
-        style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w600,
+        style: TextStyle(
+            color: textColor, fontSize: 14, fontWeight: FontWeight.w600,
             letterSpacing: -0.2, decoration: TextDecoration.none),
         child: const Text('Trandia'),
       ),

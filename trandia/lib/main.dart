@@ -80,10 +80,19 @@ class _TrandiaAppState extends State<TrandiaApp> {
         title: 'Trandia',
         navigatorKey: navigatorKey,
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true,
+          brightness: Brightness.light,
+          scaffoldBackgroundColor: const Color(0xFFFFFFFF),
+          colorScheme: const ColorScheme.light(
+            surface: Color(0xFFFFFFFF),
+          ),
         ),
-        darkTheme: ThemeData.dark(),
+        darkTheme: ThemeData(
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: const Color(0xFF111111),
+          colorScheme: const ColorScheme.dark(
+            surface: Color(0xFF111111),
+          ),
+        ),
         themeMode: ThemeMode.system,
         home: const _SplashRouter(),
       );

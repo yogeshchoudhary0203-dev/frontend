@@ -1,147 +1,1224 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import '../../services/auth_service.dart';
-import '../../services/api_service.dart';
+import 'package:flutter/services.dart';
 import '../../services/fcm_service.dart';
-import '../auth/login_screen.dart';
+import '../notifications_screen.dart';
 
+extension _ColorOp on Color {
+  Color op(double opacity) => withOpacity(opacity);
+}
+
+const double _kBtnSize  = 64.0;
+const double _kNavWidth = _kBtnSize;
+const double _kItemH    = 54.0;
+const double _kNavGap   = 6.0;
+const double _kIconSize = 20.0; // message icon — minor size reduction
+
+// ─── Story data ───────────────────────────────────────
+class _StoryData {
+  final String name, initials;
+  final Color  avatarColor;
+  final bool   seen, isOwn;
+  const _StoryData({
+    required this.name, required this.initials, required this.avatarColor,
+    this.seen = false, this.isOwn = false,
+  });
+}
+
+const _kStories = <_StoryData>[
+  _StoryData(name: 'Your Story', initials: '+',  avatarColor: Color(0xFF3A3A3E), isOwn: true),
+  _StoryData(name: 'Arjun',      initials: 'AK', avatarColor: Color(0xFF2D3561)),
+  _StoryData(name: 'Priya',      initials: 'PS', avatarColor: Color(0xFF1B4332)),
+  _StoryData(name: 'Rohan',      initials: 'RV', avatarColor: Color(0xFF3D0C11)),
+  _StoryData(name: 'Sneha',      initials: 'SN', avatarColor: Color(0xFF2C2C54)),
+  _StoryData(name: 'Dev',        initials: 'DM', avatarColor: Color(0xFF1A1A2E)),
+  _StoryData(name: 'Kavya',      initials: 'KR', avatarColor: Color(0xFF2D132C)),
+  _StoryData(name: 'Nikhil',     initials: 'NK', avatarColor: Color(0xFF0D3349), seen: true),
+];
+
+// ─── Post data ────────────────────────────────────────
+class _PostData {
+  final String user, userInitials, timeAgo, description;
+  final Color  userColor;
+  final List<Color> mediaGradient;
+  final double aspectRatio;
+  final bool   isVideo;
+  final int    likes, comments;
+  const _PostData({
+    required this.user, required this.userInitials, required this.timeAgo,
+    required this.description, required this.userColor,
+    required this.mediaGradient, required this.aspectRatio,
+    this.isVideo = false, required this.likes, required this.comments,
+  });
+}
+
+const _kPosts = <_PostData>[
+  _PostData(
+    user: 'Arjun Kapoor', userInitials: 'AK', timeAgo: '2m ago',
+    userColor: Color(0xFF2D3561),
+    description: 'Golden hour at Manali. Sometimes you just need to step away from the noise and let the mountains do the talking. Pure bliss.',
+    mediaGradient: [Color(0xFF1a1a2e), Color(0xFF16213e), Color(0xFF0f3460)],
+    aspectRatio: 1.333, likes: 284, comments: 31,
+  ),
+  _PostData(
+    user: 'Priya Sharma', userInitials: 'PS', timeAgo: '18m ago',
+    userColor: Color(0xFF1B4332),
+    description: 'Reel of the day! Caught the most insane sunset timelapse. Drop a fire if you want the full BTS.',
+    mediaGradient: [Color(0xFF0d1b2a), Color(0xFF1b4332), Color(0xFF2d6a4f)],
+    aspectRatio: 0.5625, isVideo: true, likes: 1420, comments: 87,
+  ),
+  _PostData(
+    user: 'Rohan Verma', userInitials: 'RV', timeAgo: '45m ago',
+    userColor: Color(0xFF3D0C11),
+    description: 'Street food chronicles! Found this hidden gem near Chandni Chowk. The aloo chaat was absolutely unreal.',
+    mediaGradient: [Color(0xFF3d0c11), Color(0xFF6b2737), Color(0xFFc9184a)],
+    aspectRatio: 1.0, likes: 532, comments: 44,
+  ),
+  _PostData(
+    user: 'Sneha Nair', userInitials: 'SN', timeAgo: '2h ago',
+    userColor: Color(0xFF2C2C54),
+    description: 'Late night coding sessions hit different with lo-fi. Building something exciting. Stay tuned. #buildinpublic #flutter',
+    mediaGradient: [Color(0xFF0a0a0f), Color(0xFF1a1a3e), Color(0xFF2c2c54)],
+    aspectRatio: 1.777, likes: 198, comments: 22,
+  ),
+  _PostData(
+    user: 'Dev Malhotra', userInitials: 'DM', timeAgo: '3h ago',
+    userColor: Color(0xFF1A1A2E),
+    description: 'Sunrise from Triund peak. Trekked 9km in the dark just for this moment. Worth every step and every sip of cold chai at 4am.',
+    mediaGradient: [Color(0xFF1a0533), Color(0xFF6a0572), Color(0xFFab47bc)],
+    aspectRatio: 0.8, likes: 876, comments: 63,
+  ),
+];
+
+// ═════════════════════════════════════════════════════
+//  HOME SCREEN
+// ═════════════════════════════════════════════════════
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  Map<String, dynamic>? _user;
-  bool    _loading = true;
-  String? _error;
+class _HomeScreenState extends State<HomeScreen>
+    with TickerProviderStateMixin {
+  bool _navOpen   = false;
+  int  _activeNav = 0;
+  late AnimationController      _navCtrl;
+  final List<Animation<double>> _itemScales    = [];
+  final List<Animation<double>> _itemOpacities = [];
+
+  // ── Island expand / collapse ──────────────────────
+  late AnimationController _islandCtrl;
+  bool _islandOpen = false;
+
+  // Island pill geometry (populated after first layout)
+  Rect   _islandRect   = Rect.zero;
+  final  GlobalKey _islandKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-
-    // Foreground FCM message listener
-    FcmService.startForegroundListener();
-
-    // Fetch user profile
-    _fetchMe();
-
-    // Notification setup — runs after first frame so Activity is fully
-    // RESUMED. This is the ONLY place permission is requested.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FcmService.setupForHomeScreen();
-    });
-  }
-
-  Future<void> _fetchMe() async {
-    try {
-      final data = await ApiService.get('/users/me', requiresAuth: true);
-      if (!mounted) return;
-      setState(() { _user = data; _loading = false; });
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      if (e.message.contains('Session expired')) { _pushToLogin(); return; }
-      setState(() { _error = e.message; _loading = false; });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Could not load profile. Check your connection.';
-        _loading = false;
-      });
+    _navCtrl = AnimationController(vsync: this,
+        duration: const Duration(milliseconds: 480));
+    for (int i = 0; i < 5; i++) {
+      final double start = (4 - i) * 0.08;
+      final double end   = (start + 0.55).clamp(0.0, 1.0);
+      _itemScales.add(Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(parent: _navCtrl,
+              curve: Interval(start, end, curve: Curves.easeOutBack))));
+      _itemOpacities.add(Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(parent: _navCtrl,
+              curve: Interval(start, (start + 0.30).clamp(0.0, 1.0),
+                  curve: Curves.easeOut))));
     }
-  }
 
-  void _pushToLogin() => Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (_) => false,
-      );
+    _islandCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    );
 
-  Future<void> _handleLogout() async {
-    await AuthService.logout();
-    if (!mounted) return;
-    _pushToLogin();
+    // Request notification permission + show queued welcome notification
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => FcmService.setupForHomeScreen(),
+    );
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Trandia ✦'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              tooltip: 'Sign out',
-              onPressed: _handleLogout,
-            ),
-          ],
-        ),
-        body: _buildBody(),
-      );
+  void dispose() {
+    _navCtrl.dispose();
+    _islandCtrl.dispose();
+    super.dispose();
+  }
 
-  Widget _buildBody() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+  void _toggleNav() {
+    HapticFeedback.mediumImpact();
+    setState(() => _navOpen = !_navOpen);
+    _navOpen ? _navCtrl.forward(from: 0) : _navCtrl.reverse();
+  }
 
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(_error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.redAccent)),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                setState(() { _loading = true; _error = null; });
-                _fetchMe();
-              },
-              child: const Text('Retry'),
+  /// Called when user taps the Dynamic Island pill.
+  void _openIsland() {
+    _captureIslandRect();
+    HapticFeedback.mediumImpact();
+    setState(() => _islandOpen = true);
+    _islandCtrl.forward(from: 0);
+  }
+
+  /// Called when user swipes down / taps close inside notification overlay.
+  void _closeIsland() {
+    HapticFeedback.lightImpact();
+    _islandCtrl.reverse().then((_) {
+      if (mounted) setState(() => _islandOpen = false);
+    });
+  }
+
+  /// Captures the Global position & size of the island pill.
+  void _captureIslandRect() {
+    final ro = _islandKey.currentContext?.findRenderObject() as RenderBox?;
+    if (ro == null) return;
+    final pos  = ro.localToGlobal(Offset.zero);
+    _islandRect = pos & ro.size;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final topPad   = MediaQuery.of(context).padding.top;
+
+    SystemChrome.setSystemUIOverlayStyle(isDark
+        ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
+        : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent));
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      extendBody: true,
+      body: Stack(children: [
+
+        // Background
+        Positioned.fill(child: Container(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.topCenter, radius: 1.5,
+              colors: isDark
+                  ? [const Color(0xFF1C1C1F), const Color(0xFF050506)]
+                  : [const Color(0xFFF8F8FA), const Color(0xFFE2E2E8)],
             ),
-          ]),
+          ),
+        )),
+        _Orb(color: (isDark ? Colors.white : Colors.black).op(0.05),
+            size: 300, top: 100, left: -50),
+        _Orb(color: (isDark ? Colors.white : Colors.black).op(0.03),
+            size: 250, bottom: 150, right: -30),
+        Positioned.fill(child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+          child: Container(
+              color: (isDark ? Colors.black : Colors.white).op(0.1)),
+        )),
+
+        // ── Feed scrolls behind island — content visible under glass ──
+        Positioned.fill(
+          child: ListView(
+            physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics()),
+            // initial padding pushes content below the island,
+            // but as user scrolls, content flows up behind the glass island
+            padding: EdgeInsets.only(top: topPad + 56),
+            children: [
+              _StorySection(isDark: isDark),
+              const SizedBox(height: 6),
+              ..._kPosts.map((post) => _PostCard(
+                    key: ValueKey(post.user), post: post, isDark: isDark)),
+              const SizedBox(height: 130),
+            ],
+          ),
         ),
-      );
+
+        // ── Fixed overlays float on top of scrolling feed ──
+        SafeArea(child: Stack(children: [
+
+          // Island — glass, no bar — tappable
+          Align(alignment: Alignment.topCenter,
+            child: Padding(padding: const EdgeInsets.only(top: 8),
+              child: GestureDetector(
+                onTap: _islandOpen ? null : _openIsland,
+                child: _TrandiaIsland(key: _islandKey, isDark: isDark)))),
+
+          // Message icon — compact
+          Align(alignment: Alignment.topRight,
+            child: Padding(padding: const EdgeInsets.only(top: 10, right: 14),
+              child: GestureDetector(onTap: () {},
+                child: SizedBox(width: 30, height: 30,
+                  child: Center(child: CustomPaint(
+                    size: const Size(_kIconSize, _kIconSize),
+                    painter: _EnvelopeIconPainter(isDark: isDark))))))),
+
+          // Navbar
+          Positioned(
+            bottom: 30 + _kBtnSize + _kNavGap, right: 20,
+            child: AnimatedBuilder(animation: _navCtrl,
+              builder: (_, __) => IgnorePointer(ignoring: !_navOpen,
+                child: _StaggeredNavbar(
+                  isDark: isDark, activeIndex: _activeNav,
+                  itemScales: _itemScales, itemOpacities: _itemOpacities,
+                  onTap: (i) => setState(() => _activeNav = i))))),
+
+          // Infinity button
+          Positioned(bottom: 30, right: 20,
+            child: _InfinityBtn(
+                isDark: isDark, isOpen: _navOpen, onTap: _toggleNav)),
+        ])),
+
+        // ── Dynamic Island expand overlay ──────────────────
+        if (_islandOpen)
+          _IslandNotificationOverlay(
+            islandRect : _islandRect,
+            controller : _islandCtrl,
+            isDark     : isDark,
+            onClose    : _closeIsland,
+          ),
+      ]),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════
+//  STORY SECTION
+// ═════════════════════════════════════════════════════
+class _StorySection extends StatelessWidget {
+  final bool isDark;
+  const _StorySection({required this.isDark});
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 110,
+    child: ListView.builder(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      physics: const BouncingScrollPhysics(),
+      itemCount: _kStories.length,
+      itemBuilder: (_, i) => Padding(
+        padding: const EdgeInsets.only(right: 14),
+        child: _StoryBubble(story: _kStories[i], isDark: isDark)),
+    ),
+  );
+}
+
+class _StoryBubble extends StatelessWidget {
+  final _StoryData story;
+  final bool       isDark;
+  const _StoryBubble({required this.story, required this.isDark});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => HapticFeedback.lightImpact(),
+      child: SizedBox(width: 70,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(width: 70, height: 70,
+            child: CustomPaint(
+              painter: _StoryRingPainter(
+                  isDark: isDark, seen: story.seen, isOwn: story.isOwn),
+              child: Padding(padding: const EdgeInsets.all(4.5),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: story.avatarColor,
+                    border: Border.all(
+                      color: isDark ? Colors.black.op(0.60)
+                                    : Colors.white.op(0.70),
+                      width: 2)),
+                  child: Center(child: story.isOwn
+                      ? CustomPaint(size: const Size(18, 18),
+                          painter: _PlusPainter(
+                              color: isDark ? Colors.white
+                                           : const Color(0xFF1A1A1A)))
+                      : Text(story.initials, style: const TextStyle(
+                          color: Colors.white, fontSize: 15,
+                          fontWeight: FontWeight.w600))),
+                )))),
+          const SizedBox(height: 6),
+          Text(story.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: (isDark ? Colors.white : Colors.black)
+                  .op(story.seen ? 0.38 : 0.80),
+              fontSize: 10.5, fontWeight: FontWeight.w500)),
+        ])),
+    );
+  }
+}
+
+class _StoryRingPainter extends CustomPainter {
+  final bool isDark, seen, isOwn;
+  const _StoryRingPainter(
+      {required this.isDark, this.seen = false, this.isOwn = false});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx     = size.width  / 2;
+    final cy     = size.height / 2;
+    final radius = size.width  / 2 - 1.5;
+    if (isOwn) { _drawDashed(canvas, Offset(cx, cy), radius); return; }
+    if (seen) {
+      canvas.drawCircle(Offset(cx, cy), radius, Paint()
+        ..style = PaintingStyle.stroke..strokeWidth = 1.8
+        ..color = (isDark ? Colors.white : Colors.black).op(0.20));
+      return;
     }
+    canvas.drawCircle(Offset(cx, cy), radius, Paint()
+      ..style = PaintingStyle.stroke..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round
+      ..shader = ui.Gradient.sweep(Offset(cx, cy),
+        isDark
+            ? const [Color(0xFFFFFFFF), Color(0xFFAAAAAA), Color(0xFF666666)]
+            : const [Color(0xFF1A1A1A), Color(0xFF555555), Color(0xFF999999)],
+        const [0.0, 0.5, 1.0], TileMode.clamp,
+        -math.pi / 2, -math.pi / 2 + math.pi * 2));
+  }
+  void _drawDashed(Canvas canvas, Offset center, double radius) {
+    const int n = 20;
+    const double step = (2 * math.pi) / n;
+    final Paint p = Paint()
+      ..style = PaintingStyle.stroke..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..color = (isDark ? Colors.white : Colors.black).op(0.45);
+    for (int i = 0; i < n; i++) {
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
+          i * step - math.pi / 2, step * 0.70, false, p);
+    }
+  }
+  @override
+  bool shouldRepaint(_StoryRingPainter o) =>
+      o.isDark != isDark || o.seen != seen || o.isOwn != isOwn;
+}
 
-    final name     = _user?['name']     as String? ?? 'User';
-    final username = _user?['username'] as String? ?? '';
-    final email    = _user?['email']    as String? ?? '';
-    final picture  = _user?['picture']  as String?;
+// ═════════════════════════════════════════════════════
+//  POST CARD
+// ═════════════════════════════════════════════════════
+class _PostCard extends StatefulWidget {
+  final _PostData post;
+  final bool      isDark;
+  const _PostCard({super.key, required this.post, required this.isDark});
+  @override
+  State<_PostCard> createState() => _PostCardState();
+}
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          if (picture != null)
-            CircleAvatar(
-              radius: 40,
-              backgroundImage: CachedNetworkImageProvider(picture),
-              onBackgroundImageError: (_, __) {},
-            )
-          else
-            CircleAvatar(
-              radius: 40,
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: const TextStyle(fontSize: 28),
+class _PostCardState extends State<_PostCard> {
+  bool _expanded  = false;
+  bool _liked     = false;
+  late int _likeCount;
+  @override
+  void initState() { super.initState(); _likeCount = widget.post.likes; }
+
+  void _toggleLike() {
+    HapticFeedback.lightImpact();
+    setState(() { _liked = !_liked; _likeCount += _liked ? 1 : -1; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p    = widget.post;
+    final dark = widget.isDark;
+    // final Color glass       = (dark ? Colors.white : Colors.black).op(0.07);
+    final Color border      = (dark ? Colors.white : Colors.black).op(0.12);
+    final Color textPrimary = (dark ? Colors.white : Colors.black).op(0.90);
+    final Color textSub     = (dark ? Colors.white : Colors.black).op(0.45);
+    // Instagram-style icon color
+    final Color iconCol     = (dark ? Colors.white : Colors.black).op(0.80);
+    final Color likedCol    = dark ? const Color(0xFFFF3040) : const Color(0xFFED4956);
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(
+          color: border, width: 0.5))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+
+            // User header — compact, Instagram style
+            Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+              child: Row(children: [
+                Container(width: 30, height: 30,
+                  decoration: BoxDecoration(shape: BoxShape.circle,
+                    color: p.userColor,
+                    border: Border.all(color: border, width: 0.8)),
+                  child: Center(child: Text(p.userInitials,
+                    style: const TextStyle(color: Colors.white,
+                        fontSize: 10, fontWeight: FontWeight.w600)))),
+                const SizedBox(width: 8),
+                Text(p.user, style: TextStyle(
+                    color: textPrimary, fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text(p.timeAgo, style: TextStyle(
+                    color: textSub, fontSize: 11)),
+              ])),
+
+            // Media — full width, no horizontal padding, no border radius
+            AspectRatio(aspectRatio: p.aspectRatio,
+              child: Stack(fit: StackFit.expand, children: [
+                Container(decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: p.mediaGradient))),
+                if (p.isVideo)
+                  Center(child: Container(width: 48, height: 48,
+                    decoration: BoxDecoration(shape: BoxShape.circle,
+                      color: Colors.black.op(0.40),
+                      border: Border.all(
+                          color: Colors.white.op(0.60), width: 1.5)),
+                    child: const Icon(Icons.play_arrow_rounded,
+                        color: Colors.white, size: 26))),
+                Container(decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent,
+                        Colors.black.op(0.18)]))),
+              ])),
+
+            // ── Instagram-exact action icons ──────────────
+            Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+              child: Row(children: [
+
+                // Like
+                GestureDetector(onTap: _toggleLike,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    transitionBuilder: (child, anim) =>
+                        ScaleTransition(scale: anim, child: child),
+                    child: SizedBox(
+                      key: ValueKey(_liked),
+                      width: 26, height: 26,
+                      child: CustomPaint(
+                        painter: _IgHeartPainter(
+                          color: _liked ? likedCol : iconCol,
+                          filled: _liked))))),
+
+                const SizedBox(width: 16),
+
+                // Comment
+                GestureDetector(
+                  onTap: () => HapticFeedback.lightImpact(),
+                  child: SizedBox(width: 26, height: 26,
+                    child: CustomPaint(
+                        painter: _IgCommentPainter(color: iconCol)))),
+
+                const SizedBox(width: 16),
+
+                // Share / Send
+                GestureDetector(
+                  onTap: () => HapticFeedback.lightImpact(),
+                  child: SizedBox(width: 26, height: 26,
+                    child: CustomPaint(
+                        painter: _IgSharePainter(color: iconCol)))),
+
+                const Spacer(),
+
+                // Bookmark (save) — Instagram right side
+                GestureDetector(
+                  onTap: () => HapticFeedback.lightImpact(),
+                  child: SizedBox(width: 26, height: 26,
+                    child: CustomPaint(
+                        painter: _IgBookmarkPainter(color: iconCol)))),
+              ])),
+
+            // Like count + description
+            Padding(padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+              child: Text('$_likeCount likes', style: TextStyle(
+                  color: textPrimary, fontSize: 13,
+                  fontWeight: FontWeight.w600))),
+
+            // Description
+            Padding(padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _expanded = !_expanded);
+                  HapticFeedback.selectionClick();
+                },
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: _expanded
+                      ? Text.rich(TextSpan(children: [
+                          TextSpan(text: '${p.user} ', style: TextStyle(
+                              color: textPrimary, fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                          TextSpan(text: p.description, style: TextStyle(
+                              color: textPrimary.op(0.85),
+                              fontSize: 13, height: 1.45)),
+                        ]))
+                      : Text.rich(
+                          TextSpan(children: [
+                            TextSpan(text: '${p.user} ', style: TextStyle(
+                                color: textPrimary, fontSize: 13,
+                                fontWeight: FontWeight.w600)),
+                            TextSpan(text: p.description, style: TextStyle(
+                                color: textPrimary.op(0.85),
+                                fontSize: 13, height: 1.45)),
+                          ]),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        )
+                ))),
+
+          ])
+      );
+  }
+}
+
+// ─── Instagram Heart (exact IG proportions) ──────────
+class _IgHeartPainter extends CustomPainter {
+  final Color color;
+  final bool  filled;
+  const _IgHeartPainter({required this.color, this.filled = false});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    // Normalize to 26×26 reference grid
+    final double sx = w / 26.0;
+    final double sy = h / 26.0;
+
+    final path = Path()
+      // bottom tip
+      ..moveTo(13.0 * sx, 23.0 * sy)
+      // left side down-curve
+      ..cubicTo(
+         6.0 * sx, 19.0 * sy,
+         1.0 * sx, 14.0 * sy,
+         1.0 * sx, 9.5  * sy)
+      // left lobe
+      ..cubicTo(
+         1.0 * sx,  5.0 * sy,
+         4.5 * sx,  2.5 * sy,
+         7.5 * sx,  2.5 * sy)
+      // center dip
+      ..cubicTo(
+        10.0 * sx,  2.5 * sy,
+        12.0 * sx,  4.0 * sy,
+        13.0 * sx,  6.0 * sy)
+      // right lobe (mirror)
+      ..cubicTo(
+        14.0 * sx,  4.0 * sy,
+        16.0 * sx,  2.5 * sy,
+        18.5 * sx,  2.5 * sy)
+      ..cubicTo(
+        21.5 * sx,  2.5 * sy,
+        25.0 * sx,  5.0 * sy,
+        25.0 * sx,  9.5 * sy)
+      // right side down-curve
+      ..cubicTo(
+        25.0 * sx, 14.0 * sy,
+        20.0 * sx, 19.0 * sy,
+        13.0 * sx, 23.0 * sy)
+      ..close();
+
+    if (filled) {
+      canvas.drawPath(path, Paint()..color = color..style = PaintingStyle.fill);
+    } else {
+      canvas.drawPath(path, Paint()
+        ..color = color..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_IgHeartPainter o) =>
+      o.color != color || o.filled != filled;
+}
+
+// ─── Instagram Comment (speech bubble, mirrored) ──────
+class _IgCommentPainter extends CustomPainter {
+  final Color color;
+  const _IgCommentPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    final double sx = w / 26.0;
+    final double sy = h / 26.0;
+
+    final Paint p = Paint()
+      ..color = color..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // IG comment: rounded rect bubble + bottom-left tail, mirrored
+    final path = Path()
+      // start top-left
+      ..moveTo(7.0 * sx, 2.5 * sy)
+      ..lineTo(19.0 * sx, 2.5 * sy)
+      ..cubicTo(22.5 * sx, 2.5 * sy, 24.5 * sx, 4.5 * sy, 24.5 * sx, 7.5 * sy)
+      ..lineTo(24.5 * sx, 15.0 * sy)
+      ..cubicTo(24.5 * sx, 18.0 * sy, 22.5 * sx, 20.0 * sy, 19.0 * sx, 20.0 * sy)
+      ..lineTo(12.0 * sx, 20.0 * sy)
+      // tail curves down to bottom-left
+      ..cubicTo(10.0 * sx, 20.0 * sy, 5.5 * sx, 22.5 * sy, 3.0 * sx, 24.0 * sy)
+      // tail curves back up
+      ..cubicTo(4.0 * sx, 21.5 * sy, 4.5 * sx, 20.0 * sy, 4.5 * sx, 18.0 * sy)
+      ..lineTo(4.5 * sx, 15.0 * sy)
+      // close left side
+      ..lineTo(1.5 * sx, 15.0 * sy)
+      ..cubicTo(1.5 * sx, 15.0 * sy, 1.5 * sx, 7.5 * sy, 1.5 * sx, 7.5 * sy)
+      ..cubicTo(1.5 * sx, 4.5 * sy, 3.5 * sx, 2.5 * sy, 7.0 * sx, 2.5 * sy)
+      ..close();
+
+    canvas.drawPath(path, p);
+  }
+
+  @override
+  bool shouldRepaint(_IgCommentPainter o) => o.color != color;
+}
+
+// ─── Instagram Share / DM send ────────────────────────
+class _IgSharePainter extends CustomPainter {
+  final Color color;
+  const _IgSharePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    final double sx = w / 26.0;
+    final double sy = h / 26.0;
+
+    final Paint p = Paint()
+      ..color = color..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // IG send / paper-plane: tilted triangle pointing upper-right
+    final plane = Path()
+      ..moveTo(2.0 * sx,  23.5 * sy)   // bottom-left
+      ..lineTo(24.0 * sx,  13.0 * sy)  // right tip
+      ..lineTo(2.0 * sx,   2.5 * sy)   // top-left
+      ..lineTo(2.0 * sx,  10.0 * sy)   // inner left top
+      ..lineTo(14.0 * sx, 13.0 * sy)   // center
+      ..lineTo(2.0 * sx,  16.0 * sy)   // inner left bottom
+      ..close();
+
+    canvas.drawPath(plane, p);
+  }
+
+  @override
+  bool shouldRepaint(_IgSharePainter o) => o.color != color;
+}
+
+// ─── Instagram Bookmark / Save ────────────────────────
+class _IgBookmarkPainter extends CustomPainter {
+  final Color color;
+  const _IgBookmarkPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    final double sx = w / 26.0;
+    final double sy = h / 26.0;
+
+    final Paint p = Paint()
+      ..color = color..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // Bookmark flag shape
+    final path = Path()
+      ..moveTo(5.0 * sx, 2.5 * sy)
+      ..lineTo(21.0 * sx, 2.5 * sy)
+      ..cubicTo(22.0 * sx, 2.5 * sy, 22.5 * sx, 3.0 * sy, 22.5 * sx, 4.0 * sy)
+      ..lineTo(22.5 * sx, 23.5 * sy)
+      ..lineTo(13.0 * sx, 18.0 * sy)
+      ..lineTo(3.5 * sx, 23.5 * sy)
+      ..lineTo(3.5 * sx, 4.0 * sy)
+      ..cubicTo(3.5 * sx, 3.0 * sy, 4.0 * sx, 2.5 * sy, 5.0 * sx, 2.5 * sy)
+      ..close();
+
+    canvas.drawPath(path, p);
+  }
+
+  @override
+  bool shouldRepaint(_IgBookmarkPainter o) => o.color != color;
+}
+
+// ═════════════════════════════════════════════════════
+//  STAGGERED NAVBAR
+// ═════════════════════════════════════════════════════
+class _StaggeredNavbar extends StatelessWidget {
+  final bool isDark;
+  final int  activeIndex;
+  final List<Animation<double>> itemScales, itemOpacities;
+  final ValueChanged<int> onTap;
+  const _StaggeredNavbar({
+    required this.isDark, required this.activeIndex,
+    required this.itemScales, required this.itemOpacities,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final double navH   = 5 * _kItemH + 12.0;
+    final Color  glass  = (isDark ? Colors.white : Colors.black).op(0.09);
+    final Color  border = (isDark ? Colors.white : Colors.black).op(0.16);
+    return FadeTransition(
+      opacity: itemOpacities.last,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_kNavWidth / 2),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          child: Container(
+            width: _kNavWidth, height: navH,
+            decoration: BoxDecoration(
+              color: glass,
+              borderRadius: BorderRadius.circular(_kNavWidth / 2),
+              border: Border.all(color: border, width: 0.8),
+              boxShadow: [BoxShadow(
+                  color: Colors.black.op(isDark ? 0.35 : 0.10),
+                  blurRadius: 20, offset: const Offset(0, 6))]),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(5, (i) {
+                  final bool active = activeIndex == i;
+                  return ScaleTransition(scale: itemScales[i],
+                    child: FadeTransition(opacity: itemOpacities[i],
+                      child: GestureDetector(
+                        onTap: () { HapticFeedback.selectionClick(); onTap(i); },
+                        behavior: HitTestBehavior.opaque,
+                        child: SizedBox(width: _kNavWidth, height: _kItemH,
+                          child: Center(child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOutCubic,
+                            width: 38, height: 38,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: active
+                                  ? (isDark ? Colors.white.op(0.18)
+                                            : Colors.black.op(0.12))
+                                  : Colors.transparent),
+                            child: Center(child: CustomPaint(
+                              size: const Size(24.0, 24.0),
+                              painter: _NavIconPainter(
+                                  index: i, isDark: isDark,
+                                  active: active)))))))));
+                }),
               ),
             ),
-          const SizedBox(height: 16),
-          Text(name,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-          if (username.isNotEmpty)
-            Text('@$username',
-                style: const TextStyle(fontSize: 14, color: Colors.grey)),
-          const SizedBox(height: 4),
-          Text(email,
-              style: const TextStyle(fontSize: 13, color: Colors.grey)),
-          const SizedBox(height: 40),
-          OutlinedButton.icon(
-            onPressed: _handleLogout,
-            icon: const Icon(Icons.logout, size: 18),
-            label: const Text('Sign out'),
           ),
-        ]),
+        ),
       ),
     );
   }
+}
+
+// ═════════════════════════════════════════════════════
+//  ENVELOPE ICON
+// ═════════════════════════════════════════════════════
+class _EnvelopeIconPainter extends CustomPainter {
+  final bool isDark;
+  const _EnvelopeIconPainter({required this.isDark});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Color  color = isDark ? Colors.white : const Color(0xFF2A2A2A);
+    final double w = size.width;
+    final double h = size.height;
+    final Paint  p = Paint()
+      ..color = color.op(0.90)..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(0.5, 1.0, w - 1.0, h - 2.0),
+        const Radius.circular(5.0)), p);
+    canvas.drawPath(Path()
+      ..moveTo(5.0, 1.0)
+      ..quadraticBezierTo(w / 2, h * 0.56, w - 5.0, 1.0), p);
+  }
+  @override
+  bool shouldRepaint(_EnvelopeIconPainter o) => o.isDark != isDark;
+}
+
+// ═════════════════════════════════════════════════════
+//  NAV ICON PAINTERS — modern minimal curved (IG-style)
+// ═════════════════════════════════════════════════════
+class _NavIconPainter extends CustomPainter {
+  final int  index;
+  final bool isDark, active;
+  const _NavIconPainter(
+      {required this.index, required this.isDark, required this.active});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Color  base   = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final Color  col    = active ? base : base.op(0.50);
+    final double sw     = active ? 1.6 : 1.4;
+    final Paint  stroke = Paint()..color = col..style = PaintingStyle.stroke
+        ..strokeWidth = sw..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+    // final Paint  fill   = Paint()..color = col..style = PaintingStyle.fill;
+    final double w = size.width; final double h = size.height;
+    final double cx = w / 2;    final double cy = h / 2;
+    switch (index) {
+
+      // ── 0: Home — modern curved house outline ──
+      case 0:
+        final home = Path()
+          ..moveTo(cx, h * 0.10)           // roof peak
+          ..lineTo(w * 0.90, h * 0.45)     // right eave
+          ..lineTo(w * 0.90, h * 0.82)     // right wall bottom
+          ..cubicTo(w * 0.90, h * 0.90, w * 0.85, h * 0.92, w * 0.78, h * 0.92) // bottom-right curve
+          ..lineTo(w * 0.22, h * 0.92)     // bottom edge
+          ..cubicTo(w * 0.15, h * 0.92, w * 0.10, h * 0.90, w * 0.10, h * 0.82) // bottom-left curve
+          ..lineTo(w * 0.10, h * 0.45)     // left wall top
+          ..close();
+        canvas.drawPath(home, stroke);
+        // door arch
+        final door = Path()
+          ..moveTo(cx - w * 0.10, h * 0.92)
+          ..lineTo(cx - w * 0.10, h * 0.68)
+          ..cubicTo(cx - w * 0.10, h * 0.56, cx + w * 0.10, h * 0.56, cx + w * 0.10, h * 0.68)
+          ..lineTo(cx + w * 0.10, h * 0.92);
+        canvas.drawPath(door, stroke);
+        break;
+
+      // ── 1: Explore / Compass — minimal circle + needle ──
+      case 1:
+        final double r = w * 0.42;
+        canvas.drawCircle(Offset(cx, cy), r, stroke);
+        // diamond / compass needle
+        final needle = Path()
+          ..moveTo(cx, cy - r * 0.50)      // top
+          ..lineTo(cx + r * 0.20, cy)      // right
+          ..lineTo(cx, cy + r * 0.50)      // bottom
+          ..lineTo(cx - r * 0.20, cy)      // left
+          ..close();
+        canvas.drawPath(needle, stroke);
+        break;
+
+      // ── 2: Create / Add — rounded square + thin plus ──
+      case 2:
+        final double inset = w * 0.12;
+        final rr = RRect.fromRectAndRadius(
+            Rect.fromLTWH(inset, inset, w - inset * 2, h - inset * 2),
+            Radius.circular(w * 0.25));
+        canvas.drawRRect(rr, stroke);
+        final double arm = w * 0.16;
+        canvas.drawLine(Offset(cx, cy - arm), Offset(cx, cy + arm), stroke);
+        canvas.drawLine(Offset(cx - arm, cy), Offset(cx + arm, cy), stroke);
+        break;
+
+      // ── 3: Search — smooth magnifying glass ──
+      case 3:
+        final double r  = w * 0.30;
+        final double ox = cx - w * 0.06;
+        final double oy = cy - h * 0.06;
+        canvas.drawCircle(Offset(ox, oy), r, stroke);
+        // handle — smooth diagonal
+        final double hx = ox + r * 0.70;
+        final double hy = oy + r * 0.70;
+        canvas.drawLine(
+          Offset(hx, hy),
+          Offset(w * 0.88, h * 0.88),
+          Paint()..color = col..style = PaintingStyle.stroke
+              ..strokeWidth = sw + 0.3..strokeCap = StrokeCap.round);
+        break;
+
+      // ── 4: Profile — minimal person outline ──
+      case 4:
+        // head circle
+        final double headR = w * 0.16;
+        canvas.drawCircle(Offset(cx, h * 0.30), headR, stroke);
+        // shoulders — smooth arc
+        final body = Path()
+          ..moveTo(w * 0.14, h * 0.92)
+          ..cubicTo(w * 0.14, h * 0.60, w * 0.30, h * 0.52, cx, h * 0.52)
+          ..cubicTo(w * 0.70, h * 0.52, w * 0.86, h * 0.60, w * 0.86, h * 0.92);
+        canvas.drawPath(body, stroke);
+        break;
+    }
+  }
+  @override
+  bool shouldRepaint(_NavIconPainter o) =>
+      o.index != index || o.isDark != isDark || o.active != active;
+}
+
+// ═════════════════════════════════════════════════════
+//  INFINITY BUTTON
+// ═════════════════════════════════════════════════════
+class _InfinityBtn extends StatefulWidget {
+  final bool isDark, isOpen;
+  final VoidCallback onTap;
+  const _InfinityBtn({
+      required this.isDark, required this.isOpen, required this.onTap});
+  @override
+  State<_InfinityBtn> createState() => _InfinityBtnState();
+}
+class _InfinityBtnState extends State<_InfinityBtn>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double>   _scale;
+  @override
+  void initState() {
+    super.initState();
+    _ctrl  = AnimationController(vsync: this,
+        duration: const Duration(milliseconds: 140));
+    _scale = Tween<double>(begin: 1.0, end: 0.92).animate(
+        CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+  @override void dispose() { _ctrl.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    final Color glass  = (widget.isDark ? Colors.white : Colors.black).op(0.09);
+    final Color border = (widget.isDark ? Colors.white : Colors.black).op(0.18);
+    final Color iconC  = widget.isDark ? Colors.white : const Color(0xFF1A1A1A);
+    return AnimatedBuilder(animation: _ctrl,
+      builder: (_, __) => Transform.scale(scale: _scale.value,
+        child: GestureDetector(
+          onTapDown:   (_) => _ctrl.forward(),
+          onTapUp:     (_) { _ctrl.reverse(); widget.onTap(); },
+          onTapCancel: () => _ctrl.reverse(),
+          child: ClipOval(child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(width: _kBtnSize, height: _kBtnSize,
+              decoration: BoxDecoration(shape: BoxShape.circle,
+                color: glass, border: Border.all(color: border, width: 0.9),
+                boxShadow: [BoxShadow(color: Colors.black.op(0.22),
+                    blurRadius: 12, offset: const Offset(0, 4))]),
+              child: CustomPaint(painter: _InfinityPainter(color: iconC))))))));
+  }
+}
+
+// ═════════════════════════════════════════════════════
+//  INFINITY PAINTER
+// ═════════════════════════════════════════════════════
+class _InfinityPainter extends CustomPainter {
+  final Color color;
+  const _InfinityPainter({required this.color});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double cx = size.width / 2; final double cy = size.height / 2;
+    const double a = 13.0; const double b = 7.0;
+    canvas.drawPath(Path()
+      ..moveTo(cx, cy)..cubicTo(cx+a*0.5, cy-b, cx+a, cy-b, cx+a, cy)
+      ..cubicTo(cx+a, cy+b, cx+a*0.5, cy+b, cx, cy)
+      ..cubicTo(cx-a*0.5, cy-b, cx-a, cy-b, cx-a, cy)
+      ..cubicTo(cx-a, cy+b, cx-a*0.5, cy+b, cx, cy),
+      Paint()..style = PaintingStyle.stroke..strokeWidth = 2.0
+          ..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round
+          ..color = color.op(0.88));
+  }
+  @override bool shouldRepaint(_InfinityPainter o) => o.color != color;
+}
+
+// ═════════════════════════════════════════════════════
+//  PLUS PAINTER
+// ═════════════════════════════════════════════════════
+class _PlusPainter extends CustomPainter {
+  final Color color;
+  const _PlusPainter({required this.color});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint p = Paint()..color = color.op(0.85)..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8..strokeCap = StrokeCap.round;
+    final double cx = size.width / 2; final double cy = size.height / 2;
+    canvas.drawLine(Offset(cx, cy - 5.5), Offset(cx, cy + 5.5), p);
+    canvas.drawLine(Offset(cx - 5.5, cy), Offset(cx + 5.5, cy), p);
+  }
+  @override bool shouldRepaint(_PlusPainter o) => o.color != color;
+}
+
+// ═════════════════════════════════════════════════════
+//  ORB
+// ═════════════════════════════════════════════════════
+class _Orb extends StatelessWidget {
+  final Color color; final double size;
+  final double? top, bottom, left, right;
+  const _Orb({required this.color, required this.size,
+      this.top, this.bottom, this.left, this.right});
+  @override
+  Widget build(BuildContext context) => Positioned(
+    top: top, bottom: bottom, left: left, right: right,
+    child: Container(width: size, height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle,
+        gradient: RadialGradient(colors: [color, color.op(0.0)]))));
+}
+
+// ═════════════════════════════════════════════════════
+//  TRANDIA ISLAND — iPhone 15 Dynamic Island size
+// ═════════════════════════════════════════════════════
+class _TrandiaIsland extends StatelessWidget {
+  final bool isDark;
+  const _TrandiaIsland({super.key, required this.isDark});
+  @override
+  Widget build(BuildContext context) {
+    final Color glass  = (isDark ? Colors.white : Colors.black).op(0.10);
+    final Color border = (isDark ? Colors.white : Colors.black).op(0.18);
+    final Color text   = isDark ? Colors.white : const Color(0xFF0A0A0A);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(19),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 32, sigmaY: 32),
+        child: Container(
+          width: 126, height: 37,
+          decoration: BoxDecoration(
+            color: glass,
+            borderRadius: BorderRadius.circular(19),
+            border: Border.all(color: border, width: 0.8)),
+          child: Center(
+            child: Text('Trandia',
+              style: TextStyle(
+                color: text,
+                fontSize: 16.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+                decoration: TextDecoration.none,
+              )),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════
+//  DYNAMIC ISLAND → NOTIFICATION SCREEN OVERLAY
+// ═════════════════════════════════════════════════════
+/// Animates the island pill expanding to a full-screen notification panel,
+/// mirroring the iPhone Dynamic Island music-player expand interaction.
+class _IslandNotificationOverlay extends StatefulWidget {
+  final Rect               islandRect;
+  final AnimationController controller;
+  final bool               isDark;
+  final VoidCallback        onClose;
+  const _IslandNotificationOverlay({
+    required this.islandRect,
+    required this.controller,
+    required this.isDark,
+    required this.onClose,
+  });
+  @override
+  State<_IslandNotificationOverlay> createState() =>
+      _IslandNotificationOverlayState();
+}
+
+class _IslandNotificationOverlayState
+    extends State<_IslandNotificationOverlay> {
+
+  // ── Drag-to-dismiss state ───────────────────────────
+  double _dragY    = 0;
+  bool   _dragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final screenRect = Rect.fromLTWH(
+        0, 0, screenSize.width, screenSize.height);
+
+    // How far can we pull before triggering close
+    const dismissThreshold = 80.0;
+
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) {
+        final t = widget.controller.value; // 0→closed  1→open
+
+        // ── Interpolated geometry ────────────────────
+        // Expand from island pill rect → full screen
+        final double left   = ui.lerpDouble(
+            widget.islandRect.left,   screenRect.left,   _expandCurve(t))!;
+        final double top    = ui.lerpDouble(
+            widget.islandRect.top,    screenRect.top,    _expandCurve(t))!
+            + (_dragging ? _dragY.clamp(0, dismissThreshold * 1.4) : 0);
+        final double right  = ui.lerpDouble(
+            widget.islandRect.right,  screenRect.right,  _expandCurve(t))!;
+        final double bottom = ui.lerpDouble(
+            widget.islandRect.bottom, screenRect.bottom, _expandCurve(t))!;
+        final double borderR = ui.lerpDouble(19, 0, _expandCurve(t))!;
+
+        // Content fades in only in the last 30% of the animation
+        final double contentAlpha =
+            ((t - 0.70) / 0.30).clamp(0.0, 1.0);
+
+        // Drag-dismiss: fade overlay slightly when dragging down
+        final double dragAlpha = _dragging
+            ? (1.0 - (_dragY / (dismissThreshold * 2.0)).clamp(0.0, 0.5))
+            : 1.0;
+
+        return Positioned(
+          left  : left,
+          top   : top,
+          width : right - left,
+          height: bottom - top,
+          child : Opacity(
+            opacity: dragAlpha,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(borderR),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: widget.isDark
+                        ? Colors.black.withOpacity(0.92)
+                        : Colors.white.withOpacity(0.94),
+                    borderRadius: BorderRadius.circular(borderR),
+                  ),
+                  child: GestureDetector(
+                    // ── Drag to dismiss ──
+                    onVerticalDragStart: (_) {
+                      setState(() { _dragging = true; _dragY = 0; });
+                    },
+                    onVerticalDragUpdate: (d) {
+                      if (d.delta.dy > 0) {
+                        setState(() => _dragY += d.delta.dy);
+                      }
+                    },
+                    onVerticalDragEnd: (d) {
+                      if (_dragY > dismissThreshold ||
+                          (d.velocity.pixelsPerSecond.dy > 600)) {
+                        setState(() { _dragging = false; _dragY = 0; });
+                        widget.onClose();
+                      } else {
+                        setState(() { _dragging = false; _dragY = 0; });
+                      }
+                    },
+                    child: Stack(children: [
+                      // Notification screen content
+                      AnimatedOpacity(
+                        duration: const Duration(milliseconds: 180),
+                        opacity: contentAlpha,
+                        child: NotificationsScreen(dark: widget.isDark),
+                      ),
+
+                      // Drag handle pill (iPhone style)
+                      if (contentAlpha > 0.1)
+                        Positioned(
+                          top: 10, left: 0, right: 0,
+                          child: Opacity(
+                            opacity: contentAlpha,
+                            child: Center(
+                              child: Container(
+                                width : 36, height: 4,
+                                decoration: BoxDecoration(
+                                  color: (widget.isDark
+                                      ? Colors.white
+                                      : Colors.black).withOpacity(0.22),
+                                  borderRadius: BorderRadius.circular(2)),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Spring-like curve: fast at start, then eases into full expand.
+  static double _expandCurve(double t) =>
+      Curves.fastEaseInToSlowEaseOut.transform(t);
 }

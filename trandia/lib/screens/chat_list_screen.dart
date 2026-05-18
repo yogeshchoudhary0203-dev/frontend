@@ -4,7 +4,9 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'glass_common.dart';
+import 'chat_screen.dart';
 
 class ChatItem {
   final String name;
@@ -251,72 +253,98 @@ class _ChatRow extends StatelessWidget {
 
     final previewText = c.mine && !c.typing ? 'You: ${c.last}' : c.last;
 
-    return GlassSurface(
-      dark: dark, radius: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(children: [
-        SizedBox(width: 50, height: 50, child: Stack(clipBehavior: Clip.none, children: [
-          Container(
-            width: 50, height: 50,
-            decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
-            alignment: Alignment.center,
-            child: Text(c.name[0].toUpperCase(),
-              style: manrope(size: 18, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.36)),
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        Navigator.of(context).push(
+          PageRouteBuilder(
+            pageBuilder: (_, animation, __) => ChatScreen(dark: dark),
+            transitionDuration: const Duration(milliseconds: 380),
+            reverseTransitionDuration: const Duration(milliseconds: 300),
+            transitionsBuilder: (_, animation, __, child) {
+              final curved = CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+                reverseCurve: Curves.easeInCubic,
+              );
+              return SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(1.0, 0),
+                  end: Offset.zero,
+                ).animate(curved),
+                child: FadeTransition(opacity: curved, child: child),
+              );
+            },
           ),
-          if (c.online) Positioned(right: 0, bottom: 0, child: Container(
-            width: 14, height: 14,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: dark ? Colors.white : const Color(0xFF0A0A0A),
-              border: Border.all(color: dark ? const Color(0xFF0C0C0E) : const Color(0xFFFAFAFA), width: 2.5),
+        );
+      },
+      child: GlassSurface(
+        dark: dark, radius: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(children: [
+          SizedBox(width: 50, height: 50, child: Stack(clipBehavior: Clip.none, children: [
+            Container(
+              width: 50, height: 50,
+              decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
+              alignment: Alignment.center,
+              child: Text(c.name[0].toUpperCase(),
+                style: manrope(size: 18, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.36)),
             ),
-          )),
-        ])),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            Flexible(child: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: manrope(size: 14.5, weight: c.unread > 0 ? FontWeight.w800 : FontWeight.w700, color: fg, letterSpacing: -0.14))),
-            if (c.muted) ...[
-              const SizedBox(width: 6),
-              Icon(Icons.volume_off_outlined, size: 14, color: sub),
-            ],
-          ]),
-          const SizedBox(height: 2),
-          Row(children: [
-            previewLeading,
-            Expanded(child: Text(previewText, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: manrope(
-                size: 12.5,
-                weight: previewWeight,
-                color: c.typing ? fg : previewColor,
-                letterSpacing: -0.05,
-              ).copyWith(fontStyle: c.typing ? FontStyle.italic : FontStyle.normal),
-            )),
-          ]),
-        ])),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 40,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
-            Text(c.time, style: manrope(size: 11, weight: c.unread > 0 ? FontWeight.w700 : FontWeight.w500, color: c.unread > 0 ? fg : sub, letterSpacing: -0.05)),
-            if (c.unread > 0) ...[
-              const SizedBox(height: 6),
-              Container(
-                constraints: const BoxConstraints(minWidth: 20),
-                height: 20, padding: const EdgeInsets.symmetric(horizontal: 6),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: dark ? Colors.white : const Color(0xFF0A0A0A),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text('${c.unread}',
-                  style: manrope(size: 11, weight: FontWeight.w800, color: dark ? const Color(0xFF0A0A0A) : Colors.white, letterSpacing: -0.1, height: 1)),
+            if (c.online) Positioned(right: 0, bottom: 0, child: Container(
+              width: 14, height: 14,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dark ? Colors.white : const Color(0xFF0A0A0A),
+                border: Border.all(color: dark ? const Color(0xFF0C0C0E) : const Color(0xFFFAFAFA), width: 2.5),
               ),
-            ],
-          ]),
-        ),
-      ]),
+            )),
+          ])),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              Flexible(child: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: manrope(size: 14.5, weight: c.unread > 0 ? FontWeight.w800 : FontWeight.w700, color: fg, letterSpacing: -0.14))),
+              if (c.muted) ...[
+                const SizedBox(width: 6),
+                Icon(Icons.volume_off_outlined, size: 14, color: sub),
+              ],
+            ]),
+            const SizedBox(height: 2),
+            Row(children: [
+              previewLeading,
+              Expanded(child: Text(previewText, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: manrope(
+                  size: 12.5,
+                  weight: previewWeight,
+                  color: c.typing ? fg : previewColor,
+                  letterSpacing: -0.05,
+                ).copyWith(fontStyle: c.typing ? FontStyle.italic : FontStyle.normal),
+              )),
+            ]),
+          ])),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 40,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+              Text(c.time, style: manrope(size: 11, weight: c.unread > 0 ? FontWeight.w700 : FontWeight.w500, color: c.unread > 0 ? fg : sub, letterSpacing: -0.05)),
+              if (c.unread > 0) ...[
+                const SizedBox(height: 6),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 20),
+                  height: 20, padding: const EdgeInsets.symmetric(horizontal: 6),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: dark ? Colors.white : const Color(0xFF0A0A0A),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text('${c.unread}',
+                    style: manrope(size: 11, weight: FontWeight.w800, color: dark ? const Color(0xFF0A0A0A) : Colors.white, letterSpacing: -0.1, height: 1)),
+                ),
+              ],
+            ]),
+          ),
+        ]),
+      ),
     );
   }
 }

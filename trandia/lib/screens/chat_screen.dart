@@ -104,7 +104,7 @@ class ChatScreen extends StatelessWidget {
             child: Row(children: [
               IconButton(
                 icon: Icon(Icons.arrow_back_ios_new_rounded, color: fg, size: 20),
-                onPressed: () {},
+                onPressed: () => Navigator.of(context).pop(),
                 splashRadius: 20,
               ),
               Stack(clipBehavior: Clip.none, children: [

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/fcm_service.dart';
+import '../notifications_screen.dart';
 
 extension _ColorOp on Color {
   Color op(double opacity) => withOpacity(opacity);
@@ -100,12 +101,20 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   bool _navOpen   = false;
   int  _activeNav = 0;
   late AnimationController      _navCtrl;
   final List<Animation<double>> _itemScales    = [];
   final List<Animation<double>> _itemOpacities = [];
+
+  // ── Island expand / collapse ──────────────────────
+  late AnimationController _islandCtrl;
+  bool _islandOpen = false;
+
+  // Island pill geometry (populated after first layout)
+  Rect   _islandRect   = Rect.zero;
+  final  GlobalKey _islandKey = GlobalKey();
 
   @override
   void initState() {
@@ -124,6 +133,11 @@ class _HomeScreenState extends State<HomeScreen>
                   curve: Curves.easeOut))));
     }
 
+    _islandCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    );
+
     // Request notification permission + show queued welcome notification
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => FcmService.setupForHomeScreen(),
@@ -131,12 +145,40 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   @override
-  void dispose() { _navCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _navCtrl.dispose();
+    _islandCtrl.dispose();
+    super.dispose();
+  }
 
   void _toggleNav() {
     HapticFeedback.mediumImpact();
     setState(() => _navOpen = !_navOpen);
     _navOpen ? _navCtrl.forward(from: 0) : _navCtrl.reverse();
+  }
+
+  /// Called when user taps the Dynamic Island pill.
+  void _openIsland() {
+    _captureIslandRect();
+    HapticFeedback.mediumImpact();
+    setState(() => _islandOpen = true);
+    _islandCtrl.forward(from: 0);
+  }
+
+  /// Called when user swipes down / taps close inside notification overlay.
+  void _closeIsland() {
+    HapticFeedback.lightImpact();
+    _islandCtrl.reverse().then((_) {
+      if (mounted) setState(() => _islandOpen = false);
+    });
+  }
+
+  /// Captures the Global position & size of the island pill.
+  void _captureIslandRect() {
+    final ro = _islandKey.currentContext?.findRenderObject() as RenderBox?;
+    if (ro == null) return;
+    final pos  = ro.localToGlobal(Offset.zero);
+    _islandRect = pos & ro.size;
   }
 
   @override
@@ -195,10 +237,12 @@ class _HomeScreenState extends State<HomeScreen>
         // ── Fixed overlays float on top of scrolling feed ──
         SafeArea(child: Stack(children: [
 
-          // Island — glass, no bar
+          // Island — glass, no bar — tappable
           Align(alignment: Alignment.topCenter,
             child: Padding(padding: const EdgeInsets.only(top: 8),
-              child: _TrandiaIsland(isDark: isDark))),
+              child: GestureDetector(
+                onTap: _islandOpen ? null : _openIsland,
+                child: _TrandiaIsland(key: _islandKey, isDark: isDark)))),
 
           // Message icon — compact
           Align(alignment: Alignment.topRight,
@@ -224,6 +268,15 @@ class _HomeScreenState extends State<HomeScreen>
             child: _InfinityBtn(
                 isDark: isDark, isOpen: _navOpen, onTap: _toggleNav)),
         ])),
+
+        // ── Dynamic Island expand overlay ──────────────────
+        if (_islandOpen)
+          _IslandNotificationOverlay(
+            islandRect : _islandRect,
+            controller : _islandCtrl,
+            isDark     : isDark,
+            onClose    : _closeIsland,
+          ),
       ]),
     );
   }
@@ -995,7 +1048,7 @@ class _Orb extends StatelessWidget {
 // ═════════════════════════════════════════════════════
 class _TrandiaIsland extends StatelessWidget {
   final bool isDark;
-  const _TrandiaIsland({required this.isDark});
+  const _TrandiaIsland({super.key, required this.isDark});
   @override
   Widget build(BuildContext context) {
     final Color glass  = (isDark ? Colors.white : Colors.black).op(0.10);
@@ -1025,4 +1078,147 @@ class _TrandiaIsland extends StatelessWidget {
       ),
     );
   }
+}
+
+// ═════════════════════════════════════════════════════
+//  DYNAMIC ISLAND → NOTIFICATION SCREEN OVERLAY
+// ═════════════════════════════════════════════════════
+/// Animates the island pill expanding to a full-screen notification panel,
+/// mirroring the iPhone Dynamic Island music-player expand interaction.
+class _IslandNotificationOverlay extends StatefulWidget {
+  final Rect               islandRect;
+  final AnimationController controller;
+  final bool               isDark;
+  final VoidCallback        onClose;
+  const _IslandNotificationOverlay({
+    required this.islandRect,
+    required this.controller,
+    required this.isDark,
+    required this.onClose,
+  });
+  @override
+  State<_IslandNotificationOverlay> createState() =>
+      _IslandNotificationOverlayState();
+}
+
+class _IslandNotificationOverlayState
+    extends State<_IslandNotificationOverlay> {
+
+  // ── Drag-to-dismiss state ───────────────────────────
+  double _dragY    = 0;
+  bool   _dragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final screenRect = Rect.fromLTWH(
+        0, 0, screenSize.width, screenSize.height);
+
+    // How far can we pull before triggering close
+    const dismissThreshold = 80.0;
+
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) {
+        final t = widget.controller.value; // 0→closed  1→open
+
+        // ── Interpolated geometry ────────────────────
+        // Expand from island pill rect → full screen
+        final double left   = ui.lerpDouble(
+            widget.islandRect.left,   screenRect.left,   _expandCurve(t))!;
+        final double top    = ui.lerpDouble(
+            widget.islandRect.top,    screenRect.top,    _expandCurve(t))!
+            + (_dragging ? _dragY.clamp(0, dismissThreshold * 1.4) : 0);
+        final double right  = ui.lerpDouble(
+            widget.islandRect.right,  screenRect.right,  _expandCurve(t))!;
+        final double bottom = ui.lerpDouble(
+            widget.islandRect.bottom, screenRect.bottom, _expandCurve(t))!;
+        final double borderR = ui.lerpDouble(19, 0, _expandCurve(t))!;
+
+        // Content fades in only in the last 30% of the animation
+        final double contentAlpha =
+            ((t - 0.70) / 0.30).clamp(0.0, 1.0);
+
+        // Drag-dismiss: fade overlay slightly when dragging down
+        final double dragAlpha = _dragging
+            ? (1.0 - (_dragY / (dismissThreshold * 2.0)).clamp(0.0, 0.5))
+            : 1.0;
+
+        return Positioned(
+          left  : left,
+          top   : top,
+          width : right - left,
+          height: bottom - top,
+          child : Opacity(
+            opacity: dragAlpha,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(borderR),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: widget.isDark
+                        ? Colors.black.withOpacity(0.92)
+                        : Colors.white.withOpacity(0.94),
+                    borderRadius: BorderRadius.circular(borderR),
+                  ),
+                  child: GestureDetector(
+                    // ── Drag to dismiss ──
+                    onVerticalDragStart: (_) {
+                      setState(() { _dragging = true; _dragY = 0; });
+                    },
+                    onVerticalDragUpdate: (d) {
+                      if (d.delta.dy > 0) {
+                        setState(() => _dragY += d.delta.dy);
+                      }
+                    },
+                    onVerticalDragEnd: (d) {
+                      if (_dragY > dismissThreshold ||
+                          (d.velocity.pixelsPerSecond.dy > 600)) {
+                        setState(() { _dragging = false; _dragY = 0; });
+                        widget.onClose();
+                      } else {
+                        setState(() { _dragging = false; _dragY = 0; });
+                      }
+                    },
+                    child: Stack(children: [
+                      // Notification screen content
+                      AnimatedOpacity(
+                        duration: const Duration(milliseconds: 180),
+                        opacity: contentAlpha,
+                        child: NotificationsScreen(dark: widget.isDark),
+                      ),
+
+                      // Drag handle pill (iPhone style)
+                      if (contentAlpha > 0.1)
+                        Positioned(
+                          top: 10, left: 0, right: 0,
+                          child: Opacity(
+                            opacity: contentAlpha,
+                            child: Center(
+                              child: Container(
+                                width : 36, height: 4,
+                                decoration: BoxDecoration(
+                                  color: (widget.isDark
+                                      ? Colors.white
+                                      : Colors.black).withOpacity(0.22),
+                                  borderRadius: BorderRadius.circular(2)),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Spring-like curve: fast at start, then eases into full expand.
+  static double _expandCurve(double t) =>
+      Curves.fastEaseInToSlowEaseOut.transform(t);
 }

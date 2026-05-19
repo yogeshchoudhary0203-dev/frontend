@@ -5,7 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 // Production Railway URL — works on all platforms (web, Android, iOS)
 const String _prodUrl = 'https://web-production-c105c.up.railway.app';
 
-String get _baseUrl => _prodUrl;
+String get baseUrl => _prodUrl;
+String get wsUrl => _prodUrl.replaceFirst('http', 'ws');
 
 const Duration _kTimeout = Duration(seconds: 15);
 
@@ -39,7 +40,7 @@ class ApiService {
     try {
       response = await http
           .post(
-            Uri.parse('$_baseUrl$path'),
+            Uri.parse('$baseUrl$path'),
             headers: headers,
             body: jsonEncode(body),
           )
@@ -89,7 +90,7 @@ class ApiService {
     try {
       response = await http
           .get(
-            Uri.parse('$_baseUrl$path'),
+            Uri.parse('$baseUrl$path'),
             headers: headers,
           )
           .timeout(_kTimeout);

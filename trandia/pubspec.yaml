@@ -24,6 +24,7 @@ dependencies:
   flutter_local_notifications: ^17.2.2
   url_launcher: ^6.3.0
   google_fonts: ^6.2.1
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:

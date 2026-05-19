@@ -103,9 +103,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final muted = dark ? Colors.white.withOpacity(0.72) : Colors.black.withOpacity(0.72);
     final hairline = dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06);
 
-    return Scaffold(
-      backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
-      body: Stack(children: [
+    return Container(
+      color: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
+      child: Stack(children: [
         GlassBackdrop(dark: dark),
 
         // ── Scroll area ───────────────────────────────────────

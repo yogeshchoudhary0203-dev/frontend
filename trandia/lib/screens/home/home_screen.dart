@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../services/fcm_service.dart';
 import '../notifications_screen.dart';
 import '../search_screen.dart';
+import '../shots_screen.dart';
 import '../profile_screen.dart';
 import '../chat_list_screen.dart';
 
@@ -298,6 +299,7 @@ class _HomeScreenState extends State<HomeScreen>
                   itemScales: _itemScales, itemOpacities: _itemOpacities,
                   onTap: (i) {
                     setState(() => _activeNav = i);
+                    if (i == 1) _openScreen(context, ShotsScreen(dark: isDark));
                     if (i == 3) _openScreen(context, SearchScreen(dark: isDark));
                     if (i == 4) _openScreen(context, ProfileScreen(dark: isDark));
                   })))),

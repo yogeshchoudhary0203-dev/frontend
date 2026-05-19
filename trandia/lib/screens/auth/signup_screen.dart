@@ -537,7 +537,13 @@ class _GlassMark extends StatelessWidget {
                   : const [Color(0x80FFFFFF), Color(0x33FFFFFF)],
             ),
           ),
-          child: Center(child: Icon(Icons.auto_awesome, size: size * 0.44, color: t.fg)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: Image.asset(
+              'assets/icons/app_icon.png',
+              fit: BoxFit.cover,
+            ),
+          ),
         ),
       ),
     );

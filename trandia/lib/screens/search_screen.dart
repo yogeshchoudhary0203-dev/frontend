@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'glass_common.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../services/user_service.dart';
 import '../models/chat_model.dart';
 import 'chat_screen.dart';
 
@@ -175,7 +176,43 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   String _filter = 'Top';
-  String _query = 'midnight';
+  String _query = '';
+  List<UserProfile> _searchResults = [];
+  bool _isSearching = false;
+
+  void _onSearchChanged(String query) async {
+    setState(() {
+      _query = query;
+    });
+    
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+    
+    setState(() {
+      _isSearching = true;
+    });
+    
+    try {
+      final results = await UserService.searchUsers(query);
+      if (mounted) {
+        setState(() {
+          _searchResults = results;
+          _isSearching = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -194,14 +231,39 @@ class _SearchScreenState extends State<SearchScreen> {
           child: ListView(
             padding: const EdgeInsets.only(bottom: 16),
             children: [
-              _Section(title: 'Recent', action: 'Clear all', dark: dark),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Column(children: [
-                  for (int i = 0; i < _recents.length; i++)
-                    _RecentRow(r: _recents[i], i: i, dark: dark),
-                ]),
-              ),
+              if (_query.isNotEmpty) ...[
+                _Section(title: 'Search Results', action: 'Clear', dark: dark),
+                if (_isSearching)
+                  const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_searchResults.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Center(
+                      child: Text('No users found',
+                        style: manrope(size: 14, color: sub)),
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Column(children: [
+                      for (int i = 0; i < _searchResults.length; i++)
+                        _UserResultRow(u: _searchResults[i], i: i, dark: dark),
+                    ]),
+                  ),
+              ] else ...[
+                _Section(title: 'Recent', action: 'Clear all', dark: dark),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(children: [
+                    for (int i = 0; i < _recents.length; i++)
+                      _RecentRow(r: _recents[i], i: i, dark: dark),
+                  ]),
+                ),
+              ],
               const SizedBox(height: 10),
               _Section(title: 'Suggested for you', action: 'See all', dark: dark),
               SizedBox(
@@ -244,7 +306,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 dark: dark,
                 value: _query,
                 placeholder: 'Search Trandia',
-                onClear: () => setState(() => _query = ''),
+                onChanged: _onSearchChanged,
+                onClear: () => _onSearchChanged(''),
               )),
             ]),
           ),
@@ -320,20 +383,50 @@ class _CircleGlass extends StatelessWidget {
   }
 }
 
-class _SearchInputPill extends StatelessWidget {
+class _SearchInputPill extends StatefulWidget {
   final bool dark;
   final String value;
   final String placeholder;
+  final ValueChanged<String>? onChanged;
   final VoidCallback onClear;
   const _SearchInputPill({
-    required this.dark, required this.value, required this.placeholder, required this.onClear,
+    required this.dark, required this.value, required this.placeholder, 
+    this.onChanged, required this.onClear,
   });
 
   @override
+  State<_SearchInputPill> createState() => _SearchInputPillState();
+}
+
+class _SearchInputPillState extends State<_SearchInputPill> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(_SearchInputPill oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != _controller.text) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final dark = widget.dark;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
-    final hasText = value.isNotEmpty;
+    final hasText = _controller.text.isNotEmpty;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
@@ -373,20 +466,39 @@ class _SearchInputPill extends StatelessWidget {
             Row(children: [
               Icon(Icons.search_rounded, size: 18, color: hasText ? fg : sub),
               const SizedBox(width: 10),
-              Expanded(child: Text(
-                hasText ? value : placeholder,
-                maxLines: 1, overflow: TextOverflow.ellipsis,
+              Expanded(child: TextField(
+                controller: _controller,
+                onChanged: (val) {
+                  setState(() {});
+                  if (widget.onChanged != null) widget.onChanged!(val);
+                },
                 style: manrope(
                   size: 14.5,
                   weight: hasText ? FontWeight.w600 : FontWeight.w500,
-                  color: hasText ? fg : sub,
+                  color: fg,
                   letterSpacing: -0.145,
+                ),
+                decoration: InputDecoration(
+                  hintText: widget.placeholder,
+                  hintStyle: manrope(
+                    size: 14.5,
+                    weight: FontWeight.w500,
+                    color: sub,
+                    letterSpacing: -0.145,
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
               )),
               const SizedBox(width: 6),
               if (hasText)
                 GestureDetector(
-                  onTap: onClear,
+                  onTap: () {
+                    _controller.clear();
+                    setState(() {});
+                    widget.onClear();
+                  },
                   child: Container(
                     width: 26, height: 26,
                     alignment: Alignment.center,
@@ -556,6 +668,51 @@ class _RecentRow extends StatelessWidget {
           ),
         ),
       ]),
+      ),
+    );
+  }
+}
+
+class _UserResultRow extends StatelessWidget {
+  final UserProfile u;
+  final int i;
+  final bool dark;
+  const _UserResultRow({required this.u, required this.i, required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = GlassTokens.fg(dark);
+    final sub = GlassTokens.sub(dark);
+
+    return GestureDetector(
+      onTap: () {
+        _startChat(context, u.username, dark);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        child: Row(children: [
+          Container(
+            width: 46, height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle, 
+              gradient: monoAvatar(dark, i),
+              image: u.picture != null 
+                  ? DecorationImage(image: NetworkImage(u.picture!), fit: BoxFit.cover)
+                  : null,
+            ),
+            alignment: Alignment.center,
+            child: u.picture == null ? Text(u.name[0].toUpperCase(),
+              style: manrope(size: 17, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.34)) : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Text(u.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: manrope(size: 14, weight: FontWeight.w700, color: fg, letterSpacing: -0.14)),
+            const SizedBox(height: 2),
+            Text('@${u.username}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: manrope(size: 11.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.06)),
+          ])),
+        ]),
       ),
     );
   }

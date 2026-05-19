@@ -109,6 +109,67 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _deleteConversation() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Chat'),
+        content: const Text('Are you sure you want to delete this conversation? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      if (!mounted) return;
+      showDialog(
+        context: context, barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator())
+      );
+      try {
+        await ChatService().deleteConversation(widget.conversation.id);
+        if (mounted) {
+          Navigator.pop(context); // pop loading
+          Navigator.pop(context, true); // pop chat screen, returning true to refresh
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.pop(context); // pop loading
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+        }
+      }
+    }
+  }
+
+  void _deleteMessage(String messageId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Message'),
+        content: const Text('Delete this message for everyone?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await ChatService().deleteMessage(widget.conversation.id, messageId);
+        if (mounted) {
+          setState(() {
+            _messages.removeWhere((m) => m.id == messageId);
+          });
+        }
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final fg  = GlassTokens.fg(widget.dark);
@@ -160,7 +221,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 3),
-                child: _Bubble(m: msg, isMe: isMe, dark: widget.dark, last: last),
+                child: GestureDetector(
+                  onLongPress: isMe ? () => _deleteMessage(msg.id) : null,
+                  child: _Bubble(m: msg, isMe: isMe, dark: widget.dark, last: last),
+                ),
               );
             },
           ),
@@ -206,6 +270,11 @@ class _ChatScreenState extends State<ChatScreen> {
               GlassCircleButton(dark: widget.dark, icon: Icons.videocam_outlined, iconSize: 20),
               const SizedBox(width: 6),
               GlassCircleButton(dark: widget.dark, icon: Icons.info_outline_rounded, iconSize: 18),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: _deleteConversation,
+                child: GlassCircleButton(dark: widget.dark, icon: Icons.delete_outline_rounded, iconSize: 18, fg: Colors.red),
+              ),
             ]),
           ),
         ),

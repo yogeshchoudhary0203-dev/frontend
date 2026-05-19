@@ -138,4 +138,32 @@ class ChatService {
     );
     return response['conversation_id'];
   }
+
+  Future<void> deleteMessage(String conversationId, String messageId) async {
+    final token = await ApiService.getToken();
+    final res = await http.delete(
+      Uri.parse('$baseUrl/chat/$conversationId/messages/$messageId'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+    if (res.statusCode != 200) {
+      throw ApiException('Failed to delete message');
+    }
+  }
+
+  Future<void> deleteConversation(String conversationId) async {
+    final token = await ApiService.getToken();
+    final res = await http.delete(
+      Uri.parse('$baseUrl/chat/$conversationId'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+    if (res.statusCode != 200) {
+      throw ApiException('Failed to delete conversation');
+    }
+  }
 }

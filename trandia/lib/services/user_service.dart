@@ -1,24 +1,49 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
 import '../models/chat_model.dart';
 import 'api_service.dart';
 
 class UserService {
   static Future<List<UserProfile>> searchUsers(String query) async {
-    final token = await ApiService.getToken();
-    final res = await http.get(
-      Uri.parse('$baseUrl/users/search?q=$query'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      },
-    );
+    try {
+      final token = await ApiService.getToken();
+      developer.log('UserService.searchUsers: query="$query", token=${token != null ? "present" : "NULL"}');
 
-    if (res.statusCode == 200) {
-      final List data = jsonDecode(res.body);
-      return data.map((e) => UserProfile.fromJson(e)).toList();
-    } else {
-      throw const ApiException('Failed to search users');
+      if (token == null) {
+        developer.log('UserService.searchUsers: No auth token — returning empty list');
+        return [];
+      }
+
+      // URL-encode the query so special chars don't break the request
+      final encodedQuery = Uri.encodeComponent(query);
+      final uri = Uri.parse('$baseUrl/users/search?q=$encodedQuery');
+      developer.log('UserService.searchUsers: GET $uri');
+
+      final res = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      developer.log('UserService.searchUsers: status=${res.statusCode}, body=${res.body}');
+
+      if (res.statusCode == 200) {
+        final List data = jsonDecode(res.body);
+        developer.log('UserService.searchUsers: found ${data.length} users');
+        return data.map((e) => UserProfile.fromJson(e)).toList();
+      } else if (res.statusCode == 401) {
+        developer.log('UserService.searchUsers: 401 Unauthorized');
+        throw const ApiException('Session expired. Please sign in again.');
+      } else {
+        developer.log('UserService.searchUsers: error ${res.statusCode}: ${res.body}');
+        throw ApiException('Search failed (${res.statusCode})');
+      }
+    } catch (e) {
+      developer.log('UserService.searchUsers ERROR: $e');
+      rethrow;
     }
   }
 }

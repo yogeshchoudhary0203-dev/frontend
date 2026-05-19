@@ -5,6 +5,8 @@
 // Drop in `lib/` alongside glass_common.dart.
 
 import 'dart:ui';
+import 'dart:async';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'glass_common.dart';
@@ -179,39 +181,57 @@ class _SearchScreenState extends State<SearchScreen> {
   String _query = '';
   List<UserProfile> _searchResults = [];
   bool _isSearching = false;
+  Timer? _debounce;
 
-  void _onSearchChanged(String query) async {
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
     setState(() {
       _query = query;
     });
     
-    if (query.trim().isEmpty) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      if (query.trim().isEmpty) {
+        setState(() {
+          _searchResults = [];
+          _isSearching = false;
+        });
+        return;
+      }
+      
       setState(() {
-        _searchResults = [];
-        _isSearching = false;
+        _isSearching = true;
       });
-      return;
-    }
-    
-    setState(() {
-      _isSearching = true;
+      
+      try {
+        final results = await UserService.searchUsers(query);
+        if (mounted) {
+          setState(() {
+            _searchResults = results;
+            _isSearching = false;
+          });
+        }
+      } catch (e) {
+        developer.log('Search error: $e');
+        if (mounted) {
+          setState(() {
+            _isSearching = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Search error: $e'),
+              backgroundColor: Colors.red.shade800,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
     });
-    
-    try {
-      final results = await UserService.searchUsers(query);
-      if (mounted) {
-        setState(() {
-          _searchResults = results;
-          _isSearching = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isSearching = false;
-        });
-      }
-    }
   }
 
   @override
@@ -220,9 +240,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
 
-    return Container(
-      color: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
-      child: Stack(children: [
+    return Scaffold(
+      backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
+      body: Stack(children: [
         GlassBackdrop(dark: dark),
 
         // ── Scrollable content ────────────────────────────────

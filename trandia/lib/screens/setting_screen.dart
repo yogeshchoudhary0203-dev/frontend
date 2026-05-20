@@ -33,6 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
                   child: GlassHeader(
                     dark: dark,
+                    padding: const EdgeInsets.only(left: 7, right: 8),
                     child: Row(
                       children: [
                         GlassCircleButton(

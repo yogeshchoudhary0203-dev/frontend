@@ -7,6 +7,8 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'glass_common.dart';
 import 'setting_screen.dart';
 
@@ -151,113 +153,120 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                 ),
-                // COVER BAND
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: _CoverBand(dark: dark),
-              ),
 
-              // AVATAR overlapping cover
-              Transform.translate(
-                offset: const Offset(0, -56),
-                child: Center(
-                  child: Container(
-                    width: 116,
-                    height: 116,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: dark ? const Color(0xFF0A0A0C) : const Color(0xFFFAFAFA),
-                      boxShadow: [
-                        BoxShadow(
-                          color: dark
-                              ? Colors.black.withOpacity(0.8)
-                              : const Color(0xFF14161E).withOpacity(0.25),
-                          blurRadius: 36,
-                          offset: const Offset(0, 18),
-                          spreadRadius: -16,
+                // COVER BAND + AVATAR
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: SizedBox(
+                    height: 218,
+                    child: Stack(
+                      alignment: Alignment.topCenter,
+                      children: [
+                        _CoverBand(
+                          dark: dark,
+                          fg: fg,
+                          sub: sub,
+                          hairline: hairline,
+                        ),
+                        Positioned(
+                          top: 96,
+                          child: Container(
+                            width: 116,
+                            height: 116,
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: dark ? const Color(0xFF0A0A0C) : const Color(0xFFFAFAFA),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: dark
+                                      ? Colors.black.withOpacity(0.8)
+                                      : const Color(0xFF14161E).withOpacity(0.25),
+                                  blurRadius: 36,
+                                  offset: const Offset(0, 18),
+                                  spreadRadius: -16,
+                                ),
+                              ],
+                            ),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: monoAvatar(dark, 0),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.white.withOpacity(0.22),
+                                    blurRadius: 0,
+                                    offset: const Offset(0, 1),
+                                    spreadRadius: -1,
+                                  ),
+                                ],
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'S',
+                                style: manrope(
+                                  size: 42,
+                                  weight: FontWeight.w700,
+                                  color: Colors.white,
+                                  letterSpacing: -1.26,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: monoAvatar(dark, 0),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.white.withOpacity(0.22),
-                            blurRadius: 0,
-                            offset: const Offset(0, 1),
-                            spreadRadius: -1,
-                          ),
-                        ],
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'S',
-                        style: manrope(
-                          size: 42,
-                          weight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -1.26,
-                        ),
-                      ),
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // NAME + HANDLE
+                _NameBlock(dark: dark, fg: fg, sub: sub),
+
+                const SizedBox(height: 12),
+
+                // TITLE CHIP
+                Center(child: _TitleChip(dark: dark, muted: muted, fg: fg)),
+
+                // BIO
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
+                  child: Text(
+                    'Designer & art director.\n'
+                    'Currently leading visual identity at Studio Atelier — '
+                    'type, motion & quiet things.',
+                    textAlign: TextAlign.center,
+                    style: manrope(
+                      size: 13.5,
+                      weight: FontWeight.w500,
+                      color: muted,
+                      letterSpacing: -0.07,
+                      height: 1.55,
                     ),
                   ),
                 ),
-              ),
 
-              // Compensate for the -56 translate so subsequent items don't overlap
-              const Padding(padding: EdgeInsets.only(top: 0), child: SizedBox(height: 0)),
-
-              // NAME + HANDLE
-              _NameBlock(dark: dark, fg: fg, sub: sub),
-
-              const SizedBox(height: 12),
-
-              // TITLE CHIP
-              Center(child: _TitleChip(dark: dark, muted: muted, fg: fg)),
-
-              // BIO
-              Padding(
-                padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
-                child: Text(
-                  'Designer & art director.\n'
-                  'Currently leading visual identity at Studio Atelier — '
-                  'type, motion & quiet things.',
-                  textAlign: TextAlign.center,
-                  style: manrope(
-                    size: 13.5,
-                    weight: FontWeight.w500,
-                    color: muted,
-                    letterSpacing: -0.07,
-                    height: 1.55,
+                // SOCIAL LINKS
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: _SocialLinksRow(
+                    dark: dark,
+                    fg: fg,
                   ),
                 ),
-              ),
 
-              // WEBSITE
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.link_rounded, size: 14, color: fg),
-                      const SizedBox(width: 6),
-                      Text(
-                        'studio-atelier.com',
-                        style: manrope(
-                          size: 12.5,
-                          weight: FontWeight.w700,
-                          color: fg,
-                          letterSpacing: -0.125,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 18),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _PostsBox(
+                    dark: dark,
+                    fg: fg,
+                    sub: sub,
+                    tiles: _tiles,
                   ),
                 ),
-              ),
 
                 const SizedBox(height: 16),
               ],
@@ -269,13 +278,181 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+Future<void> _openSocialLink(String url) async {
+  final uri = Uri.parse(url);
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+
+class _SocialLinksRow extends StatelessWidget {
+  final bool dark;
+  final Color fg;
+  const _SocialLinksRow({required this.dark, required this.fg});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SocialButton(
+            dark: dark,
+            icon: FontAwesomeIcons.snapchat,
+            color: const Color(0xFFFFFC00),
+            label: 'Snapchat',
+            url: 'https://www.snapchat.com/add/sarah.d',
+          ),
+          const SizedBox(width: 10),
+          _SocialButton(
+            dark: dark,
+            icon: FontAwesomeIcons.instagram,
+            color: const Color(0xFFE4405F),
+            label: 'Instagram',
+            url: 'https://www.instagram.com/sarah.d',
+          ),
+          const SizedBox(width: 10),
+          _SocialButton(
+            dark: dark,
+            icon: FontAwesomeIcons.whatsapp,
+            color: const Color(0xFF25D366),
+            label: 'WhatsApp',
+            url: 'https://wa.me/15551234567',
+          ),
+          const SizedBox(width: 10),
+          _SocialButton(
+            dark: dark,
+            icon: FontAwesomeIcons.facebookF,
+            color: const Color(0xFF1877F2),
+            label: 'Facebook',
+            url: 'https://www.facebook.com/sarah.d',
+          ),
+          const SizedBox(width: 10),
+          _SocialButton(
+            dark: dark,
+            icon: FontAwesomeIcons.xTwitter,
+            color: dark ? Colors.white : const Color(0xFF000000),
+            label: 'Twitter',
+            url: 'https://twitter.com/sarah_d',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SocialButton extends StatelessWidget {
+  final bool dark;
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String url;
+  const _SocialButton({
+    required this.dark,
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.url,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: () => _openSocialLink(url),
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 38,
+          height: 38,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: dark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.8),
+            border: Border.all(
+              color: dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(dark ? 0.28 : 0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+                spreadRadius: -10,
+              ),
+            ],
+          ),
+          child: FaIcon(icon, size: 22, color: color),
+        ),
+      ),
+    );
+  }
+}
+
+class _PostsBox extends StatelessWidget {
+  final bool dark;
+  final Color fg;
+  final Color sub;
+  final List<ProfileTile> tiles;
+  const _PostsBox({
+    required this.dark,
+    required this.fg,
+    required this.sub,
+    required this.tiles,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassSurface(
+      dark: dark,
+      radius: 28,
+      padding: const EdgeInsets.all(10),
+      blurSigma: 28,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+          child: Row(children: [
+            Icon(Icons.grid_on_rounded, size: 15, color: fg),
+            const SizedBox(width: 7),
+            Text(
+              'Posts',
+              style: manrope(
+                size: 14,
+                weight: FontWeight.w800,
+                color: fg,
+                letterSpacing: -0.14,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${tiles.length}',
+              style: manrope(
+                size: 12,
+                weight: FontWeight.w700,
+                color: sub,
+                letterSpacing: -0.12,
+              ),
+            ),
+          ]),
+        ),
+        _ProfileGrid(dark: dark, tiles: tiles),
+      ]),
+    );
+  }
+}
+
 // ───────────────────────────────────────────────────────────────
 // Cover band
 // ───────────────────────────────────────────────────────────────
 
 class _CoverBand extends StatelessWidget {
   final bool dark;
-  const _CoverBand({required this.dark});
+  final Color fg;
+  final Color sub;
+  final Color hairline;
+  const _CoverBand({
+    required this.dark,
+    required this.fg,
+    required this.sub,
+    required this.hairline,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -322,9 +499,41 @@ class _CoverBand extends StatelessWidget {
             painter: _DiagonalStripesPainter(dark: dark),
             size: Size.infinite,
           ),
+          Positioned(
+            left: 18,
+            right: 18,
+            top: 42,
+            child: _CoverStatsRow(
+              fg: fg,
+              sub: sub,
+              hairline: hairline,
+            ),
+          ),
         ]),
       ),
     );
+  }
+}
+
+class _CoverStatsRow extends StatelessWidget {
+  final Color fg;
+  final Color sub;
+  final Color hairline;
+  const _CoverStatsRow({
+    required this.fg,
+    required this.sub,
+    required this.hairline,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Expanded(child: _Stat(value: '24.3K', label: 'Followers', fg: fg, sub: sub)),
+      Container(width: 1, height: 30, color: hairline),
+      Expanded(child: _Stat(value: '482', label: 'Following', fg: fg, sub: sub)),
+      Container(width: 1, height: 30, color: hairline),
+      Expanded(child: _Stat(value: '168', label: 'Posts', fg: fg, sub: sub)),
+    ]);
   }
 }
 
@@ -460,13 +669,17 @@ class _StatsCard extends StatelessWidget {
   final Color sub;
   final Color hairline;
   const _StatsCard({
-    required this.dark, required this.fg, required this.sub, required this.hairline,
+    required this.dark,
+    required this.fg,
+    required this.sub,
+    required this.hairline,
   });
 
   @override
   Widget build(BuildContext context) {
     return GlassSurface(
-      dark: dark, radius: 20,
+      dark: dark,
+      radius: 20,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
       blurSigma: 28,
       child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -845,10 +1058,10 @@ class _ProfileTileView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(14),
           gradient: _tileGradient(dark, i),
         ),
         child: Stack(fit: StackFit.expand, children: [

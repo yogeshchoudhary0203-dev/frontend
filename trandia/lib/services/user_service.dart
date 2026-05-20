@@ -31,9 +31,14 @@ class UserService {
       developer.log('UserService.searchUsers: status=${res.statusCode}, body=${res.body}');
 
       if (res.statusCode == 200) {
-        final List data = jsonDecode(res.body);
+        final dynamic decoded = jsonDecode(res.body);
+        final List data = decoded is List
+            ? decoded
+            : (decoded is Map<String, dynamic> && decoded['results'] is List)
+                ? decoded['results'] as List
+                : [];
         developer.log('UserService.searchUsers: found ${data.length} users');
-        return data.map((e) => UserProfile.fromJson(e)).toList();
+        return data.map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
       } else if (res.statusCode == 401) {
         developer.log('UserService.searchUsers: 401 Unauthorized');
         throw const ApiException('Session expired. Please sign in again.');

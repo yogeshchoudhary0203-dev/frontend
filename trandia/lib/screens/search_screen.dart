@@ -16,28 +16,53 @@ import '../services/user_service.dart';
 import '../models/chat_model.dart';
 import 'chat_screen.dart';
 
-Future<void> _startChat(BuildContext context, String username, bool dark) async {
+Future<void> _startChat(BuildContext context, String username, bool dark, {UserProfile? selectedUser}) async {
   try {
     HapticFeedback.selectionClick();
     showDialog(
-      context: context, 
+      context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator())
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    
+
     final convId = await ChatService().startConversation(username);
     final convs = await ChatService().getConversations();
-    final conversation = convs.firstWhere((c) => c.id == convId);
     final myUserId = await AuthService.getCurrentUserId();
-    
+
+    ChatConversation? conversation;
+    try {
+      conversation = convs.firstWhere((c) => c.id == convId);
+    } catch (_) {
+      if (selectedUser != null && myUserId != null) {
+        conversation = ChatConversation(
+          id: convId,
+          participants: [
+            UserProfile(id: myUserId, name: '', username: '', picture: null),
+            selectedUser,
+          ],
+          lastMessage: null,
+          lastMessageTime: null,
+          unreadCounts: {},
+          isGroup: false,
+        );
+      }
+    }
+
     if (context.mounted) Navigator.of(context).pop(); // pop loading
-    
+
     if (context.mounted) {
+      if (conversation == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open chat. Please try again.')),
+        );
+        return;
+      }
+
       await Navigator.of(context).push(
         PageRouteBuilder(
           pageBuilder: (_, animation, __) => ChatScreen(
-            dark: dark, 
-            conversation: conversation,
+            dark: dark,
+            conversation: conversation!,
             myUserId: myUserId ?? '',
           ),
           transitionDuration: const Duration(milliseconds: 380),
@@ -359,8 +384,7 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
         ),
-        ]),
-      ),
+      ]),
     );
   }
 }
@@ -708,7 +732,7 @@ class _UserResultRow extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        _startChat(context, u.username, dark);
+        _startChat(context, u.username, dark, selectedUser: u);
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),

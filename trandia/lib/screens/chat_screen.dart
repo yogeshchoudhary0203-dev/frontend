@@ -56,11 +56,24 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       if (msg.conversationId == widget.conversation.id) {
         setState(() {
-          // Remove optimistic duplicate if it exists
-          _pendingIds.remove(msg.id);
-          // Avoid inserting if already present (idempotent)
-          if (!_messages.any((m) => m.id == msg.id)) {
-            _messages.insert(0, msg);
+          final existingIndex = _messages.indexWhere((m) => m.id == msg.id);
+          if (existingIndex != -1) {
+            _pendingIds.remove(msg.id);
+          } else {
+            final pendingIndex = _messages.indexWhere((m) =>
+                _pendingIds.contains(m.id) &&
+                m.senderId == msg.senderId &&
+                (msg.text.isEmpty || m.text == msg.text));
+
+            if (pendingIndex != -1) {
+              final pending = _messages[pendingIndex];
+              _pendingIds.remove(pending.id);
+              _messages[pendingIndex] = _isDisplayableMessage(msg)
+                  ? msg
+                  : _confirmedFromPending(pending, msg);
+            } else if (_isDisplayableMessage(msg)) {
+              _messages.insert(0, msg);
+            }
           }
           if (msg.senderId == _typingUserId) _typingUserId = null;
         });
@@ -92,13 +105,61 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadMessages() async {
-    if (mounted) setState(() { _isLoading = true; _hasError = false; });
-    try {
-      final msgs = await ChatService().getMessages(widget.conversation.id);
-      if (mounted) setState(() { _messages = msgs; _isLoading = false; });
-    } catch (e) {
-      if (mounted) setState(() { _isLoading = false; _hasError = true; });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
     }
+    try {
+      final msgs = await ChatService().getMessages(
+        widget.conversation.id,
+        limit: 25,
+      );
+      if (mounted) {
+        setState(() {
+          _messages = msgs.where(_isDisplayableMessage).toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+        });
+      }
+    }
+  }
+
+  ChatMessage _confirmedFromPending(ChatMessage pending, ChatMessage confirmed) {
+    return ChatMessage(
+      id: confirmed.id,
+      conversationId: confirmed.conversationId,
+      senderId: confirmed.senderId,
+      text: pending.text,
+      createdAt: confirmed.createdAt,
+      readBy: confirmed.readBy,
+      encryptedAesKeys: confirmed.encryptedAesKeys,
+    );
+  }
+
+  bool _isDisplayableMessage(ChatMessage msg) {
+    final text = msg.text.trim();
+    if (text.isEmpty) return false;
+    if (text.startsWith('[Decryption error:') ||
+        text.contains('Decryption error:') ||
+        text == '[Encrypted Message]') {
+      return false;
+    }
+    return !_looksLikeEncryptedPayload(text);
+  }
+
+  bool _looksLikeEncryptedPayload(String text) {
+    final normalized = text.replaceAll(RegExp(r'\s+'), '');
+    return normalized.startsWith('{"ct":') &&
+        normalized.contains('"iv":') &&
+        normalized.endsWith('}');
   }
 
   /// Optimistic send: insert locally first, then fire over WS.
@@ -108,13 +169,14 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.isEmpty) return;
 
     // Optimistic insert — use a temp id
-    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+    final sentAt = DateTime.now();
+    final tempId = 'temp_${sentAt.millisecondsSinceEpoch}';
     final optimistic = ChatMessage(
       id: tempId,
       conversationId: widget.conversation.id,
       senderId: widget.myUserId,
       text: text,
-      createdAt: DateTime.now(),
+      createdAt: sentAt,
       readBy: [widget.myUserId],
     );
 
@@ -127,7 +189,12 @@ class _ChatScreenState extends State<ChatScreen> {
     HapticFeedback.lightImpact();
 
     // Send via WebSocket with E2EE participants
-    ChatService().sendMessage(widget.conversation.id, text, widget.conversation.participants);
+    ChatService().sendMessage(
+      widget.conversation.id,
+      text,
+      widget.conversation.participants,
+      createdAt: sentAt,
+    );
   }
 
   void _onTyping(String text) {

@@ -112,7 +112,10 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     }
     try {
-      final msgs = await ChatService().getMessages(widget.conversation.id);
+      final msgs = await ChatService().getMessages(
+        widget.conversation.id,
+        limit: 25,
+      );
       if (mounted) {
         setState(() {
           _messages = msgs.where(_isDisplayableMessage).toList();
@@ -166,13 +169,14 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.isEmpty) return;
 
     // Optimistic insert — use a temp id
-    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+    final sentAt = DateTime.now();
+    final tempId = 'temp_${sentAt.millisecondsSinceEpoch}';
     final optimistic = ChatMessage(
       id: tempId,
       conversationId: widget.conversation.id,
       senderId: widget.myUserId,
       text: text,
-      createdAt: DateTime.now(),
+      createdAt: sentAt,
       readBy: [widget.myUserId],
     );
 
@@ -185,7 +189,12 @@ class _ChatScreenState extends State<ChatScreen> {
     HapticFeedback.lightImpact();
 
     // Send via WebSocket with E2EE participants
-    ChatService().sendMessage(widget.conversation.id, text, widget.conversation.participants);
+    ChatService().sendMessage(
+      widget.conversation.id,
+      text,
+      widget.conversation.participants,
+      createdAt: sentAt,
+    );
   }
 
   void _onTyping(String text) {

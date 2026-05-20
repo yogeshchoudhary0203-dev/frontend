@@ -124,7 +124,12 @@ class ChatService {
 
   // ── Send helpers ─────────────────────────────────────────────
 
-  Future<void> sendMessage(String conversationId, String text, List<UserProfile> participants) async {
+  Future<void> sendMessage(
+    String conversationId,
+    String text,
+    List<UserProfile> participants, {
+    DateTime? createdAt,
+  }) async {
     if (_channel == null) {
       developer.log('[ChatService] sendMessage: WS not connected');
       return;
@@ -165,6 +170,7 @@ class ChatService {
         'type': 'message',
         'conversation_id': conversationId,
         'text': encryptedText,
+        'client_created_at': (createdAt ?? DateTime.now()).toUtc().toIso8601String(),
         'encrypted_aes_keys': encryptedAesKeys,
       }));
     } catch (e) {
@@ -252,12 +258,7 @@ class ChatService {
     if (res.statusCode == 200) {
       final List data = jsonDecode(res.body) as List;
       await _ensureKeysLoaded();
-      return data
-          .map((e) {
-            final msg = ChatMessage.fromJson(e as Map<String, dynamic>);
-            return decryptMessage(msg);
-          })
-          .toList();
+      return _decryptMessagesInBatches(data);
     } else if (res.statusCode == 401) {
       await ApiService.clearToken();
       throw const ApiException('Session expired. Please sign in again.');
@@ -315,6 +316,18 @@ class ChatService {
       developer.log('[ChatService] Decryption error: $e');
       return _hiddenEncryptedMessage(msg);
     }
+  }
+
+  Future<List<ChatMessage>> _decryptMessagesInBatches(List data) async {
+    final messages = <ChatMessage>[];
+    for (var i = 0; i < data.length; i++) {
+      final msg = ChatMessage.fromJson(data[i] as Map<String, dynamic>);
+      messages.add(decryptMessage(msg));
+      if (i % 5 == 4) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+    return messages;
   }
 
   ChatMessage _hiddenEncryptedMessage(ChatMessage msg) {

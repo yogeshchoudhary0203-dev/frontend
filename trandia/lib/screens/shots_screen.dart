@@ -391,18 +391,18 @@ class _RightRail extends StatelessWidget {
           size: 30, count: data.likes, onTap: onLike,
         ),
         const SizedBox(height: 18),
-        _BareIconWithCount(
-          icon: Icons.mode_comment_outlined,
+        _BareCustomIconWithCount(
+          child: CustomPaint(painter: _CommentBubblePainter(color: Colors.white)),
           size: 28, count: data.comments, onTap: () {},
         ),
         const SizedBox(height: 18),
         _BareIconWithCount(
-          icon: Icons.send_outlined,
+          icon: Icons.near_me_rounded,
           size: 28, count: data.shares, onTap: () {},
         ),
         const SizedBox(height: 18),
-        _BareIcon(
-          icon: saved ? Icons.bookmark : Icons.bookmark_border,
+        _BareCustomIcon(
+          child: CustomPaint(painter: _SaveCirclePainter(color: Colors.white)),
           size: 28, onTap: onSave,
         ),
         const SizedBox(height: 18),
@@ -447,6 +447,37 @@ class _BareIcon extends StatelessWidget {
   }
 }
 
+class _BareCustomIcon extends StatelessWidget {
+  final Widget child;
+  final double size;
+  final VoidCallback? onTap;
+  const _BareCustomIcon({
+    required this.child,
+    required this.size,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              boxShadow: [BoxShadow(color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1))],
+            ),
+            child: SizedBox(width: size, height: size, child: child),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BareIconWithCount extends StatelessWidget {
   final IconData icon;
   final double size;
@@ -482,6 +513,122 @@ class _BareIconWithCount extends StatelessWidget {
       ],
     );
   }
+}
+
+class _BareCustomIconWithCount extends StatelessWidget {
+  final Widget child;
+  final double size;
+  final String count;
+  final VoidCallback onTap;
+  const _BareCustomIconWithCount({
+    required this.child,
+    required this.size,
+    required this.count,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            customBorder: const CircleBorder(),
+            child: Padding(
+              padding: const EdgeInsets.all(3),
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  boxShadow: [BoxShadow(color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1))],
+                ),
+                child: SizedBox(width: size, height: size, child: child),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          count,
+          style: manrope(
+            size: 11.5,
+            weight: FontWeight.w700,
+            color: Colors.white,
+            letterSpacing: -0.115,
+          ).copyWith(
+            shadows: const [Shadow(color: Color(0x99000000), blurRadius: 3, offset: Offset(0, 1))],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CommentBubblePainter extends CustomPainter {
+  final Color color;
+  const _CommentBubblePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sx = size.width / 28.0;
+    final sy = size.height / 28.0;
+    final bounds = Offset.zero & size;
+    final bubble = Path()
+      ..moveTo(8.6 * sx, 4.3 * sy)
+      ..lineTo(19.4 * sx, 4.3 * sy)
+      ..cubicTo(23.7 * sx, 4.3 * sy, 25.8 * sx, 7.5 * sy, 25.8 * sx, 11.8 * sy)
+      ..lineTo(25.8 * sx, 16.2 * sy)
+      ..cubicTo(25.8 * sx, 20.5 * sy, 22.6 * sx, 22.6 * sy, 18.3 * sx, 22.6 * sy)
+      ..lineTo(16.2 * sx, 22.6 * sy)
+      ..cubicTo(13.5 * sx, 22.6 * sy, 11.4 * sx, 23.7 * sy, 8.6 * sx, 25.8 * sy)
+      ..cubicTo(8.0 * sx, 26.4 * sy, 7.1 * sx, 25.8 * sy, 7.1 * sx, 24.9 * sy)
+      ..lineTo(7.1 * sx, 22.4 * sy)
+      ..cubicTo(3.9 * sx, 21.4 * sy, 2.2 * sx, 18.6 * sy, 2.2 * sx, 15.1 * sy)
+      ..lineTo(2.2 * sx, 11.8 * sy)
+      ..cubicTo(2.2 * sx, 7.5 * sy, 4.3 * sx, 4.3 * sy, 8.6 * sx, 4.3 * sy)
+      ..close();
+
+    canvas.saveLayer(bounds, Paint());
+    canvas.drawPath(bubble, Paint()..color = color);
+    final clear = Paint()..blendMode = BlendMode.clear;
+    for (final cx in [10.2, 14.0, 17.8]) {
+      canvas.drawCircle(Offset(cx * sx, 14.0 * sy), 1.7 * sx, clear);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_CommentBubblePainter o) => o.color != color;
+}
+
+class _SaveCirclePainter extends CustomPainter {
+  final Color color;
+  const _SaveCirclePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sx = size.width / 28.0;
+    final sy = size.height / 28.0;
+
+    final bookmark = Path()
+      ..moveTo(7.5 * sx, 3.4 * sy)
+      ..lineTo(20.5 * sx, 3.4 * sy)
+      ..cubicTo(22.3 * sx, 3.4 * sy, 23.7 * sx, 4.8 * sy, 23.7 * sx, 6.7 * sy)
+      ..lineTo(23.7 * sx, 22.6 * sy)
+      ..cubicTo(23.7 * sx, 24.3 * sy, 21.8 * sx, 25.2 * sy, 20.5 * sx, 23.9 * sy)
+      ..lineTo(14.0 * sx, 17.9 * sy)
+      ..lineTo(7.5 * sx, 23.9 * sy)
+      ..cubicTo(6.2 * sx, 25.2 * sy, 4.3 * sx, 24.3 * sy, 4.3 * sx, 22.6 * sy)
+      ..lineTo(4.3 * sx, 6.7 * sy)
+      ..cubicTo(4.3 * sx, 4.8 * sy, 5.7 * sx, 3.4 * sy, 7.5 * sx, 3.4 * sy)
+      ..close();
+
+    canvas.drawPath(bookmark, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_SaveCirclePainter o) => o.color != color;
 }
 
 class _AudioDisc extends StatelessWidget {

@@ -8,6 +8,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'glass_common.dart';
+import 'setting_screen.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Models
@@ -114,6 +115,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      GlassCircleButton(
+                        dark: dark,
+                        icon: Icons.settings_outlined,
+                        iconSize: 19,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              pageBuilder: (_, animation, __) => SettingsScreen(dark: dark),
+                              transitionDuration: const Duration(milliseconds: 320),
+                              reverseTransitionDuration: const Duration(milliseconds: 260),
+                              transitionsBuilder: (_, animation, __, child) {
+                                final curved = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic,
+                                  reverseCurve: Curves.easeInCubic,
+                                );
+                                return SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(0, 0.05),
+                                    end: Offset.zero,
+                                  ).animate(curved),
+                                  child: FadeTransition(opacity: curved, child: child),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
                 // COVER BAND
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),

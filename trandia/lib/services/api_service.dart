@@ -121,6 +121,52 @@ class ApiService {
         data is Map ? (data['detail'] ?? 'Request failed') : 'Request failed';
     throw ApiException(detail.toString());
   }
+
+  static Future<Map<String, dynamic>> put(
+    String path,
+    Map<String, dynamic> body, {
+    bool requiresAuth = false,
+  }) async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (requiresAuth) {
+      final token = await getToken();
+      if (token != null) headers['Authorization'] = 'Bearer $token';
+    }
+    final http.Response response;
+    try {
+      response = await http
+          .put(
+            Uri.parse('$baseUrl$path'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(_kTimeout);
+    } on Exception {
+      throw const ApiException(
+          'Could not connect to server. Check your network.');
+    }
+
+    if (response.statusCode == 401) {
+      await clearToken();
+      throw const ApiException('Session expired. Please sign in again.');
+    }
+
+    final dynamic data;
+    try {
+      data = jsonDecode(response.body);
+    } catch (_) {
+      throw ApiException(
+          'Server returned an unexpected response (HTTP ${response.statusCode}). '
+          'Please try again.');
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return data as Map<String, dynamic>;
+    }
+    final detail =
+        data is Map ? (data['detail'] ?? 'Request failed') : 'Request failed';
+    throw ApiException(detail.toString());
+  }
 }
 
 class ApiException implements Exception {

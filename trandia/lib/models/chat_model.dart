@@ -3,12 +3,14 @@ class UserProfile {
   final String name;
   final String username;
   final String? picture;
+  final String? publicKey;
 
   UserProfile({
     required this.id,
     required this.name,
     required this.username,
     this.picture,
+    this.publicKey,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -17,6 +19,7 @@ class UserProfile {
       name: json['name'],
       username: json['username'],
       picture: json['picture'],
+      publicKey: json['public_key'],
     );
   }
 }
@@ -29,6 +32,7 @@ class ChatConversation {
   final Map<String, int> unreadCounts;
   final bool isGroup;
   final String? name;
+  final Map<String, String> lastMessageEncryptedAesKeys;
 
   ChatConversation({
     required this.id,
@@ -38,6 +42,7 @@ class ChatConversation {
     this.unreadCounts = const {},
     this.isGroup = false,
     this.name,
+    this.lastMessageEncryptedAesKeys = const {},
   });
 
   factory ChatConversation.fromJson(Map<String, dynamic> json) {
@@ -45,6 +50,13 @@ class ChatConversation {
     if (json['unread_counts'] != null) {
       json['unread_counts'].forEach((key, value) {
         unreadCounts[key] = value as int;
+      });
+    }
+
+    final Map<String, String> lastMessageEncryptedAesKeys = {};
+    if (json['last_message_encrypted_aes_keys'] != null) {
+      json['last_message_encrypted_aes_keys'].forEach((key, value) {
+        lastMessageEncryptedAesKeys[key] = value as String;
       });
     }
 
@@ -60,6 +72,7 @@ class ChatConversation {
       unreadCounts: unreadCounts,
       isGroup: json['is_group'] ?? false,
       name: json['name'],
+      lastMessageEncryptedAesKeys: lastMessageEncryptedAesKeys,
     );
   }
 
@@ -75,6 +88,7 @@ class ChatMessage {
   final String text;
   final DateTime createdAt;
   final List<String> readBy;
+  final Map<String, String> encryptedAesKeys;
 
   ChatMessage({
     required this.id,
@@ -83,9 +97,17 @@ class ChatMessage {
     required this.text,
     required this.createdAt,
     this.readBy = const [],
+    this.encryptedAesKeys = const {},
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    final Map<String, String> encryptedAesKeys = {};
+    if (json['encrypted_aes_keys'] != null) {
+      json['encrypted_aes_keys'].forEach((key, value) {
+        encryptedAesKeys[key] = value as String;
+      });
+    }
+
     return ChatMessage(
       id: json['id'],
       conversationId: json['conversation_id'],
@@ -93,6 +115,7 @@ class ChatMessage {
       text: json['text'],
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       readBy: List<String>.from(json['read_by'] ?? []),
+      encryptedAesKeys: encryptedAesKeys,
     );
   }
 }

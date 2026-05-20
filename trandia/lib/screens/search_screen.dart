@@ -16,78 +16,112 @@ import '../services/user_service.dart';
 import '../models/chat_model.dart';
 import 'chat_screen.dart';
 
-Future<void> _startChat(BuildContext context, String username, bool dark, {UserProfile? selectedUser}) async {
+/// ─── BUG FIX: _startChat ────────────────────────────────────────────────────
+/// Previous version had 3 bugs:
+/// 1. Called getConversations() — unnecessary extra API round-trip.
+///    If that call failed OR returned data before the new conv was committed,
+///    `firstWhere` threw StateError → conversation stayed null → no navigation.
+/// 2. myUserId was fetched AFTER the API calls. If it was null AND
+///    firstWhere failed, the fallback ChatConversation was never built → no nav.
+/// 3. navigator.pop() in catch ran even when no dialog was open (if
+///    startConversation threw before showDialog), popping the wrong screen.
+/// ────────────────────────────────────────────────────────────────────────────
+Future<void> _startChat(
+  BuildContext context,
+  String username,
+  bool dark, {
+  UserProfile? selectedUser,
+}) async {
   try {
     HapticFeedback.selectionClick();
+
+    // ① Get myUserId FIRST — sync read from SharedPreferences, fast
+    final myUserId = await AuthService.getCurrentUserId();
+    if (!context.mounted) return;
+
+    // ② Show loading dialog — track whether it's open
+    bool dialogShowing = false;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+    dialogShowing = true;
 
+    // ③ Start/get conversation — single API call
     final convId = await ChatService().startConversation(username);
-    final convs = await ChatService().getConversations();
-    final myUserId = await AuthService.getCurrentUserId();
 
-    ChatConversation? conversation;
-    try {
-      conversation = convs.firstWhere((c) => c.id == convId);
-    } catch (_) {
-      if (selectedUser != null && myUserId != null) {
-        conversation = ChatConversation(
-          id: convId,
-          participants: [
-            UserProfile(id: myUserId, name: '', username: '', picture: null),
-            selectedUser,
-          ],
-          lastMessage: null,
-          lastMessageTime: null,
-          unreadCounts: {},
-          isGroup: false,
-        );
-      }
+    // ④ Dismiss dialog safely
+    if (context.mounted && dialogShowing) {
+      Navigator.of(context).pop();
+      dialogShowing = false;
     }
+    if (!context.mounted) return;
 
-    if (context.mounted) Navigator.of(context).pop(); // pop loading
-
-    if (context.mounted) {
-      if (conversation == null) {
+    // ⑤ Build conversation object directly — no extra getConversations() call
+    final ChatConversation conversation;
+    if (selectedUser != null && myUserId != null) {
+      // Fast path: we already have everything we need
+      conversation = ChatConversation(
+        id: convId,
+        participants: [
+          UserProfile(id: myUserId, name: 'Me', username: 'me', picture: null),
+          selectedUser,
+        ],
+        lastMessage: null,
+        lastMessageTime: null,
+        unreadCounts: {},
+        isGroup: false,
+      );
+    } else {
+      // Slow path: fetch list to find the conversation (only if selectedUser unknown)
+      final convs = await ChatService().getConversations();
+      if (!context.mounted) return;
+      try {
+        conversation = convs.firstWhere((c) => c.id == convId);
+      } catch (_) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not open chat. Please try again.')),
         );
         return;
       }
-
-      await Navigator.of(context).push(
-        PageRouteBuilder(
-          pageBuilder: (_, animation, __) => ChatScreen(
-            dark: dark,
-            conversation: conversation!,
-            myUserId: myUserId ?? '',
-          ),
-          transitionDuration: const Duration(milliseconds: 380),
-          reverseTransitionDuration: const Duration(milliseconds: 300),
-          transitionsBuilder: (_, animation, __, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-              reverseCurve: Curves.easeInCubic,
-            );
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(1.0, 0),
-                end: Offset.zero,
-              ).animate(curved),
-              child: FadeTransition(opacity: curved, child: child),
-            );
-          },
-        ),
-      );
     }
+
+    // ⑥ Navigate to ChatScreen
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, animation, __) => ChatScreen(
+          dark: dark,
+          conversation: conversation,
+          myUserId: myUserId ?? '',
+        ),
+        transitionDuration: const Duration(milliseconds: 380),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1.0, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
+      ),
+    );
   } catch (e) {
+    developer.log('_startChat error: $e');
     if (context.mounted) {
-      Navigator.of(context).pop(); // pop loading
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not start chat: $e')));
+      // Safe pop — ignores error if nothing to pop
+      try { Navigator.of(context).pop(); } catch (_) {}
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not start chat: $e')),
+      );
     }
   }
 }
@@ -116,9 +150,9 @@ class SuggestedItem {
 enum TileKind { photo, reel, carousel }
 
 class DiscoverTile {
-  final int span;        // 1 or 2 (row span)
+  final int span;
   final TileKind kind;
-  final int? count;      // for carousel
+  final int? count;
   const DiscoverTile({required this.span, required this.kind, this.count});
 }
 
@@ -157,7 +191,6 @@ const _tiles = <DiscoverTile>[
   DiscoverTile(span: 1, kind: TileKind.photo),
 ];
 
-/// Monochrome tile gradient with varied angle.
 LinearGradient _tileGradient(bool dark, int i) {
   final double a, b;
   if (dark) {
@@ -167,11 +200,6 @@ LinearGradient _tileGradient(bool dark, int i) {
     a = (92 - (i % 5) * 4).toDouble();
     b = (a - 18).clamp(56, 100).toDouble();
   }
-  final angle = (135 + (i * 23) % 90) * 3.14159 / 180.0;
-  // Convert angle to begin/end alignments
-  final dx = -1 * (i.isEven ? 1 : -1).toDouble();
-  final dy = -1.0;
-  // We approximate by switching alignments based on index to vary direction.
   final begin = (i % 4 == 0) ? Alignment.topLeft
               : (i % 4 == 1) ? Alignment.topCenter
               : (i % 4 == 2) ? Alignment.topRight
@@ -215,44 +243,26 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _onSearchChanged(String query) {
-    setState(() {
-      _query = query;
-    });
-    
+    setState(() { _query = query; });
+
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () async {
       if (query.trim().isEmpty) {
-        setState(() {
-          _searchResults = [];
-          _isSearching = false;
-        });
+        setState(() { _searchResults = []; _isSearching = false; });
         return;
       }
-      
-      setState(() {
-        _isSearching = true;
-      });
-      
+      setState(() { _isSearching = true; });
       try {
         final results = await UserService.searchUsers(query);
-        if (mounted) {
-          setState(() {
-            _searchResults = results;
-            _isSearching = false;
-          });
-        }
+        if (mounted) setState(() { _searchResults = results; _isSearching = false; });
       } catch (e) {
         developer.log('Search error: $e');
         if (mounted) {
-          setState(() {
-            _isSearching = false;
-          });
+          setState(() { _isSearching = false; });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Search error: $e'),
+            SnackBar(content: Text('Search error: $e'),
               backgroundColor: Colors.red.shade800,
-              duration: const Duration(seconds: 4),
-            ),
+              duration: const Duration(seconds: 4)),
           );
         }
       }
@@ -271,7 +281,6 @@ class _SearchScreenState extends State<SearchScreen> {
       body: Stack(children: [
         GlassBackdrop(dark: dark),
 
-        // ── Scrollable content ────────────────────────────────
         Positioned.fill(
           top: headerTop + 102,
           child: ListView(
@@ -280,18 +289,10 @@ class _SearchScreenState extends State<SearchScreen> {
               if (_query.isNotEmpty) ...[
                 _Section(title: 'Search Results', action: 'Clear', dark: dark),
                 if (_isSearching)
-                  const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
+                  const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
                 else if (_searchResults.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Center(
-                      child: Text('No users found',
-                        style: manrope(size: 14, color: sub)),
-                    ),
-                  )
+                  Padding(padding: const EdgeInsets.all(20),
+                    child: Center(child: Text('No users found', style: manrope(size: 14, color: sub))))
                 else
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -333,24 +334,20 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
 
-        // ── Header: back + search input ───────────────────────
+        // Header
         Positioned(
           top: headerTop, left: 12, right: 12,
           child: SizedBox(
             height: 52,
             child: Row(children: [
-              // Back button
               _CircleGlass(
-                dark: dark,
-                size: 44,
+                dark: dark, size: 44,
                 child: Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: fg),
                 onTap: () => Navigator.of(context).maybePop(),
               ),
               const SizedBox(width: 8),
-              // Search input pill
               Expanded(child: _SearchInputPill(
-                dark: dark,
-                value: _query,
+                dark: dark, value: _query,
                 placeholder: 'Search Trandia',
                 onChanged: _onSearchChanged,
                 onClear: () => _onSearchChanged(''),
@@ -359,7 +356,7 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
 
-        // ── Filter chips ──────────────────────────────────────
+        // Filter chips
         Positioned(
           top: headerTop + 60, left: 0, right: 0,
           child: SizedBox(
@@ -436,7 +433,7 @@ class _SearchInputPill extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final VoidCallback onClear;
   const _SearchInputPill({
-    required this.dark, required this.value, required this.placeholder, 
+    required this.dark, required this.value, required this.placeholder,
     this.onChanged, required this.onClear,
   });
 
@@ -456,16 +453,11 @@ class _SearchInputPillState extends State<_SearchInputPill> {
   @override
   void didUpdateWidget(_SearchInputPill oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.value != _controller.text) {
-      _controller.text = widget.value;
-    }
+    if (widget.value != _controller.text) _controller.text = widget.value;
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  void dispose() { _controller.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -498,7 +490,6 @@ class _SearchInputPillState extends State<_SearchInputPill> {
             ],
           ),
           child: Stack(alignment: Alignment.center, children: [
-            // top sheen
             Positioned(
               top: 0, left: 20, right: 20, height: 1,
               child: Container(
@@ -518,36 +509,20 @@ class _SearchInputPillState extends State<_SearchInputPill> {
                   setState(() {});
                   if (widget.onChanged != null) widget.onChanged!(val);
                 },
-                style: manrope(
-                  size: 14.5,
-                  weight: hasText ? FontWeight.w600 : FontWeight.w500,
-                  color: fg,
-                  letterSpacing: -0.145,
-                ),
+                style: manrope(size: 14.5, weight: hasText ? FontWeight.w600 : FontWeight.w500,
+                  color: fg, letterSpacing: -0.145),
                 decoration: InputDecoration(
                   hintText: widget.placeholder,
-                  hintStyle: manrope(
-                    size: 14.5,
-                    weight: FontWeight.w500,
-                    color: sub,
-                    letterSpacing: -0.145,
-                  ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
+                  hintStyle: manrope(size: 14.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.145),
+                  border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero,
                 ),
               )),
               const SizedBox(width: 6),
               if (hasText)
                 GestureDetector(
-                  onTap: () {
-                    _controller.clear();
-                    setState(() {});
-                    widget.onClear();
-                  },
+                  onTap: () { _controller.clear(); setState(() {}); widget.onClear(); },
                   child: Container(
-                    width: 26, height: 26,
-                    alignment: Alignment.center,
+                    width: 26, height: 26, alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
@@ -556,10 +531,8 @@ class _SearchInputPillState extends State<_SearchInputPill> {
                   ),
                 )
               else
-                SizedBox(
-                  width: 32, height: 32,
-                  child: Icon(Icons.mic_none_rounded, size: 18, color: sub),
-                ),
+                SizedBox(width: 32, height: 32,
+                  child: Icon(Icons.mic_none_rounded, size: 18, color: sub)),
             ]),
           ]),
         ),
@@ -574,10 +547,8 @@ class _FilterChip extends StatelessWidget {
   final bool dark;
   final IconData? leading;
   final VoidCallback onTap;
-  const _FilterChip({
-    required this.label, required this.active, required this.dark,
-    required this.onTap, this.leading,
-  });
+  const _FilterChip({required this.label, required this.active, required this.dark,
+    required this.onTap, this.leading});
 
   @override
   Widget build(BuildContext context) {
@@ -601,16 +572,10 @@ class _FilterChip extends StatelessWidget {
                 : (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06))),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              if (leading != null) ...[
-                Icon(leading, size: 13, color: fg),
-                const SizedBox(width: 5),
-              ],
-              Text(label,
-                style: manrope(
-                  size: 12.5,
-                  weight: active ? FontWeight.w700 : FontWeight.w600,
-                  color: fg, letterSpacing: -0.125,
-                )),
+              if (leading != null) ...[Icon(leading, size: 13, color: fg), const SizedBox(width: 5)],
+              Text(label, style: manrope(size: 12.5,
+                weight: active ? FontWeight.w700 : FontWeight.w600,
+                color: fg, letterSpacing: -0.125)),
             ]),
           ),
         ),
@@ -638,8 +603,7 @@ class _Section extends StatelessWidget {
         if (action != null)
           GestureDetector(
             onTap: () {},
-            child: Text(action!,
-              style: manrope(size: 12, weight: FontWeight.w700, color: fg, letterSpacing: -0.12)),
+            child: Text(action!, style: manrope(size: 12, weight: FontWeight.w700, color: fg, letterSpacing: -0.12)),
           ),
       ]),
     );
@@ -671,8 +635,7 @@ class _RecentRow extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
-            width: 46, height: 46,
-            alignment: Alignment.center,
+            width: 46, height: 46, alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06),
@@ -680,40 +643,38 @@ class _RecentRow extends StatelessWidget {
             ),
             child: Icon(
               r.kind == RecentKind.tag ? Icons.local_offer_outlined : Icons.location_on_outlined,
-              size: 18, color: fg,
-            ),
+              size: 18, color: fg),
           ),
         ),
       );
     }
 
     return GestureDetector(
-      onTap: () {
+      // FIX: async + await so Future exceptions surface properly
+      onTap: () async {
         if (r.kind == RecentKind.user) {
-          _startChat(context, r.name, dark);
+          await _startChat(context, r.name, dark);
         }
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
         child: Row(children: [
-        leading,
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: manrope(size: 14, weight: FontWeight.w700, color: fg, letterSpacing: -0.14)),
-          const SizedBox(height: 2),
-          Text(r.sub, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: manrope(size: 11.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.06)),
-        ])),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: () {},
-          child: Container(
-            width: 28, height: 28, alignment: Alignment.center,
-            child: Icon(Icons.close_rounded, size: 14, color: sub),
+          leading,
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: manrope(size: 14, weight: FontWeight.w700, color: fg, letterSpacing: -0.14)),
+            const SizedBox(height: 2),
+            Text(r.sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: manrope(size: 11.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.06)),
+          ])),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () {},
+            child: Container(width: 28, height: 28, alignment: Alignment.center,
+              child: Icon(Icons.close_rounded, size: 14, color: sub)),
           ),
-        ),
-      ]),
+        ]),
       ),
     );
   }
@@ -731,8 +692,9 @@ class _UserResultRow extends StatelessWidget {
     final sub = GlassTokens.sub(dark);
 
     return GestureDetector(
-      onTap: () {
-        _startChat(context, u.username, dark, selectedUser: u);
+      // FIX: async + await — exceptions are surfaced, not silently dropped
+      onTap: () async {
+        await _startChat(context, u.username, dark, selectedUser: u);
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
@@ -740,15 +702,20 @@ class _UserResultRow extends StatelessWidget {
           Container(
             width: 46, height: 46,
             decoration: BoxDecoration(
-              shape: BoxShape.circle, 
+              shape: BoxShape.circle,
               gradient: monoAvatar(dark, i),
-              image: u.picture != null 
+              image: u.picture != null
                   ? DecorationImage(image: NetworkImage(u.picture!), fit: BoxFit.cover)
                   : null,
             ),
             alignment: Alignment.center,
-            child: u.picture == null ? Text(u.name[0].toUpperCase(),
-              style: manrope(size: 17, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.34)) : null,
+            // FIX: guard against empty username/name to avoid RangeError
+            child: u.picture == null
+              ? Text(
+                  u.name.isNotEmpty ? u.name[0].toUpperCase() : '?',
+                  style: manrope(size: 17, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.34),
+                )
+              : null,
           ),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
@@ -775,63 +742,59 @@ class _SuggestedCard extends StatelessWidget {
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
     return GestureDetector(
-      onTap: () => _startChat(context, s.name, dark),
+      onTap: () async => await _startChat(context, s.name, dark),
       child: SizedBox(
         width: 132,
-      child: GlassSurface(
-        dark: dark, radius: 20,
-        padding: const EdgeInsets.fromLTRB(10, 14, 10, 10),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 62, height: 62,
-            decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, i + 1)),
-            alignment: Alignment.center,
-            child: Text(s.name[0].toUpperCase(),
-              style: manrope(size: 22, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.44)),
-          ),
-          const SizedBox(height: 8),
-          Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: manrope(size: 13, weight: FontWeight.w700, color: fg, letterSpacing: -0.13)),
-          const SizedBox(height: 1),
-          Text(s.sub, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: manrope(size: 10.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.05)),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity, height: 30,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                padding: EdgeInsets.zero,
-                elevation: 0,
-                backgroundColor: s.followed
-                  ? (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06))
-                  : (dark ? Colors.white : const Color(0xFF0A0A0A)),
-                foregroundColor: s.followed ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  side: s.followed
-                    ? BorderSide(color: dark ? Colors.white.withOpacity(0.14) : Colors.black.withOpacity(0.08))
-                    : BorderSide.none,
-                ),
-              ),
-              onPressed: () {},
-              child: Text(s.followed ? 'Following' : 'Follow',
-                style: manrope(
-                  size: 12, weight: FontWeight.w700,
-                  color: s.followed ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
-                  letterSpacing: -0.12,
-                )),
+        child: GlassSurface(
+          dark: dark, radius: 20,
+          padding: const EdgeInsets.fromLTRB(10, 14, 10, 10),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 62, height: 62,
+              decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, i + 1)),
+              alignment: Alignment.center,
+              child: Text(s.name[0].toUpperCase(),
+                style: manrope(size: 22, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.44)),
             ),
-          ),
-        ]),
-      ),
+            const SizedBox(height: 8),
+            Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: manrope(size: 13, weight: FontWeight.w700, color: fg, letterSpacing: -0.13)),
+            const SizedBox(height: 1),
+            Text(s.sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: manrope(size: 10.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.05)),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity, height: 30,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.zero, elevation: 0,
+                  backgroundColor: s.followed
+                    ? (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06))
+                    : (dark ? Colors.white : const Color(0xFF0A0A0A)),
+                  foregroundColor: s.followed ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                    side: s.followed
+                      ? BorderSide(color: dark ? Colors.white.withOpacity(0.14) : Colors.black.withOpacity(0.08))
+                      : BorderSide.none,
+                  ),
+                ),
+                onPressed: () {},
+                child: Text(s.followed ? 'Following' : 'Follow',
+                  style: manrope(size: 12, weight: FontWeight.w700,
+                    color: s.followed ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
+                    letterSpacing: -0.12)),
+              ),
+            ),
+          ]),
+        ),
       ),
     );
   }
 }
 
 // ───────────────────────────────────────────────────────────────
-// Discover grid — 3-col masonry where each tile spans 1 or 2 rows.
-// Pure layout math (no third-party deps).
+// Discover grid
 // ───────────────────────────────────────────────────────────────
 
 class _DiscoverGrid extends StatelessWidget {
@@ -846,7 +809,6 @@ class _DiscoverGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
       final tileW = (c.maxWidth - _gap * (_cols - 1)) / _cols;
-      // place each tile into the shortest column
       final colHeights = List<double>.filled(_cols, 0);
       final positions  = <_Pos>[];
       double maxH = 0;
@@ -909,12 +871,10 @@ class _DiscoverTileView extends StatelessWidget {
           ],
         ),
         child: Stack(fit: StackFit.expand, children: [
-          // subtle top vignette
           Container(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: const Alignment(-0.4, -1),
-                radius: 1.2,
+                center: const Alignment(-0.4, -1), radius: 1.2,
                 colors: dark
                   ? [Colors.white.withOpacity(0.06), Colors.transparent]
                   : [Colors.white.withOpacity(0.55), Colors.transparent],
@@ -922,7 +882,6 @@ class _DiscoverTileView extends StatelessWidget {
               ),
             ),
           ),
-          // kind chip top-right
           if (t.kind != TileKind.photo)
             Positioned(
               top: 6, right: 6,
@@ -934,32 +893,24 @@ class _DiscoverTileView extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     color: Colors.black.withOpacity(0.42),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(
-                        t.kind == TileKind.reel ? Icons.movie_creation_outlined : Icons.collections_outlined,
-                        size: 12, color: Colors.white,
-                      ),
+                      Icon(t.kind == TileKind.reel ? Icons.movie_creation_outlined : Icons.collections_outlined,
+                        size: 12, color: Colors.white),
                       if (t.kind == TileKind.carousel && t.count != null) ...[
                         const SizedBox(width: 3),
-                        Text('${t.count}',
-                          style: manrope(size: 10, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.1)),
+                        Text('${t.count}', style: manrope(size: 10, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.1)),
                       ],
                     ]),
                   ),
                 ),
               ),
             ),
-          // reel play glyph centered
           if (t.kind == TileKind.reel)
             Center(child: ClipOval(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: Container(
-                  width: 30, height: 30,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withOpacity(0.35),
-                  ),
+                  width: 30, height: 30, alignment: Alignment.center,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withOpacity(0.35)),
                   child: const Icon(Icons.play_arrow_rounded, size: 18, color: Colors.white),
                 ),
               ),

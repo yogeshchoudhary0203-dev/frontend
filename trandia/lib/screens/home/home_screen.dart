@@ -8,6 +8,7 @@ import '../search_screen.dart';
 import '../shots_screen.dart';
 import '../profile_screen.dart';
 import '../chat_list_screen.dart';
+import '../../services/cryptography_service.dart';
 
 extension _ColorOp on Color {
   Color op(double opacity) => withOpacity(opacity);
@@ -143,9 +144,10 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     // Request notification permission + show queued welcome notification
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => FcmService.setupForHomeScreen(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FcmService.setupForHomeScreen();
+      CryptographyService().ensurePublicKeyRegistered();
+    });
   }
 
   @override

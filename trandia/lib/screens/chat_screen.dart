@@ -1,9 +1,16 @@
 // chat_screen.dart
-// Conversation view — glass header, message bubbles (text + voice + typing), glass input.
+// BUGS FIXED:
+// 1. Header top: 10 ignored status bar → header overlapped OS bar on notched phones
+// 2. Input bottom: 10 ignored keyboard insets → input hidden behind keyboard
+// 3. No optimistic message insert → send felt laggy (had to wait for WS round-trip)
+// 4. Typing event sent every keystroke → WS spam; now delegated to ChatService throttle
+// 5. otherUser.username[0] crash when username is empty string
+// 6. Dead `runs` variable in build()
 
 import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/chat_model.dart';
 import '../services/chat_service.dart';
 import 'glass_common.dart';
@@ -14,7 +21,7 @@ class ChatScreen extends StatefulWidget {
   final String myUserId;
 
   const ChatScreen({
-    super.key, 
+    super.key,
     required this.dark,
     required this.conversation,
     required this.myUserId,
@@ -27,13 +34,17 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
+
   List<ChatMessage> _messages = [];
   bool _isLoading = true;
+  bool _hasError = false;
   String? _typingUserId;
   Timer? _typingTimer;
-  late StreamSubscription _messageSub;
-  late StreamSubscription _typingSub;
+  late StreamSubscription<ChatMessage> _messageSub;
+  late StreamSubscription<Map<String, dynamic>> _typingSub;
+
+  // For optimistic send — track pending messages by temp id
+  final Set<String> _pendingIds = {};
 
   @override
   void initState() {
@@ -42,30 +53,29 @@ class _ChatScreenState extends State<ChatScreen> {
     ChatService().markAsRead(widget.conversation.id);
 
     _messageSub = ChatService().messageStream.listen((msg) {
+      if (!mounted) return;
       if (msg.conversationId == widget.conversation.id) {
         setState(() {
-          // insert at top because ListView is reversed
-          _messages.insert(0, msg);
-          if (msg.senderId == _typingUserId) {
-            _typingUserId = null; // stop typing if they sent a message
+          // Remove optimistic duplicate if it exists
+          _pendingIds.remove(msg.id);
+          // Avoid inserting if already present (idempotent)
+          if (!_messages.any((m) => m.id == msg.id)) {
+            _messages.insert(0, msg);
           }
+          if (msg.senderId == _typingUserId) _typingUserId = null;
         });
         ChatService().markAsRead(widget.conversation.id);
       }
     });
 
     _typingSub = ChatService().typingStream.listen((event) {
-      if (event['conversation_id'] == widget.conversation.id && event['user_id'] != widget.myUserId) {
-        setState(() {
-          _typingUserId = event['user_id'];
-        });
+      if (!mounted) return;
+      if (event['conversation_id'] == widget.conversation.id &&
+          event['user_id'] != widget.myUserId) {
+        setState(() => _typingUserId = event['user_id'] as String?);
         _typingTimer?.cancel();
         _typingTimer = Timer(const Duration(seconds: 3), () {
-          if (mounted) {
-            setState(() {
-              _typingUserId = null;
-            });
-          }
+          if (mounted) setState(() => _typingUserId = null);
         });
       }
     });
@@ -82,240 +92,337 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadMessages() async {
+    if (mounted) setState(() { _isLoading = true; _hasError = false; });
     try {
       final msgs = await ChatService().getMessages(widget.conversation.id);
-      if (mounted) {
-        setState(() {
-          _messages = msgs;
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() { _messages = msgs; _isLoading = false; });
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() { _isLoading = false; _hasError = true; });
     }
   }
 
+  /// Optimistic send: insert locally first, then fire over WS.
+  /// If WS echoes back, we de-dupe by id.
   void _sendMessage() {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
-    
-    ChatService().sendMessage(widget.conversation.id, text);
+
+    // Optimistic insert — use a temp id
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+    final optimistic = ChatMessage(
+      id: tempId,
+      conversationId: widget.conversation.id,
+      senderId: widget.myUserId,
+      text: text,
+      createdAt: DateTime.now(),
+      readBy: [widget.myUserId],
+    );
+
+    setState(() {
+      _messages.insert(0, optimistic);
+      _pendingIds.add(tempId);
+    });
+
     _textController.clear();
+    HapticFeedback.lightImpact();
+
+    // Send via WebSocket with E2EE participants
+    ChatService().sendMessage(widget.conversation.id, text, widget.conversation.participants);
   }
 
   void _onTyping(String text) {
-    if (text.isNotEmpty) {
-      ChatService().sendTyping(widget.conversation.id);
-    }
+    // ChatService.sendTyping is already throttled to 1 event / 2 sec
+    if (text.isNotEmpty) ChatService().sendTyping(widget.conversation.id);
   }
 
-  void _deleteConversation() async {
+  Future<void> _deleteConversation() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Delete Chat'),
-        content: const Text('Are you sure you want to delete this conversation? This cannot be undone.'),
+        content: const Text('Delete this conversation? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
+    if (confirm != true) return;
+    if (!mounted) return;
 
-    if (confirm == true) {
-      if (!mounted) return;
-      showDialog(
-        context: context, barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator())
-      );
-      try {
-        await ChatService().deleteConversation(widget.conversation.id);
-        if (mounted) {
-          Navigator.pop(context); // pop loading
-          Navigator.pop(context, true); // pop chat screen, returning true to refresh
-        }
-      } catch (e) {
-        if (mounted) {
-          Navigator.pop(context); // pop loading
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
-        }
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await ChatService().deleteConversation(widget.conversation.id);
+      if (mounted) {
+        Navigator.pop(context); // pop loading
+        Navigator.pop(context, true); // pop chat screen
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // pop loading
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not delete: $e')));
       }
     }
   }
 
-  void _deleteMessage(String messageId) async {
+  Future<void> _deleteMessage(String messageId) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Delete Message'),
         content: const Text('Delete this message for everyone?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
-
-    if (confirm == true) {
-      try {
-        await ChatService().deleteMessage(widget.conversation.id, messageId);
-        if (mounted) {
-          setState(() {
-            _messages.removeWhere((m) => m.id == messageId);
-          });
-        }
-      } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+    if (confirm != true) return;
+    try {
+      await ChatService().deleteMessage(widget.conversation.id, messageId);
+      if (mounted) setState(() => _messages.removeWhere((m) => m.id == messageId));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not delete: $e')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final fg  = GlassTokens.fg(widget.dark);
+    final fg = GlassTokens.fg(widget.dark);
     final sub = GlassTokens.sub(widget.dark);
-    final otherUser = widget.conversation.getOtherParticipant(widget.myUserId);
 
-    // Group consecutive same-side messages
-    final runs = <List<ChatMessage>>[];
-    // _messages is new-to-old (because of DB sorting). We iterate from old to new or handle grouped logic.
-    // For reversed ListView, index 0 is at bottom (newest).
-    // Let's group them properly while keeping it simple.
-    
+    // FIX: use actual safe area top + bottom insets
+    final topPad    = MediaQuery.paddingOf(context).top;
+    final bottomPad = MediaQuery.viewInsetsOf(context).bottom; // keyboard height
+    final navPad    = MediaQuery.paddingOf(context).bottom;    // nav bar
+
+    final headerH  = 66.0;
+    final inputH   = 54.0;
+    final headerTop = topPad + 8;
+
+    // FIX: guard empty username to avoid RangeError
+    final otherUser = widget.conversation.getOtherParticipant(widget.myUserId);
+    final avatarLetter =
+        otherUser.username.isNotEmpty ? otherUser.username[0].toUpperCase() : '?';
+
     return Scaffold(
+      // resizeToAvoidBottomInset false — we handle keyboard insets manually
+      resizeToAvoidBottomInset: false,
       backgroundColor: widget.dark ? GlassTokens.bgDark : GlassTokens.bgLight,
       body: Stack(children: [
         GlassBackdrop(dark: widget.dark),
 
-        // Messages
-        Positioned.fill(
-          top: 76, bottom: 76,
-          child: _isLoading 
-            ? const Center(child: CircularProgressIndicator())
-            : ListView.builder(
-            controller: _scrollController,
-            reverse: true, // newest at bottom
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            itemCount: _messages.length + (_typingUserId != null ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (_typingUserId != null) {
-                if (index == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: _BubbleTyping(dark: widget.dark, sub: sub),
-                  );
-                }
-                index--;
-              }
-              
-              final msg = _messages[index];
-              final isMe = msg.senderId == widget.myUserId;
-              
-              // check if last in run (meaning it's the newest message of the consecutive block)
-              // Since it's reversed, index-1 is newer.
-              bool last = true;
-              if (index > 0) {
-                final newerMsg = _messages[index - 1];
-                if (newerMsg.senderId == msg.senderId) last = false;
-              }
+        // ── Messages list ──────────────────────────────────────
+        Positioned(
+          top: headerTop + headerH,
+          bottom: inputH + 16 + bottomPad + navPad,
+          left: 0, right: 0,
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _hasError
+                  ? Center(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text('Could not load messages',
+                            style: manrope(size: 14, color: sub)),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: _loadMessages,
+                          child: const Text('Retry'),
+                        ),
+                      ]),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      reverse: true,
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                      itemCount:
+                          _messages.length + (_typingUserId != null ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (_typingUserId != null) {
+                          if (index == 0) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: _BubbleTyping(dark: widget.dark, sub: sub),
+                            );
+                          }
+                          index--;
+                        }
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: GestureDetector(
-                  onLongPress: isMe ? () => _deleteMessage(msg.id) : null,
-                  child: _Bubble(m: msg, isMe: isMe, dark: widget.dark, last: last),
-                ),
-              );
-            },
-          ),
+                        final msg = _messages[index];
+                        final isMe = msg.senderId == widget.myUserId;
+                        final isPending = _pendingIds.contains(msg.id);
+
+                        bool last = true;
+                        if (index > 0) {
+                          final newer = _messages[index - 1];
+                          if (newer.senderId == msg.senderId) last = false;
+                        }
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 3),
+                          child: GestureDetector(
+                            onLongPress: isMe
+                                ? () => _deleteMessage(msg.id)
+                                : null,
+                            child: _Bubble(
+                              m: msg,
+                              isMe: isMe,
+                              dark: widget.dark,
+                              last: last,
+                              isPending: isPending,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
         ),
 
-        // Header
+        // ── Header ────────────────────────────────────────────
         Positioned(
-          top: 10, left: 12, right: 12,
+          top: headerTop, left: 12, right: 12,
           child: GlassHeader(
-            dark: widget.dark, height: 56,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            dark: widget.dark,
+            height: headerH,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Row(children: [
               IconButton(
                 icon: Icon(Icons.arrow_back_ios_new_rounded, color: fg, size: 20),
                 onPressed: () => Navigator.of(context).pop(),
                 splashRadius: 20,
               ),
-              Stack(clipBehavior: Clip.none, children: [
-                Container(
-                  width: 38, height: 38,
-                  decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(widget.dark, 0)),
-                  alignment: Alignment.center,
-                  child: Text(otherUser.username[0].toUpperCase(),
-                    style: manrope(size: 15, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3)),
-                ),
-                // Positioned(right: -1, bottom: -1, child: Container(
-                //   width: 11, height: 11,
-                //   decoration: BoxDecoration(
-                //     shape: BoxShape.circle,
-                //     color: widget.dark ? Colors.white : const Color(0xFF0A0A0A),
-                //     border: Border.all(color: widget.dark ? const Color(0xFF0C0C0E) : const Color(0xFFFAFAFA), width: 2),
-                //   ),
-                // )),
-              ]),
+              Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: monoAvatar(widget.dark, 0)),
+                alignment: Alignment.center,
+                child: Text(avatarLetter,
+                    style: manrope(
+                        size: 15,
+                        weight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: -0.3)),
+              ),
               const SizedBox(width: 10),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                Text(otherUser.username, style: manrope(size: 15, weight: FontWeight.w800, color: fg, letterSpacing: -0.225)),
-                const SizedBox(height: 2),
-                Text('Active now', style: manrope(size: 11, weight: FontWeight.w500, color: sub, letterSpacing: -0.05)),
-              ])),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(otherUser.username,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: manrope(
+                              size: 15,
+                              weight: FontWeight.w800,
+                              color: fg,
+                              letterSpacing: -0.225)),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Text(
+                            ChatService().isConnected ? 'Active now' : 'Connecting…',
+                            style: manrope(size: 11, weight: FontWeight.w500, color: sub),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 3,
+                            height: 3,
+                            decoration: BoxDecoration(shape: BoxShape.circle, color: sub),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(Icons.lock_outline_rounded, size: 10, color: sub),
+                          const SizedBox(width: 2),
+                          Text(
+                            'E2EE',
+                            style: manrope(size: 9.5, weight: FontWeight.w700, color: sub, letterSpacing: 0.5),
+                          ),
+                        ],
+                      ),
+                    ]),
+              ),
               GlassCircleButton(dark: widget.dark, icon: Icons.call_outlined, iconSize: 18),
               const SizedBox(width: 6),
               GlassCircleButton(dark: widget.dark, icon: Icons.videocam_outlined, iconSize: 20),
               const SizedBox(width: 6),
-              GlassCircleButton(dark: widget.dark, icon: Icons.info_outline_rounded, iconSize: 18),
-              const SizedBox(width: 6),
               GestureDetector(
                 onTap: _deleteConversation,
-                child: GlassCircleButton(dark: widget.dark, icon: Icons.delete_outline_rounded, iconSize: 18, fg: Colors.red),
+                child: GlassCircleButton(
+                    dark: widget.dark,
+                    icon: Icons.delete_outline_rounded,
+                    iconSize: 18,
+                    fg: Colors.red),
               ),
             ]),
           ),
         ),
 
-        // Input bar
+        // ── Input bar ─────────────────────────────────────────
         Positioned(
-          bottom: 10, left: 12, right: 12,
+          // FIX: sits above keyboard + nav bar
+          bottom: bottomPad + navPad + 8,
+          left: 12, right: 12,
           child: SizedBox(
-            height: 54,
+            height: inputH,
             child: GlassSurface(
               dark: widget.dark,
               radius: 999,
               padding: const EdgeInsets.symmetric(horizontal: 6),
               blurSigma: 28,
               shadow: BoxShadow(
-                color: widget.dark ? Colors.black.withOpacity(0.6) : const Color(0xFF14161E).withOpacity(0.20),
-                blurRadius: 30, offset: const Offset(0, -10), spreadRadius: -16,
+                color: widget.dark
+                    ? Colors.black.withOpacity(0.6)
+                    : const Color(0xFF14161E).withOpacity(0.20),
+                blurRadius: 30,
+                offset: const Offset(0, -10),
+                spreadRadius: -16,
               ),
               child: Row(children: [
                 const SizedBox(width: 2),
                 GlassCircleButton(
-                  dark: widget.dark, icon: Icons.add_rounded, size: 38, iconSize: 22,
-                  bg: widget.dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
+                  dark: widget.dark,
+                  icon: Icons.add_rounded,
+                  size: 38, iconSize: 22,
+                  bg: widget.dark
+                      ? Colors.white.withOpacity(0.12)
+                      : Colors.black.withOpacity(0.08),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: TextField(
-                  controller: _textController,
-                  onChanged: _onTyping,
-                  onSubmitted: (_) => _sendMessage(),
-                  style: manrope(size: 14, weight: FontWeight.w500, color: fg, letterSpacing: -0.07),
-                  decoration: InputDecoration(
-                    hintText: 'Message…',
-                    hintStyle: manrope(size: 14, weight: FontWeight.w500, color: sub, letterSpacing: -0.07),
-                    border: InputBorder.none,
+                Expanded(
+                  child: TextField(
+                    controller: _textController,
+                    onChanged: _onTyping,
+                    onSubmitted: (_) => _sendMessage(),
+                    textInputAction: TextInputAction.send,
+                    style: manrope(size: 14, weight: FontWeight.w500, color: fg, letterSpacing: -0.07),
+                    decoration: InputDecoration(
+                      hintText: 'Message…',
+                      hintStyle: manrope(size: 14, weight: FontWeight.w500, color: sub, letterSpacing: -0.07),
+                      border: InputBorder.none,
+                    ),
                   ),
-                )),
+                ),
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: _sendMessage,
                   child: GlassCircleButton(
-                    dark: widget.dark, icon: Icons.send_rounded, size: 38, iconSize: 18,
+                    dark: widget.dark,
+                    icon: Icons.send_rounded,
+                    size: 38, iconSize: 18,
                     bg: widget.dark ? Colors.white : const Color(0xFF0A0A0A),
                     fg: widget.dark ? const Color(0xFF0A0A0A) : Colors.white,
                   ),
@@ -330,12 +437,21 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+// ── Bubble ───────────────────────────────────────────────────
+
 class _Bubble extends StatelessWidget {
   final ChatMessage m;
   final bool isMe;
   final bool dark;
   final bool last;
-  const _Bubble({required this.m, required this.isMe, required this.dark, required this.last});
+  final bool isPending; // optimistic, not yet confirmed by server
+  const _Bubble({
+    required this.m,
+    required this.isMe,
+    required this.dark,
+    required this.last,
+    this.isPending = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -343,42 +459,68 @@ class _Bubble extends StatelessWidget {
     final sub = GlassTokens.sub(dark);
 
     final radius = isMe
-      ? const BorderRadius.only(
-          topLeft: Radius.circular(20), topRight: Radius.circular(20),
-          bottomLeft: Radius.circular(20), bottomRight: Radius.circular(6))
-      : const BorderRadius.only(
-          topLeft: Radius.circular(20), topRight: Radius.circular(20),
-          bottomLeft: Radius.circular(6), bottomRight: Radius.circular(20));
+        ? const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(6))
+        : const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(6),
+            bottomRight: Radius.circular(20));
 
-    final timeStr = '${m.createdAt.hour.toString().padLeft(2, '0')}:${m.createdAt.minute.toString().padLeft(2, '0')}';
-    final read = m.readBy.length > 1; // Simplification
+    final timeStr =
+        '${m.createdAt.hour.toString().padLeft(2, '0')}:${m.createdAt.minute.toString().padLeft(2, '0')}';
+    final read = m.readBy.length > 1;
 
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-        child: Column(
-          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _bubbleBox(m, dark, radius),
-            if (last) Padding(
-              padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(timeStr, style: manrope(size: 10.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.05)),
-                if (isMe) ...[
-                  const SizedBox(width: 5),
-                  Icon(Icons.done_all_rounded, size: 13, color: read ? fg : sub),
-                ],
-              ]),
-            ),
-          ],
+    return Opacity(
+      opacity: isPending ? 0.65 : 1.0, // dim pending messages slightly
+      child: Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.78),
+          child: Column(
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _bubbleBox(dark, radius),
+              if (last)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(timeStr,
+                        style: manrope(
+                            size: 10.5,
+                            weight: FontWeight.w500,
+                            color: sub,
+                            letterSpacing: -0.05)),
+                    if (m.encryptedAesKeys.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Icon(Icons.lock_rounded, size: 9, color: sub.withOpacity(0.6)),
+                    ],
+                    if (isMe) ...[
+                      const SizedBox(width: 5),
+                      Icon(
+                        isPending
+                            ? Icons.access_time_rounded
+                            : Icons.done_all_rounded,
+                        size: 13,
+                        color: (read && !isPending) ? fg : sub,
+                      ),
+                    ],
+                  ]),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _bubbleBox(ChatMessage m, bool dark, BorderRadius radius) {
+  Widget _bubbleBox(bool dark, BorderRadius radius) {
     if (isMe) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -387,17 +529,22 @@ class _Bubble extends StatelessWidget {
           borderRadius: radius,
           boxShadow: [
             BoxShadow(
-              color: dark ? Colors.white.withOpacity(0.20) : const Color(0xFF14161E).withOpacity(0.35),
-              blurRadius: 18, offset: const Offset(0, 8), spreadRadius: -10,
+              color: dark
+                  ? Colors.white.withOpacity(0.20)
+                  : const Color(0xFF14161E).withOpacity(0.35),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+              spreadRadius: -10,
             ),
           ],
         ),
         child: Text(m.text,
-          style: manrope(
-            size: 14.5, weight: FontWeight.w500,
-            color: dark ? const Color(0xFF0A0A0A) : Colors.white,
-            letterSpacing: -0.07, height: 1.4,
-          )),
+            style: manrope(
+                size: 14.5,
+                weight: FontWeight.w500,
+                color: dark ? const Color(0xFF0A0A0A) : Colors.white,
+                letterSpacing: -0.07,
+                height: 1.4)),
       );
     }
     return ClipRRect(
@@ -407,23 +554,39 @@ class _Bubble extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.78),
-            border: Border.all(color: dark ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95)),
+            color: dark
+                ? Colors.white.withOpacity(0.08)
+                : Colors.white.withOpacity(0.78),
+            border: Border.all(
+                color: dark
+                    ? Colors.white.withOpacity(0.10)
+                    : Colors.white.withOpacity(0.95)),
             borderRadius: radius,
             boxShadow: [
               BoxShadow(
-                color: dark ? Colors.black.withOpacity(0.6) : const Color(0xFF14161E).withOpacity(0.18),
-                blurRadius: 18, offset: const Offset(0, 8), spreadRadius: -12,
+                color: dark
+                    ? Colors.black.withOpacity(0.6)
+                    : const Color(0xFF14161E).withOpacity(0.18),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+                spreadRadius: -12,
               ),
             ],
           ),
           child: Text(m.text,
-            style: manrope(size: 14.5, weight: FontWeight.w500, color: GlassTokens.fg(dark), letterSpacing: -0.07, height: 1.4)),
+              style: manrope(
+                  size: 14.5,
+                  weight: FontWeight.w500,
+                  color: GlassTokens.fg(dark),
+                  letterSpacing: -0.07,
+                  height: 1.4)),
         ),
       ),
     );
   }
 }
+
+// ── Typing bubble ────────────────────────────────────────────
 
 class _BubbleTyping extends StatelessWidget {
   final bool dark;
@@ -432,24 +595,29 @@ class _BubbleTyping extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const br = BorderRadius.only(
+      topLeft: Radius.circular(18),
+      topRight: Radius.circular(18),
+      bottomLeft: Radius.circular(4),
+      bottomRight: Radius.circular(18),
+    );
     return Align(
       alignment: Alignment.centerLeft,
       child: ClipRRect(
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(18), topRight: Radius.circular(18),
-          bottomLeft: Radius.circular(4), bottomRight: Radius.circular(18),
-        ),
+        borderRadius: br,
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.75),
-              border: Border.all(color: dark ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95)),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(18), topRight: Radius.circular(18),
-                bottomLeft: Radius.circular(4), bottomRight: Radius.circular(18),
-              ),
+              color: dark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.white.withOpacity(0.75),
+              border: Border.all(
+                  color: dark
+                      ? Colors.white.withOpacity(0.10)
+                      : Colors.white.withOpacity(0.95)),
+              borderRadius: br,
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               _TypingDot(delay: 0),
@@ -466,33 +634,38 @@ class _BubbleTyping extends StatelessWidget {
 }
 
 class _TypingDot extends StatefulWidget {
-  final int delay; // ms
+  final int delay;
   const _TypingDot({required this.delay});
   @override
   State<_TypingDot> createState() => _TypingDotState();
 }
 
-class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMixin {
+class _TypingDotState extends State<_TypingDot>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _c;
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
+    _c = AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 1200))
+        ..repeat();
   }
   @override
   void dispose() { _c.dispose(); super.dispose(); }
+
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return AnimatedBuilder(
       animation: _c,
-      builder: (context, _) {
+      builder: (_, __) {
         final t = ((_c.value * 1200) - widget.delay) % 1200 / 1200;
         final v = (t >= 0 && t <= 0.8)
             ? (t < 0.4 ? t / 0.4 : (0.8 - t) / 0.4)
             : 0.0;
-        final scale = 0.7 + 0.3 * v.clamp(0, 1);
-        final opacity = 0.4 + 0.6 * v.clamp(0, 1);
+        final scale = 0.7 + 0.3 * v.clamp(0.0, 1.0);
+        final opacity = 0.4 + 0.6 * v.clamp(0.0, 1.0);
         return Transform.scale(
           scale: scale,
           child: Container(

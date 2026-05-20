@@ -15,7 +15,7 @@ import '../services/chat_service.dart';
 import 'glass_common.dart';
 
 // ── Quick emoji choices ───────────────────────────────────────
-const _kQuickEmojis = ['❤️', '😂', '😮', '😢', '👍', '🔥'];
+const _kQuickEmojis = ['🤍', '😂', '🥺', '✨', '🔥', '👍'];
 
 class ChatScreen extends StatefulWidget {
   final bool dark;
@@ -710,51 +710,71 @@ class _ReplyPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sub = GlassTokens.sub(dark);
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          height: height,
+    final accent = dark ? Colors.white.withOpacity(0.8) : Colors.black87;
+    return Container(
+      height: height,
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
+      decoration: BoxDecoration(
+        color: dark
+            ? Colors.white.withOpacity(0.08)
+            : Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withOpacity(0.12)
+              : Colors.black.withOpacity(0.05),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Row(children: [
+        Container(
+          width: 4, height: 24,
           decoration: BoxDecoration(
-            color: dark
-                ? Colors.white.withOpacity(0.07)
-                : Colors.white.withOpacity(0.72),
-            border: Border(
-              top: BorderSide(
-                color: dark
-                    ? Colors.white.withOpacity(0.10)
-                    : Colors.black.withOpacity(0.07),
-              ),
-            ),
+            color: accent,
+            borderRadius: BorderRadius.circular(4),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Row(children: [
-            Container(
-              width: 3, height: 28,
-              decoration: BoxDecoration(
-                color: dark ? Colors.white.withOpacity(0.6) : Colors.black.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(2),
+        ),
+        const SizedBox(width: 12),
+        Icon(Icons.reply_rounded, size: 16, color: accent),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Replying to',
+                style: manrope(size: 10, weight: FontWeight.w700, color: accent),
               ),
-            ),
-            const SizedBox(width: 10),
-            Icon(Icons.reply_rounded, size: 14, color: sub),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
+              const SizedBox(height: 2),
+              Text(
                 text,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: manrope(size: 12.5, weight: FontWeight.w500, color: sub),
               ),
-            ),
-            GestureDetector(
-              onTap: onCancel,
-              child: Icon(Icons.close_rounded, size: 18, color: sub),
-            ),
-          ]),
+            ],
+          ),
         ),
-      ),
+        GestureDetector(
+          onTap: onCancel,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+            ),
+            child: Icon(Icons.close_rounded, size: 14, color: sub),
+          ),
+        ),
+      ]),
     );
   }
 }
@@ -834,33 +854,54 @@ class _Bubble extends StatelessWidget {
                   _bubbleBox(dark, radius, sub, fg),
                   if (visibleReactions.isNotEmpty)
                     Positioned(
-                      bottom: -8,
-                      right: isMe ? null : 10,
-                      left: isMe ? 10 : null,
+                      bottom: -10,
+                      right: isMe ? 4 : null,
+                      left: isMe ? null : 4,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: visibleReactions.map((entry) {
                           final emoji = entry.key;
+                          final count = entry.value.length;
+                          final hasMyReaction = entry.value.contains(myUserId);
                           return GestureDetector(
                             onTap: () => onReact(emoji),
                             behavior: HitTestBehavior.opaque,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 2.0),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: dark 
+                                    ? (hasMyReaction ? Colors.white.withOpacity(0.2) : Colors.white.withOpacity(0.1)) 
+                                    : (hasMyReaction ? Colors.black.withOpacity(0.08) : Colors.white),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: dark 
+                                      ? Colors.white.withOpacity(hasMyReaction ? 0.3 : 0.1) 
+                                      : Colors.black.withOpacity(hasMyReaction ? 0.15 : 0.05),
+                                ),
+                                boxShadow: dark ? [] : [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.04),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  )
+                                ],
+                              ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
                                     emoji,
-                                    style: const TextStyle(fontSize: 16),
+                                    style: const TextStyle(fontSize: 13),
                                   ),
-                                  if (entry.value.length > 1) ...[
-                                    const SizedBox(width: 2),
+                                  if (count > 1) ...[
+                                    const SizedBox(width: 4),
                                     Text(
-                                      '${entry.value.length}',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: dark ? Colors.white70 : Colors.black87,
+                                      '$count',
+                                      style: manrope(
+                                        size: 11,
+                                        weight: FontWeight.w700,
+                                        color: dark ? Colors.white.withOpacity(0.9) : Colors.black87,
                                       ),
                                     ),
                                   ],
@@ -921,11 +962,11 @@ class _Bubble extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: dark
-                  ? Colors.white.withOpacity(0.20)
-                  : const Color(0xFF14161E).withOpacity(0.35),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-              spreadRadius: -10,
+                  ? Colors.white.withOpacity(0.15)
+                  : const Color(0xFF14161E).withOpacity(0.25),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+              spreadRadius: -8,
             ),
           ],
         ),
@@ -938,41 +979,35 @@ class _Bubble extends StatelessWidget {
                 height: 1.4)),
       );
     }
-    return ClipRRect(
-      borderRadius: radius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: dark
+            ? const Color(0xFF242424).withOpacity(0.85)
+            : Colors.white.withOpacity(0.95),
+        border: Border.all(
             color: dark
-                ? Colors.white.withOpacity(0.08)
-                : Colors.white.withOpacity(0.78),
-            border: Border.all(
-                color: dark
-                    ? Colors.white.withOpacity(0.10)
-                    : Colors.white.withOpacity(0.95)),
-            borderRadius: radius,
-            boxShadow: [
-              BoxShadow(
-                color: dark
-                    ? Colors.black.withOpacity(0.6)
-                    : const Color(0xFF14161E).withOpacity(0.18),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-                spreadRadius: -12,
-              ),
-            ],
+                ? Colors.white.withOpacity(0.05)
+                : Colors.black.withOpacity(0.04)),
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: dark
+                ? Colors.black.withOpacity(0.4)
+                : const Color(0xFF14161E).withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: -4,
           ),
-          child: Text(m.text,
-              style: manrope(
-                  size: 14.5,
-                  weight: FontWeight.w500,
-                  color: GlassTokens.fg(dark),
-                  letterSpacing: -0.07,
-                  height: 1.4)),
-        ),
+        ],
       ),
+      child: Text(m.text,
+          style: manrope(
+              size: 14.5,
+              weight: FontWeight.w500,
+              color: GlassTokens.fg(dark),
+              letterSpacing: -0.07,
+              height: 1.4)),
     );
   }
 }
@@ -993,45 +1028,39 @@ class _ReplyQuote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sub = GlassTokens.sub(dark);
+    final textColor = isMe 
+        ? (dark ? Colors.black87 : Colors.white70) 
+        : (dark ? Colors.white70 : Colors.black87);
+    final bgColor = isMe
+        ? (dark ? Colors.black.withOpacity(0.08) : Colors.white.withOpacity(0.15))
+        : (dark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04));
+    
     return Container(
-      margin: const EdgeInsets.only(bottom: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: dark
-            ? Colors.white.withOpacity(0.07)
-            : Colors.black.withOpacity(0.06),
-        borderRadius: BorderRadius.only(
-          topLeft: radius.topLeft,
-          topRight: radius.topRight,
-          bottomLeft: const Radius.circular(4),
-          bottomRight: const Radius.circular(4),
-        ),
-        border: Border(
-          left: BorderSide(
-            width: 3,
-            color: dark
-                ? Colors.white.withOpacity(0.40)
-                : Colors.black.withOpacity(0.30),
-          ),
-        ),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(children: [
-        Icon(Icons.reply_rounded, size: 12, color: sub),
-        const SizedBox(width: 5),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: manrope(
-                size: 12,
-                weight: FontWeight.w500,
-                color: sub,
-                height: 1.3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.reply_rounded, size: 14, color: textColor.withOpacity(0.7)),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: manrope(
+                  size: 12.5,
+                  weight: FontWeight.w500,
+                  color: textColor,
+                  height: 1.3),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -1091,31 +1120,35 @@ class _BubbleTyping extends StatelessWidget {
     );
     return Align(
       alignment: Alignment.centerLeft,
-      child: ClipRRect(
-        borderRadius: br,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: dark
+              ? const Color(0xFF242424).withOpacity(0.85)
+              : Colors.white.withOpacity(0.95),
+          border: Border.all(
               color: dark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.white.withOpacity(0.75),
-              border: Border.all(
-                  color: dark
-                      ? Colors.white.withOpacity(0.10)
-                      : Colors.white.withOpacity(0.95)),
-              borderRadius: br,
+                  ? Colors.white.withOpacity(0.05)
+                  : Colors.black.withOpacity(0.04)),
+          borderRadius: br,
+          boxShadow: [
+            BoxShadow(
+              color: dark
+                  ? Colors.black.withOpacity(0.4)
+                  : const Color(0xFF14161E).withOpacity(0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+              spreadRadius: -4,
             ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              _TypingDot(delay: 0),
-              const SizedBox(width: 5),
-              _TypingDot(delay: 150),
-              const SizedBox(width: 5),
-              _TypingDot(delay: 300),
-            ]),
-          ),
+          ],
         ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          _TypingDot(delay: 0),
+          const SizedBox(width: 5),
+          _TypingDot(delay: 150),
+          const SizedBox(width: 5),
+          _TypingDot(delay: 300),
+        ]),
       ),
     );
   }

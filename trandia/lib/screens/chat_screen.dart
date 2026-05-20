@@ -511,16 +511,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 3),
-                          child: GestureDetector(
-                            onLongPress: () => _showMessageOptions(msg),
-                            child: _Bubble(
-                              m: msg,
-                              isMe: isMe,
-                              dark: widget.dark,
-                              last: last,
-                              isPending: isPending,
-                              myUserId: widget.myUserId,
-                              onReact: (emoji) => _onReact(msg, emoji),
+                          child: SwipeToReply(
+                            dark: widget.dark,
+                            onReply: () {
+                              setState(() => _replyingTo = msg);
+                            },
+                            child: GestureDetector(
+                              onLongPress: () => _showMessageOptions(msg),
+                              child: _Bubble(
+                                m: msg,
+                                isMe: isMe,
+                                dark: widget.dark,
+                                last: last,
+                                isPending: isPending,
+                                myUserId: widget.myUserId,
+                                onReact: (emoji) => _onReact(msg, emoji),
+                              ),
                             ),
                           ),
                         );
@@ -821,8 +827,55 @@ class _Bubble extends StatelessWidget {
                   radius: radius,
                 ),
 
-              // ── Main bubble ────────────────────────────────
-              _bubbleBox(dark, radius, sub, fg),
+              // ── Main bubble with floating reactions ────────
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  _bubbleBox(dark, radius, sub, fg),
+                  if (visibleReactions.isNotEmpty)
+                    Positioned(
+                      bottom: -8,
+                      right: isMe ? null : 10,
+                      left: isMe ? 10 : null,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: visibleReactions.map((entry) {
+                          final emoji = entry.key;
+                          return GestureDetector(
+                            onTap: () => onReact(emoji),
+                            behavior: HitTestBehavior.opaque,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    emoji,
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                  if (entry.value.length > 1) ...[
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '${entry.value.length}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: dark ? Colors.white70 : Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                ],
+              ),
+
+              if (visibleReactions.isNotEmpty)
+                const SizedBox(height: 6),
 
               // ── Timestamp + status ─────────────────────────
               if (last)
@@ -850,69 +903,6 @@ class _Bubble extends StatelessWidget {
                       ),
                     ],
                   ]),
-                ),
-
-              // ── Reaction chips ────────────────────────────
-              if (visibleReactions.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6, left: 2, right: 2),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    alignment:
-                        isMe ? WrapAlignment.end : WrapAlignment.start,
-                    children: visibleReactions.map((entry) {
-                      final emoji = entry.key;
-                      final users = entry.value;
-                      final iMine = users.contains(myUserId);
-                      return GestureDetector(
-                        onTap: () => onReact(emoji),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 9, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: iMine
-                                ? (dark
-                                    ? Colors.white.withOpacity(0.22)
-                                    : Colors.black.withOpacity(0.13))
-                                : (dark
-                                    ? Colors.white.withOpacity(0.08)
-                                    : Colors.white.withOpacity(0.75)),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: iMine
-                                  ? (dark
-                                      ? Colors.white.withOpacity(0.35)
-                                      : Colors.black.withOpacity(0.25))
-                                  : (dark
-                                      ? Colors.white.withOpacity(0.10)
-                                      : Colors.black.withOpacity(0.08)),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(emoji,
-                                  style: const TextStyle(fontSize: 13)),
-                              if (users.length > 1) ...[
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${users.length}',
-                                  style: manrope(
-                                      size: 11,
-                                      weight: FontWeight.w700,
-                                      color: dark
-                                          ? Colors.white.withOpacity(0.75)
-                                          : Colors.black.withOpacity(0.60)),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
                 ),
             ],
           ),
@@ -1175,6 +1165,135 @@ class _TypingDotState extends State<_TypingDot>
           ),
         );
       },
+    );
+  }
+}
+
+// ── Swipe to Reply Widget ────────────────────────────────────
+
+class SwipeToReply extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onReply;
+  final bool enabled;
+  final bool dark;
+
+  const SwipeToReply({
+    super.key,
+    required this.child,
+    required this.onReply,
+    required this.dark,
+    this.enabled = true,
+  });
+
+  @override
+  State<SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<SwipeToReply>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  double _dragOffset = 0.0;
+  bool _triggered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    if (!widget.enabled) return;
+    setState(() {
+      _dragOffset += details.delta.dx;
+      if (_dragOffset < 0.0) _dragOffset = 0.0;
+      if (_dragOffset > 70.0) {
+        _dragOffset = 70.0;
+        if (!_triggered) {
+          _triggered = true;
+          HapticFeedback.lightImpact();
+        }
+      } else {
+        _triggered = false;
+      }
+    });
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    if (!widget.enabled) return;
+    if (_dragOffset >= 50.0) {
+      widget.onReply();
+    }
+    _controller.value = _dragOffset / 70.0;
+    _controller.animateTo(0.0, curve: Curves.easeOut).then((_) {
+      if (mounted) {
+        setState(() {
+          _dragOffset = 0.0;
+          _triggered = false;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+
+    return GestureDetector(
+      onHorizontalDragUpdate: _onHorizontalDragUpdate,
+      onHorizontalDragEnd: _onHorizontalDragEnd,
+      behavior: HitTestBehavior.translucent,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final offset = _controller.isAnimating
+              ? _controller.value * 70.0
+              : _dragOffset;
+          final progress = (offset / 50.0).clamp(0.0, 1.0);
+
+          return Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.centerLeft,
+            children: [
+              Positioned(
+                left: -35 + (progress * 45),
+                child: Opacity(
+                  opacity: progress,
+                  child: Transform.scale(
+                    scale: 0.6 + (0.4 * progress),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: widget.dark
+                            ? Colors.white.withOpacity(0.12)
+                            : Colors.black.withOpacity(0.08),
+                      ),
+                      child: Icon(
+                        Icons.reply_rounded,
+                        color: widget.dark ? Colors.white : Colors.black87,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Transform.translate(
+                offset: Offset(offset, 0),
+                child: widget.child,
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

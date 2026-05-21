@@ -210,6 +210,14 @@ class FcmService {
 
       if (msgType == 'welcome') return; // shown locally — suppress duplicate
 
+      // Follow notification — show with people icon
+      if (msgType == 'follow') {
+        final title = msg.data['title'] as String? ?? msg.notification?.title ?? 'New follower';
+        final body  = msg.data['body']  as String? ?? msg.notification?.body  ?? 'started following you';
+        await show(title: title, body: body);
+        return;
+      }
+
       final title = msg.notification?.title
           ?? (msg.data['title'] as String?)
           ?? 'Trandia';

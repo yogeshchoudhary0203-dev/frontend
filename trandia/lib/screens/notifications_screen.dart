@@ -1,47 +1,88 @@
 // notifications_screen.dart
 // Matte glass notifications with cascade-stack scroll. Monochrome, light + dark.
+// NOW BACKED BY REAL SERVER DATA — no fake notifications.
 //
 // Usage:
 //   Scaffold(body: NotificationsScreen(dark: true))
 //
 // Requires glass_common.dart.
 
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../services/api_service.dart';
 import 'glass_common.dart';
 
 enum NfKind { like, comment, follow, mention, live, msg, system }
 
 class NfItem {
+  final String id;
   final NfKind kind;
   final String name;
   final String text;
   final String time;
+  final String fromUserId;
   final bool thumb;
   final bool unread;
-  const NfItem({
-    required this.kind, required this.name, required this.text, required this.time,
-    this.thumb = false, this.unread = false,
-  });
-}
 
-const _items = <NfItem>[
-  NfItem(kind: NfKind.live,    name: 'mikhail',        text: 'is live now',                            time: 'just now', unread: true),
-  NfItem(kind: NfKind.like,    name: 'sarah.d',        text: 'liked your post',                        time: '2m',  thumb: true, unread: true),
-  NfItem(kind: NfKind.follow,  name: 'aanya_',         text: 'started following you',                  time: '14m', unread: true),
-  NfItem(kind: NfKind.mention, name: 'devon.b',        text: 'mentioned you in a comment',             time: '1h',  thumb: true, unread: true),
-  NfItem(kind: NfKind.comment, name: 'kiraa',          text: 'commented: "this is unreal 🤍"',          time: '1h',  thumb: true),
-  NfItem(kind: NfKind.like,    name: 'ren.x',          text: 'and 3 others liked your photo',          time: '2h',  thumb: true),
-  NfItem(kind: NfKind.msg,     name: 'noor.j',         text: 'sent you a message',                     time: '3h'),
-  NfItem(kind: NfKind.follow,  name: 'studio.atelier', text: 'started following you',                  time: '5h'),
-  NfItem(kind: NfKind.like,    name: 'mikhail',        text: 'and 14 others liked your photo',         time: '8h',  thumb: true),
-  NfItem(kind: NfKind.mention, name: 'sarah.d',        text: 'tagged you in a post',                   time: '1d',  thumb: true),
-  NfItem(kind: NfKind.system,  name: 'Security',       text: 'New login from Chrome on macOS',         time: '1d'),
-  NfItem(kind: NfKind.comment, name: 'aanya_',         text: 'commented: "send the moodboard please"', time: '2d',  thumb: true),
-  NfItem(kind: NfKind.follow,  name: 'noor.j',         text: 'started following you',                  time: '2d'),
-  NfItem(kind: NfKind.like,    name: 'devon.b',        text: 'liked your post',                        time: '3d',  thumb: true),
-  NfItem(kind: NfKind.system,  name: 'Trandia',        text: 'Your weekly summary is ready',           time: '4d'),
-];
+  const NfItem({
+    this.id = '',
+    required this.kind,
+    required this.name,
+    required this.text,
+    required this.time,
+    this.fromUserId = '',
+    this.thumb = false,
+    this.unread = false,
+  });
+
+  /// Build an NfItem from the real API JSON.
+  factory NfItem.fromJson(Map<String, dynamic> json) {
+    return NfItem(
+      id: json['id'] ?? '',
+      kind: _parseKind(json['type'] ?? 'follow'),
+      name: json['from_username'] ?? json['from_name'] ?? '',
+      text: json['text'] ?? '',
+      time: _timeAgo(json['created_at']),
+      fromUserId: json['from_user_id'] ?? '',
+      unread: !(json['read'] ?? false),
+    );
+  }
+
+  static NfKind _parseKind(String type) {
+    switch (type) {
+      case 'like':    return NfKind.like;
+      case 'comment': return NfKind.comment;
+      case 'follow':  return NfKind.follow;
+      case 'mention': return NfKind.mention;
+      case 'live':    return NfKind.live;
+      case 'message': return NfKind.msg;
+      case 'system':  return NfKind.system;
+      default:        return NfKind.follow;
+    }
+  }
+
+  static String _timeAgo(dynamic createdAt) {
+    if (createdAt == null) return '';
+    try {
+      final DateTime dt;
+      if (createdAt is String) {
+        dt = DateTime.parse(createdAt).toLocal();
+      } else {
+        return '';
+      }
+      final diff = DateTime.now().difference(dt);
+      if (diff.inSeconds < 60) return 'just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+      if (diff.inHours < 24) return '${diff.inHours}h';
+      if (diff.inDays < 7) return '${diff.inDays}d';
+      return '${(diff.inDays / 7).floor()}w';
+    } catch (_) {
+      return '';
+    }
+  }
+}
 
 IconData _kindIcon(NfKind k) {
   switch (k) {
@@ -73,19 +114,89 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   final _scroll = ScrollController();
   String _filter = 'All';
 
+  List<NfItem> _items = [];
+  bool _loading = true;
+  bool _error = false;
+  StreamSubscription? _fcmSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchNotifications();
+    _listenForRealtimeNotifications();
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _fcmSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchNotifications() async {
+    setState(() { _loading = true; _error = false; });
+    try {
+      final data = await ApiService.getList(
+        '/notifications?limit=50',
+        requiresAuth: true,
+      );
+      final items = data
+          .map((d) => NfItem.fromJson(d as Map<String, dynamic>))
+          .toList();
+      if (mounted) {
+        setState(() { _items = items; _loading = false; });
+      }
+    } catch (e) {
+      debugPrint('[Notifications] fetch error: $e');
+      if (mounted) {
+        setState(() { _loading = false; _error = true; });
+      }
+    }
+  }
+
+  /// Listen for FCM foreground messages and prepend follow notifications in real-time.
+  void _listenForRealtimeNotifications() {
+    _fcmSub = FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
+      final msgType = msg.data['type'] as String?;
+      if (msgType == 'follow') {
+        final newItem = NfItem(
+          kind: NfKind.follow,
+          name: msg.data['username'] ?? msg.data['title'] ?? '',
+          text: msg.data['body'] ?? 'started following you',
+          time: 'just now',
+          unread: true,
+        );
+        if (mounted) {
+          setState(() { _items.insert(0, newItem); });
+        }
+      }
+    });
+  }
+
   List<NfItem> get _filtered {
     switch (_filter) {
-      case 'Mentions': return _items.where((n) => n.kind == NfKind.mention || n.kind == NfKind.comment).toList();
       case 'Follows':  return _items.where((n) => n.kind == NfKind.follow).toList();
-      case 'System':   return _items.where((n) => n.kind == NfKind.system).toList();
       default:         return _items.toList();
     }
   }
 
   int get _unread => _items.where((n) => n.unread).length;
 
-  @override
-  void dispose() { _scroll.dispose(); super.dispose(); }
+  Future<void> _markAllRead() async {
+    try {
+      await ApiService.put('/notifications/read-all', {}, requiresAuth: true);
+      if (mounted) {
+        setState(() {
+          _items = _items.map((n) => NfItem(
+            id: n.id, kind: n.kind, name: n.name, text: n.text,
+            time: n.time, fromUserId: n.fromUserId, thumb: n.thumb, unread: false,
+          )).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('[Notifications] mark-all-read error: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,28 +214,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       child: Stack(children: [
         GlassBackdrop(dark: dark),
 
-        // ── Cascade list (positioned below header to prevent overlap) ──
+        // ── Content area ──
         Positioned(
           top: listTop, bottom: 0, left: 0, right: 0,
-          child: AnimatedBuilder(
-            animation: _scroll,
-            builder: (context, _) {
-              final offset = _scroll.hasClients ? _scroll.offset : 0.0;
-              final viewportHeight = MediaQuery.of(context).size.height;
-              return SingleChildScrollView(
-                controller: _scroll,
-                padding: const EdgeInsets.only(top: listInnerTopPadding, bottom: 40, left: 10, right: 10),
-                child: SizedBox(
-                  // explicit height so we can absolute-position cards inside
-                  height: items.length * (_kCardHeight + _kCardGap),
-                  child: Stack(clipBehavior: Clip.none, children: [
-                    for (int i = items.length - 1; i >= 0; i--)
-                      _buildCascadeCard(items[i], i, offset, dark, viewportHeight, listStartGlobalY),
-                  ]),
-                ),
-              );
-            },
-          ),
+          child: _loading
+              ? _buildLoadingShimmer(dark)
+              : _error
+                  ? _buildError(dark)
+                  : items.isEmpty
+                      ? _buildEmpty(dark)
+                      : _buildCascadeList(items, dark, listInnerTopPadding, listStartGlobalY),
         ),
 
         // ── Floating header pill ──
@@ -141,7 +240,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 _CountBadge(count: _unread, dark: dark, big: true),
               ],
               const Spacer(),
-              GlassCircleButton(dark: dark, icon: Icons.settings_outlined, iconSize: 18),
+              if (_unread > 0)
+                GestureDetector(
+                  onTap: _markAllRead,
+                  child: GlassCircleButton(dark: dark, icon: Icons.done_all, iconSize: 18),
+                )
+              else
+                GlassCircleButton(dark: dark, icon: Icons.settings_outlined, iconSize: 18),
             ]),
           ),
         ),
@@ -157,16 +262,144 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               children: [
                 _Chip(label: 'All',      active: _filter=='All',      count: _unread, dark: dark, onTap: () => setState(() => _filter='All')),
                 const SizedBox(width: 8),
-                _Chip(label: 'Mentions', active: _filter=='Mentions', dark: dark, onTap: () => setState(() => _filter='Mentions')),
-                const SizedBox(width: 8),
                 _Chip(label: 'Follows',  active: _filter=='Follows',  dark: dark, onTap: () => setState(() => _filter='Follows')),
-                const SizedBox(width: 8),
-                _Chip(label: 'System',   active: _filter=='System',   dark: dark, onTap: () => setState(() => _filter='System')),
               ],
             ),
           ),
         ),
       ]),
+    );
+  }
+
+  Widget _buildCascadeList(List<NfItem> items, bool dark, double listInnerTopPadding, double listStartGlobalY) {
+    final viewportHeight = MediaQuery.of(context).size.height;
+    return AnimatedBuilder(
+      animation: _scroll,
+      builder: (context, _) {
+        final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+        return RefreshIndicator(
+          onRefresh: _fetchNotifications,
+          color: dark ? Colors.white : Colors.black,
+          backgroundColor: dark ? const Color(0xFF1A1A1A) : Colors.white,
+          child: SingleChildScrollView(
+            controller: _scroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.only(top: listInnerTopPadding, bottom: 40, left: 10, right: 10),
+            child: SizedBox(
+              height: items.length * (_kCardHeight + _kCardGap),
+              child: Stack(clipBehavior: Clip.none, children: [
+                for (int i = items.length - 1; i >= 0; i--)
+                  _buildCascadeCard(items[i], i, offset, dark, viewportHeight, listStartGlobalY),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLoadingShimmer(bool dark) {
+    final shimmerBase = dark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05);
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 16, left: 10, right: 10),
+      itemCount: 6,
+      itemBuilder: (_, i) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Container(
+          height: _kCardHeight,
+          decoration: BoxDecoration(
+            color: shimmerBase,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Row(children: [
+            const SizedBox(width: 14),
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.07),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 12, width: 120,
+                    decoration: BoxDecoration(
+                      color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.07),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 10, width: 80,
+                    decoration: BoxDecoration(
+                      color: dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmpty(bool dark) {
+    final fg = GlassTokens.fg(dark);
+    final sub = GlassTokens.sub(dark);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.notifications_none_rounded, size: 56,
+            color: dark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.12)),
+          const SizedBox(height: 16),
+          Text('No notifications yet',
+            style: manrope(size: 16, weight: FontWeight.w700, color: fg, letterSpacing: -0.2)),
+          const SizedBox(height: 6),
+          Text('When someone follows you, it\'ll show up here',
+            style: manrope(size: 13, weight: FontWeight.w500, color: sub, letterSpacing: -0.1)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError(bool dark) {
+    final fg = GlassTokens.fg(dark);
+    final sub = GlassTokens.sub(dark);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.wifi_off_rounded, size: 48,
+            color: dark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.12)),
+          const SizedBox(height: 16),
+          Text('Couldn\'t load notifications',
+            style: manrope(size: 15, weight: FontWeight.w700, color: fg)),
+          const SizedBox(height: 6),
+          Text('Check your connection and try again',
+            style: manrope(size: 13, weight: FontWeight.w500, color: sub)),
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: _fetchNotifications,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                color: dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06),
+              ),
+              child: Text('Retry',
+                style: manrope(size: 13, weight: FontWeight.w700, color: fg)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

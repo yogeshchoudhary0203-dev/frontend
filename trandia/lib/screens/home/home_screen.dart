@@ -161,17 +161,21 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
-  // 🔔 Load total unread count from all conversations
+  // 🔔 Load unread conversation count (number of conversations that have unread msgs)
+  // — 1 conversation with 9 messages still shows as 1, not 9
   Future<void> _loadUnreadCount() async {
     try {
       final myUserId = await AuthService.getCurrentUserId();
       final convs = await ChatService().getConversations();
       if (!mounted) return;
-      int total = 0;
+      // Count CONVERSATIONS with unread messages, not total messages
+      int unreadConversations = 0;
       for (final c in convs) {
-        total += (c.unreadCounts[myUserId] ?? 0);
+        if ((c.unreadCounts[myUserId] ?? 0) > 0) {
+          unreadConversations++;
+        }
       }
-      setState(() => _totalUnread = total);
+      setState(() => _totalUnread = unreadConversations);
     } catch (_) {}
   }
 
@@ -355,7 +359,7 @@ class _HomeScreenState extends State<HomeScreen>
                           ),
                           alignment: Alignment.center,
                           child: Text(
-                            _totalUnread > 99 ? '99+' : '$_totalUnread',
+                            _totalUnread > 9 ? '9+' : '$_totalUnread',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 9,

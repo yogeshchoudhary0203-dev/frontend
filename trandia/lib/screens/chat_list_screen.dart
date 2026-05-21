@@ -267,21 +267,26 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                         )
                       : RefreshIndicator(
                           onRefresh: _loadConversations,
-                          child: ListView(
+                          child: ListView.builder(
                             padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
-                            children: [
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                child: Text('CHATS',
-                                    style: manrope(
-                                        size: 11,
-                                        weight: FontWeight.w700,
-                                        color: sub,
-                                        letterSpacing: 0.88)),
-                              ),
-                              if (_conversations.isEmpty)
-                                Padding(
+                            // +1 for the header, +1 if empty state
+                            itemCount: 1 + (_conversations.isEmpty ? 1 : _conversations.length),
+                            itemBuilder: (context, index) {
+                              // Header row
+                              if (index == 0) {
+                                return Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                  child: Text('CHATS',
+                                      style: manrope(
+                                          size: 11,
+                                          weight: FontWeight.w700,
+                                          color: sub,
+                                          letterSpacing: 0.88)),
+                                );
+                              }
+                              // Empty state
+                              if (_conversations.isEmpty) {
+                                return Padding(
                                   padding: const EdgeInsets.all(20),
                                   child: Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -300,19 +305,21 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                                                 color: sub),
                                             textAlign: TextAlign.center),
                                       ]),
+                                );
+                              }
+                              // Conversation row (index - 1 because of header)
+                              final i = index - 1;
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                                child: _ChatRow(
+                                  c: _conversations[i],
+                                  i: i + 1,
+                                  dark: widget.dark,
+                                  myUserId: _myUserId ?? '',
+                                  onReload: _loadConversations,
                                 ),
-                              ..._conversations.asMap().entries.map((e) => Padding(
-                                    padding:
-                                        const EdgeInsets.fromLTRB(10, 0, 10, 8),
-                                    child: _ChatRow(
-                                      c: e.value,
-                                      i: e.key + 1,
-                                      dark: widget.dark,
-                                      myUserId: _myUserId ?? '',
-                                      onReload: _loadConversations,
-                                    ),
-                                  )),
-                            ],
+                              );
+                            },
                           ),
                         ),
             ),
@@ -540,7 +547,7 @@ class _ChatRow extends StatelessWidget {
                         color: dark ? Colors.white : const Color(0xFF0A0A0A),
                         borderRadius: BorderRadius.circular(999),
                       ),
-                      child: Text(unread > 99 ? '99+' : '$unread',
+                      child: Text(unread > 4 ? '4+' : '$unread',
                           style: manrope(
                               size: 11,
                               weight: FontWeight.w800,

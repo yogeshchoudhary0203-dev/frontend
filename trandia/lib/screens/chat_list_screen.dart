@@ -267,21 +267,26 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                         )
                       : RefreshIndicator(
                           onRefresh: _loadConversations,
-                          child: ListView(
+                          child: ListView.builder(
                             padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
-                            children: [
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                child: Text('CHATS',
-                                    style: manrope(
-                                        size: 11,
-                                        weight: FontWeight.w700,
-                                        color: sub,
-                                        letterSpacing: 0.88)),
-                              ),
-                              if (_conversations.isEmpty)
-                                Padding(
+                            // +1 for the header, +1 if empty state
+                            itemCount: 1 + (_conversations.isEmpty ? 1 : _conversations.length),
+                            itemBuilder: (context, index) {
+                              // Header row
+                              if (index == 0) {
+                                return Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                  child: Text('CHATS',
+                                      style: manrope(
+                                          size: 11,
+                                          weight: FontWeight.w700,
+                                          color: sub,
+                                          letterSpacing: 0.88)),
+                                );
+                              }
+                              // Empty state
+                              if (_conversations.isEmpty) {
+                                return Padding(
                                   padding: const EdgeInsets.all(20),
                                   child: Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -300,19 +305,21 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                                                 color: sub),
                                             textAlign: TextAlign.center),
                                       ]),
+                                );
+                              }
+                              // Conversation row (index - 1 because of header)
+                              final i = index - 1;
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                                child: _ChatRow(
+                                  c: _conversations[i],
+                                  i: i + 1,
+                                  dark: widget.dark,
+                                  myUserId: _myUserId ?? '',
+                                  onReload: _loadConversations,
                                 ),
-                              ..._conversations.asMap().entries.map((e) => Padding(
-                                    padding:
-                                        const EdgeInsets.fromLTRB(10, 0, 10, 8),
-                                    child: _ChatRow(
-                                      c: e.value,
-                                      i: e.key + 1,
-                                      dark: widget.dark,
-                                      myUserId: _myUserId ?? '',
-                                      onReload: _loadConversations,
-                                    ),
-                                  )),
-                            ],
+                              );
+                            },
                           ),
                         ),
             ),
@@ -430,7 +437,9 @@ class _ChatRow extends StatelessWidget {
         otherUser.username.isNotEmpty ? otherUser.username[0].toUpperCase() : '?';
 
     final unread    = c.unreadCounts[myUserId] ?? 0;
-    final lastText  = c.lastMessage ?? 'No messages yet';
+    // Clean up encrypted/failed preview — show plain fallback instead
+    final rawLast   = c.lastMessage ?? '';
+    final lastText  = _cleanPreview(rawLast);
     final timeStr   = _formatTime(c.lastMessageTime);
 
     final previewColor  = unread > 0 ? fg : sub;
@@ -527,7 +536,7 @@ class _ChatRow extends StatelessWidget {
                           weight: unread > 0 ? FontWeight.w700 : FontWeight.w500,
                           color: unread > 0 ? fg : sub,
                           letterSpacing: -0.05)),
-                  if (unread > 0) ...[
+                  if (unread > 0) ...[  // unread badge
                     const SizedBox(height: 6),
                     Container(
                       constraints: const BoxConstraints(minWidth: 20),
@@ -538,7 +547,7 @@ class _ChatRow extends StatelessWidget {
                         color: dark ? Colors.white : const Color(0xFF0A0A0A),
                         borderRadius: BorderRadius.circular(999),
                       ),
-                      child: Text('$unread',
+                      child: Text(unread > 4 ? '4+' : '$unread',
                           style: manrope(
                               size: 11,
                               weight: FontWeight.w800,
@@ -554,11 +563,25 @@ class _ChatRow extends StatelessWidget {
     );
   }
 
+  String _cleanPreview(String raw) {
+    if (raw.isEmpty) return 'No messages yet';
+    // Hide raw encrypted payloads and fallback strings from chat_service
+    if (raw.contains('[Encrypted Message]') ||
+        raw.startsWith('{"ct":') ||
+        raw.startsWith('{"ct" :')) {
+      return '\u{1F4AC} Message';
+    }
+    return raw;
+  }
+
   String _formatTime(DateTime? time) {
     if (time == null) return '';
+    final localTime = time.toLocal();
     final now = DateTime.now();
-    final diff = now.difference(time);
-    if (diff.inDays > 7) return '${time.day}/${time.month}';
+    final diff = now.difference(localTime);
+    // Agar diff negative ho (future time) ya bahut chhota ho — 'now' dikhao
+    if (diff.isNegative || diff.inSeconds < 30) return 'now';
+    if (diff.inDays > 7) return '${localTime.day}/${localTime.month}';
     if (diff.inDays > 0) return '${diff.inDays}d';
     if (diff.inHours > 0) return '${diff.inHours}h';
     if (diff.inMinutes > 0) return '${diff.inMinutes}m';

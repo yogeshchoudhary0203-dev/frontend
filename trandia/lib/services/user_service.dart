@@ -5,6 +5,42 @@ import '../models/chat_model.dart';
 import 'api_service.dart';
 
 class UserService {
+  // ── Follow / Unfollow / Status ───────────────────────────────────────────
+
+  static Future<bool> followUser(String targetId) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.post(
+        Uri.parse('$baseUrl/users/$targetId/follow'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+      developer.log('followUser $targetId → ${res.statusCode}');
+      return res.statusCode == 200;
+    } catch (e) {
+      developer.log('followUser error: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> unfollowUser(String targetId) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.delete(
+        Uri.parse('$baseUrl/users/$targetId/follow'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+      developer.log('unfollowUser $targetId → ${res.statusCode}');
+      return res.statusCode == 200;
+    } catch (e) {
+      developer.log('unfollowUser error: $e');
+      return false;
+    }
+  }
+
+  // ── Search ───────────────────────────────────────────────────────────────
+
   static Future<List<UserProfile>> searchUsers(String query) async {
     try {
       final token = await ApiService.getToken();

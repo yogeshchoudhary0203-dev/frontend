@@ -516,6 +516,9 @@ class _SearchInputPillState extends State<_SearchInputPill> {
                   hintStyle: manrope(size: 14.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.145),
                   border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero,
                 ),
+                keyboardType: TextInputType.text,
+                autocorrect: false,
+                enableSuggestions: false,
               )),
               const SizedBox(width: 6),
               if (hasText)
@@ -725,7 +728,75 @@ class _UserResultRow extends StatelessWidget {
             Text('@${u.username}', maxLines: 1, overflow: TextOverflow.ellipsis,
               style: manrope(size: 11.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.06)),
           ])),
+          const SizedBox(width: 8),
+          _FollowButton(userId: u.id, initialFollowing: u.isFollowing, dark: dark),
         ]),
+      ),
+    );
+  }
+}
+
+// ── Follow Button (stateful toggle) ───────────────────────────────────────
+
+class _FollowButton extends StatefulWidget {
+  final String userId;
+  final bool initialFollowing;
+  final bool dark;
+  const _FollowButton({required this.userId, required this.initialFollowing, required this.dark});
+
+  @override
+  State<_FollowButton> createState() => _FollowButtonState();
+}
+
+class _FollowButtonState extends State<_FollowButton> {
+  late bool _isFollowing;
+
+  @override
+  void initState() {
+    super.initState();
+    _isFollowing = widget.initialFollowing; // instant — no API call
+  }
+
+  Future<void> _toggle() async {
+    final wasFollowing = _isFollowing;
+    setState(() => _isFollowing = !wasFollowing); // instant optimistic update
+    // fire-and-forget: UI already updated, API runs in background
+    if (wasFollowing) {
+      UserService.unfollowUser(widget.userId);
+    } else {
+      UserService.followUser(widget.userId);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = widget.dark;
+    final fg = GlassTokens.fg(dark);
+    return GestureDetector(
+      onTap: _toggle,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: _isFollowing
+              ? Colors.transparent
+              : (dark ? Colors.white : const Color(0xFF0A0A0A)),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: _isFollowing
+                ? (dark ? Colors.white.withOpacity(0.25) : Colors.black.withOpacity(0.18))
+                : Colors.transparent,
+          ),
+        ),
+        child: Text(
+          _isFollowing ? 'Following' : 'Follow',
+          style: manrope(
+            size: 12.5,
+            weight: FontWeight.w700,
+            color: _isFollowing ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
+            letterSpacing: -0.12,
+          ),
+        ),
       ),
     );
   }

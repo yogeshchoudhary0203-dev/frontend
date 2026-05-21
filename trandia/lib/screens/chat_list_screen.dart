@@ -569,9 +569,12 @@ class _ChatRow extends StatelessWidget {
 
   String _formatTime(DateTime? time) {
     if (time == null) return '';
+    final localTime = time.toLocal();
     final now = DateTime.now();
-    final diff = now.difference(time);
-    if (diff.inDays > 7) return '${time.day}/${time.month}';
+    final diff = now.difference(localTime);
+    // Agar diff negative ho (future time) ya bahut chhota ho — 'now' dikhao
+    if (diff.isNegative || diff.inSeconds < 30) return 'now';
+    if (diff.inDays > 7) return '${localTime.day}/${localTime.month}';
     if (diff.inDays > 0) return '${diff.inDays}d';
     if (diff.inHours > 0) return '${diff.inHours}h';
     if (diff.inMinutes > 0) return '${diff.inMinutes}m';

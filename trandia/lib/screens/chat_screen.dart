@@ -871,8 +871,10 @@ class _Bubble extends StatelessWidget {
             topLeft: Radius.circular(20), topRight: Radius.circular(20),
             bottomLeft: Radius.circular(6), bottomRight: Radius.circular(20));
 
-    final timeStr =
-        '${m.createdAt.hour.toString().padLeft(2, '0')}:${m.createdAt.minute.toString().padLeft(2, '0')}';
+    final localTime = m.createdAt.toLocal();
+    final hour12 = localTime.hour == 0 ? 12 : (localTime.hour > 12 ? localTime.hour - 12 : localTime.hour);
+    final amPm = localTime.hour < 12 ? 'AM' : 'PM';
+    final timeStr = '${hour12.toString().padLeft(2, '0')}:${localTime.minute.toString().padLeft(2, '0')} $amPm';
     final read = m.readBy.length > 1;
 
     final visibleReactions =

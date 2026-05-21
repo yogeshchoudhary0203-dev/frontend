@@ -565,8 +565,13 @@ class _ChatScreenState extends State<ChatScreen> {
                       controller: _scrollController,
                       reverse: true,
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                      itemCount: _messages.length + (_typingUserId != null ? 1 : 0),
+                      itemCount: _messages.length + (_typingUserId != null ? 1 : 0) + 1,
                       itemBuilder: (context, index) {
+                        // 🔒 E2E banner at TOP (last index = top of reversed list)
+                        final bannerIndex = _messages.length + (_typingUserId != null ? 1 : 0);
+                        if (index == bannerIndex) {
+                          return _E2EBanner(dark: widget.dark);
+                        }
                         if (_typingUserId != null) {
                           if (index == 0) {
                             return Padding(
@@ -1253,6 +1258,62 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
           ),
         );
       },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// E2E Encryption Banner — chat ke TOP pe dikhta hai (first message se pehle)
+// ─────────────────────────────────────────────────────────────
+
+class _E2EBanner extends StatelessWidget {
+  final bool dark;
+  const _E2EBanner({super.key, required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = GlassTokens.sub(dark);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.black.withOpacity(0.05),
+            ),
+            child: Icon(Icons.lock_rounded, size: 18, color: sub),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'End-to-end encrypted',
+            style: manrope(
+                size: 12.5,
+                weight: FontWeight.w700,
+                color: sub,
+                letterSpacing: -0.1),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Messages are secured with end-to-end encryption.\nOnly you and the recipient can read them.',
+            textAlign: TextAlign.center,
+            style: manrope(
+                size: 11,
+                weight: FontWeight.w500,
+                color: sub.withOpacity(0.7),
+                height: 1.45),
+          ),
+          const SizedBox(height: 16),
+          Divider(
+              height: 1,
+              color: dark
+                  ? Colors.white.withOpacity(0.07)
+                  : Colors.black.withOpacity(0.07)),
+        ],
+      ),
     );
   }
 }

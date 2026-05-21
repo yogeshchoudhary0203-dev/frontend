@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/fcm_service.dart';
+import '../../services/chat_service.dart';
+import '../../services/auth_service.dart';
 import '../notifications_screen.dart';
 import '../search_screen.dart';
 import '../shots_screen.dart';
@@ -109,6 +111,7 @@ class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin {
   bool _navOpen   = false;
   int  _activeNav = 0;
+  int  _totalUnread = 0; // 🔴 unread message badge count
   late AnimationController      _navCtrl;
   final List<Animation<double>> _itemScales    = [];
   final List<Animation<double>> _itemOpacities = [];
@@ -147,6 +150,7 @@ class _HomeScreenState extends State<HomeScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FcmService.setupForHomeScreen();
       CryptographyService().ensurePublicKeyRegistered();
+      _loadUnreadCount();
     });
   }
 
@@ -155,6 +159,20 @@ class _HomeScreenState extends State<HomeScreen>
     _navCtrl.dispose();
     _islandCtrl.dispose();
     super.dispose();
+  }
+
+  // 🔔 Load total unread count from all conversations
+  Future<void> _loadUnreadCount() async {
+    try {
+      final myUserId = await AuthService.getCurrentUserId();
+      final convs = await ChatService().getConversations();
+      if (!mounted) return;
+      int total = 0;
+      for (final c in convs) {
+        total += (c.unreadCounts[myUserId] ?? 0);
+      }
+      setState(() => _totalUnread = total);
+    } catch (_) {}
   }
 
   void _toggleNav() {
@@ -281,15 +299,75 @@ class _HomeScreenState extends State<HomeScreen>
                 onTap: _islandOpen ? null : _openIsland,
                 child: _TrandiaIsland(key: _islandKey, isDark: isDark)))),
 
-          // Message icon — compact
+          // Message icon — compact with unread badge
           Align(alignment: Alignment.topRight,
             child: Padding(padding: const EdgeInsets.only(top: 10, right: 14),
               child: GestureDetector(
-                onTap: () => _openScreen(context, ChatListScreen(dark: isDark)),
-                child: SizedBox(width: 30, height: 30,
-                  child: Center(child: CustomPaint(
-                    size: const Size(_kIconSize, _kIconSize),
-                    painter: _EnvelopeIconPainter(isDark: isDark))))))),
+                onTap: () async {
+                  HapticFeedback.selectionClick();
+                  if (_navOpen) { setState(() => _navOpen = false); _navCtrl.reverse(); }
+                  await Navigator.of(context).push(
+                    PageRouteBuilder(
+                      pageBuilder: (_, animation, __) => ChatListScreen(dark: isDark),
+                      transitionDuration: const Duration(milliseconds: 380),
+                      reverseTransitionDuration: const Duration(milliseconds: 300),
+                      transitionsBuilder: (_, animation, __, child) {
+                        final curved = CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                          reverseCurve: Curves.easeInCubic,
+                        );
+                        return SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, 0.06),
+                            end: Offset.zero,
+                          ).animate(curved),
+                          child: FadeTransition(opacity: curved, child: child),
+                        );
+                      },
+                    ),
+                  );
+                  _loadUnreadCount(); // badge refresh after returning
+                },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    SizedBox(width: 30, height: 30,
+                      child: Center(child: CustomPaint(
+                        size: const Size(_kIconSize, _kIconSize),
+                        painter: _EnvelopeIconPainter(isDark: isDark)))),
+                    if (_totalUnread > 0)
+                      Positioned(
+                        right: -5, top: -5,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 16),
+                          height: 16,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF1C1C1F)
+                                  : const Color(0xFFF8F8FA),
+                              width: 1.5,
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            _totalUnread > 99 ? '99+' : '$_totalUnread',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              height: 1.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ))),
 
           // Navbar
           Positioned(

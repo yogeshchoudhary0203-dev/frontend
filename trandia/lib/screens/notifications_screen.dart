@@ -12,6 +12,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/api_service.dart';
+import '../services/chat_service.dart';
 import 'glass_common.dart';
 
 enum NfKind { like, comment, follow, mention, live, msg, system }
@@ -118,6 +119,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _loading = true;
   bool _error = false;
   StreamSubscription? _fcmSub;
+  StreamSubscription? _wsNotifSub;
 
   @override
   void initState() {
@@ -130,6 +132,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void dispose() {
     _scroll.dispose();
     _fcmSub?.cancel();
+    _wsNotifSub?.cancel();
     super.dispose();
   }
 
@@ -159,7 +162,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _fcmSub = FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
       final msgType = msg.data['type'] as String?;
       if (msgType == 'follow') {
+        final String notifId = msg.data['id'] ?? '';
+        if (notifId.isNotEmpty && _items.any((item) => item.id == notifId)) {
+          return; // Skip duplicate
+        }
         final newItem = NfItem(
+          id: notifId,
           kind: NfKind.follow,
           name: msg.data['username'] ?? msg.data['title'] ?? '',
           text: msg.data['body'] ?? 'started following you',
@@ -169,6 +177,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         if (mounted) {
           setState(() { _items.insert(0, newItem); });
         }
+      }
+    });
+
+    _wsNotifSub = ChatService().notificationStream.listen((data) {
+      try {
+        final newItem = NfItem.fromJson(data);
+        if (newItem.id.isNotEmpty && _items.any((item) => item.id == newItem.id)) {
+          return; // Skip duplicate
+        }
+        if (mounted) {
+          setState(() {
+            _items.insert(0, newItem);
+          });
+        }
+      } catch (e) {
+        debugPrint('[Notifications] WS parse error: $e');
       }
     });
   }

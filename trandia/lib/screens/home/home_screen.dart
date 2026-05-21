@@ -151,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen>
       FcmService.setupForHomeScreen();
       CryptographyService().ensurePublicKeyRegistered();
       _loadUnreadCount();
+      ChatService().connectWebSocket();
     });
   }
 

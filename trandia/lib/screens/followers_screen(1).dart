@@ -1,0 +1,988 @@
+// followers_screen.dart
+// Single-file Followers / Following screen — matte glass monochrome.
+// Supports both Light and Dark themes via the `dark` flag.
+//
+// Requires in pubspec.yaml:
+//   google_fonts: ^6.0.0
+//
+// Usage:
+//   Navigator.push(context, MaterialPageRoute(
+//     builder: (_) => FollowersScreen(dark: true, initialTab: FollowersTab.followers),
+//   ));
+
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+// ───────────────────────────────────────────────────────────────
+// Public API
+// ───────────────────────────────────────────────────────────────
+
+enum FollowersTab { followers, following }
+
+class FollowersScreen extends StatefulWidget {
+  final bool dark;
+  final FollowersTab initialTab;
+  final String userHandle;
+  final int totalFollowers;
+  final int totalFollowing;
+
+  const FollowersScreen({
+    super.key,
+    required this.dark,
+    this.initialTab = FollowersTab.followers,
+    this.userHandle = '',
+    this.totalFollowers = 0,
+    this.totalFollowing = 0,
+  });
+
+  @override
+  State<FollowersScreen> createState() => _FollowersScreenState();
+}
+
+// ───────────────────────────────────────────────────────────────
+// Internal tokens / helpers (inlined so this file is standalone)
+// ───────────────────────────────────────────────────────────────
+
+class _Tk {
+  static Color fg(bool d) => d ? Colors.white : const Color(0xFF0A0A0A);
+  static Color sub(bool d) =>
+      d ? Colors.white.withOpacity(0.55) : Colors.black.withOpacity(0.55);
+  static Color muted(bool d) =>
+      d ? Colors.white.withOpacity(0.72) : Colors.black.withOpacity(0.72);
+
+  static List<Color> glassBg(bool d) => d
+      ? [Colors.white.withOpacity(0.07), Colors.white.withOpacity(0.03)]
+      : [Colors.white.withOpacity(0.72), Colors.white.withOpacity(0.55)];
+
+  static Color glassBorder(bool d) =>
+      d ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95);
+
+  static BoxShadow cardShadow(bool d) => BoxShadow(
+    color: d
+        ? Colors.black.withOpacity(0.8)
+        : const Color(0xFF14161E).withOpacity(0.18),
+    blurRadius: 28,
+    offset: const Offset(0, 10),
+    spreadRadius: -16,
+  );
+
+  static TextStyle manrope({
+    double size = 14,
+    FontWeight weight = FontWeight.w500,
+    Color color = Colors.white,
+    double? letterSpacing,
+    double? height,
+  }) => GoogleFonts.manrope(
+    fontSize: size,
+    fontWeight: weight,
+    color: color,
+    letterSpacing: letterSpacing ?? size * -0.01,
+    height: height,
+  );
+
+  /// Monochrome avatar gradient (varied by index).
+  static LinearGradient monoAvatar(bool dark, int i) {
+    double top, bot;
+    if (dark) {
+      top = 62 - (i % 7) * 5.0;
+      bot = (top - 30).clamp(10.0, 100.0);
+    } else {
+      top = 92 - (i % 7) * 3.0;
+      bot = (top - 32).clamp(32.0, 100.0);
+    }
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        HSLColor.fromAHSL(1, 0, 0, top / 100).toColor(),
+        HSLColor.fromAHSL(1, 0, 0, bot / 100).toColor(),
+      ],
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+// Models
+// ───────────────────────────────────────────────────────────────
+
+enum _FollowState { follow, followBack, following }
+
+class _UserRow {
+  final String name;
+  final String handle;
+  final String bio;
+  final String mutual;
+  final bool verified;
+  final bool isNew;
+  final _FollowState state;
+
+  const _UserRow({
+    required this.name,
+    required this.handle,
+    required this.bio,
+    this.mutual = '',
+    this.verified = false,
+    this.isNew = false,
+    required this.state,
+  });
+
+  _UserRow copyWith({_FollowState? state}) => _UserRow(
+    name: name,
+    handle: handle,
+    bio: bio,
+    mutual: mutual,
+    verified: verified,
+    isNew: isNew,
+    state: state ?? this.state,
+  );
+}
+
+const _seedFollowers = <_UserRow>[];
+
+const _seedFollowing = <_UserRow>[];
+
+// ───────────────────────────────────────────────────────────────
+// State
+// ───────────────────────────────────────────────────────────────
+
+class _FollowersScreenState extends State<FollowersScreen> {
+  late FollowersTab _tab = widget.initialTab;
+  String _query = '';
+
+  // overrides per "tab:handle" so toggles persist across switches
+  final Map<String, _FollowState> _overrides = {};
+
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return '$n';
+  }
+
+  List<_UserRow> _currentList() {
+    final src = _tab == FollowersTab.followers
+        ? _seedFollowers
+        : _seedFollowing;
+    final tabKey = _tab == FollowersTab.followers ? 'F' : 'G';
+    final q = _query.trim().toLowerCase();
+    return src
+        .map((u) {
+          final ov = _overrides['$tabKey:${u.handle}'];
+          return ov == null ? u : u.copyWith(state: ov);
+        })
+        .where((u) {
+          if (q.isEmpty) return true;
+          return u.name.toLowerCase().contains(q) ||
+              u.handle.toLowerCase().contains(q);
+        })
+        .toList();
+  }
+
+  void _toggle(_UserRow u) {
+    final tabKey = _tab == FollowersTab.followers ? 'F' : 'G';
+    final next = u.state == _FollowState.following
+        ? _FollowState.follow
+        : _FollowState.following;
+    setState(() => _overrides['$tabKey:${u.handle}'] = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = widget.dark;
+    final list = _currentList();
+
+    return Scaffold(
+      backgroundColor: dark ? Colors.black : const Color(0xFFFAFAFA),
+      body: Stack(
+        children: [
+          const _Backdrop(),
+          // backdrop needs dark; pass via Theme-like InheritedWidget would be overkill — just rebuild it
+          Positioned.fill(child: _Backdrop(dark: dark)),
+
+          // SCROLLABLE LIST
+          Positioned.fill(
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 192, bottom: 16),
+                child: list.isEmpty
+                    ? Center(
+                        child: Text(
+                          _query.trim().isEmpty
+                              ? (_tab == FollowersTab.followers
+                                    ? 'No followers yet.'
+                                    : 'Not following anyone yet.')
+                              : 'No one matches "${_query.trim()}".',
+                          style: _Tk.manrope(
+                            size: 13,
+                            weight: FontWeight.w500,
+                            color: _Tk.sub(dark),
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        itemCount: list.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final u = list[i];
+                          // find seed index for stable avatar gradient
+                          final src = _tab == FollowersTab.followers
+                              ? _seedFollowers
+                              : _seedFollowing;
+                          final seedIdx = src.indexWhere(
+                            (x) => x.handle == u.handle,
+                          );
+                          return _UserRowCard(
+                            u: u,
+                            i: seedIdx < 0 ? i : seedIdx,
+                            dark: dark,
+                            onToggle: () => _toggle(u),
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ),
+
+          // TOP BAR
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 12,
+            right: 12,
+            child: _TopBar(
+              dark: dark,
+              handle: widget.userHandle,
+              subtitle: _tab == FollowersTab.followers
+                  ? '${_fmt(widget.totalFollowers)} followers'
+                  : '${_fmt(widget.totalFollowing)} following',
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+          ),
+
+          // SEGMENTED TAB
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 64,
+            left: 12,
+            right: 12,
+            child: _SegmentedTabs(
+              dark: dark,
+              active: _tab,
+              followerCount: _fmt(widget.totalFollowers),
+              followingCount: _fmt(widget.totalFollowing),
+              onChange: (t) => setState(() => _tab = t),
+            ),
+          ),
+
+          // SEARCH
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 116,
+            left: 12,
+            right: 12,
+            child: _SearchPill(
+              dark: dark,
+              hint: _tab == FollowersTab.followers
+                  ? 'Search followers'
+                  : 'Search following',
+              onChanged: (v) => setState(() => _query = v),
+            ),
+          ),
+
+          // SECTION HEADER
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 168,
+            left: 18,
+            right: 18,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _tab == FollowersTab.followers
+                      ? 'ALL FOLLOWERS'
+                      : 'YOU FOLLOW',
+                  style: _Tk.manrope(
+                    size: 10.5,
+                    weight: FontWeight.w700,
+                    color: _Tk.sub(dark),
+                    letterSpacing: 1.05,
+                  ),
+                ),
+                Text(
+                  '${list.length} SHOWN',
+                  style: _Tk.manrope(
+                    size: 10.5,
+                    weight: FontWeight.w600,
+                    color: _Tk.sub(dark),
+                    letterSpacing: 0.63,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+// Backdrop
+// ───────────────────────────────────────────────────────────────
+
+class _Backdrop extends StatelessWidget {
+  final bool dark;
+  const _Backdrop({this.dark = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0, -1),
+                radius: 1.2,
+                colors: dark
+                    ? const [
+                        Color(0xFF161617),
+                        Color(0xFF08080A),
+                        Color(0xFF000000),
+                      ]
+                    : const [
+                        Color(0xFFFAFAFA),
+                        Color(0xFFECECEE),
+                        Color(0xFFDCDCE0),
+                      ],
+                stops: const [0.0, 0.55, 1.0],
+              ),
+            ),
+          ),
+          _blob(
+            dark
+                ? Colors.white.withOpacity(0.10)
+                : Colors.white.withOpacity(0.95),
+            const Alignment(-1, -0.8),
+            320,
+          ),
+          _blob(
+            dark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.black.withOpacity(0.10),
+            const Alignment(1, -0.2),
+            280,
+          ),
+          _blob(
+            dark
+                ? Colors.white.withOpacity(0.05)
+                : Colors.black.withOpacity(0.08),
+            const Alignment(-0.6, 0.9),
+            300,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _blob(Color c, Alignment a, double size) => Align(
+    alignment: a,
+    child: ImageFiltered(
+      imageFilter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [c, c.withOpacity(0)],
+            stops: const [0, 0.7],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// Top bar
+// ───────────────────────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  final bool dark;
+  final String handle;
+  final String subtitle;
+  final VoidCallback onBack;
+  const _TopBar({
+    required this.dark,
+    required this.handle,
+    required this.subtitle,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = _Tk.fg(dark);
+    final sub = _Tk.sub(dark);
+    return SizedBox(
+      height: 44,
+      child: Row(
+        children: [
+          _CircleBtn(
+            dark: dark,
+            size: 38,
+            icon: Icons.arrow_back_ios_new_rounded,
+            iconSize: 18,
+            onTap: onBack,
+          ),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  handle,
+                  style: _Tk.manrope(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: fg,
+                    letterSpacing: -0.21,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  subtitle.toUpperCase(),
+                  style: _Tk.manrope(
+                    size: 10.5,
+                    weight: FontWeight.w600,
+                    color: sub,
+                    letterSpacing: 0.84,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _CircleBtn(
+            dark: dark,
+            size: 38,
+            icon: Icons.swap_vert_rounded,
+            iconSize: 20,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleBtn extends StatelessWidget {
+  final bool dark;
+  final double size;
+  final IconData icon;
+  final double iconSize;
+  final VoidCallback? onTap;
+  const _CircleBtn({
+    required this.dark,
+    required this.size,
+    required this.icon,
+    this.iconSize = 18,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = _Tk.fg(dark);
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            width: size,
+            height: size,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.white.withOpacity(0.6),
+              border: Border.all(
+                color: dark
+                    ? Colors.white.withOpacity(0.10)
+                    : Colors.white.withOpacity(0.95),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: dark
+                      ? Colors.black.withOpacity(0.7)
+                      : const Color(0xFF14161E).withOpacity(0.18),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                  spreadRadius: -14,
+                ),
+              ],
+            ),
+            child: Icon(icon, size: iconSize, color: fg),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+// Segmented tab
+// ───────────────────────────────────────────────────────────────
+
+class _SegmentedTabs extends StatelessWidget {
+  final bool dark;
+  final FollowersTab active;
+  final String followerCount;
+  final String followingCount;
+  final ValueChanged<FollowersTab> onChange;
+  const _SegmentedTabs({
+    required this.dark,
+    required this.active,
+    required this.followerCount,
+    required this.followingCount,
+    required this.onChange,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: dark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.white.withOpacity(0.6),
+            border: Border.all(color: _Tk.glassBorder(dark)),
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [_Tk.cardShadow(dark)],
+          ),
+          child: Row(
+            children: [
+              _SegmentBtn(
+                label: 'Followers',
+                count: followerCount,
+                active: active == FollowersTab.followers,
+                dark: dark,
+                onTap: () => onChange(FollowersTab.followers),
+              ),
+              _SegmentBtn(
+                label: 'Following',
+                count: followingCount,
+                active: active == FollowersTab.following,
+                dark: dark,
+                onTap: () => onChange(FollowersTab.following),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentBtn extends StatelessWidget {
+  final String label;
+  final String count;
+  final bool active;
+  final bool dark;
+  final VoidCallback onTap;
+  const _SegmentBtn({
+    required this.label,
+    required this.count,
+    required this.active,
+    required this.dark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activeBg = dark ? Colors.white : const Color(0xFF0A0A0A);
+    final activeFg = dark ? const Color(0xFF0A0A0A) : Colors.white;
+    final muted = _Tk.muted(dark);
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? activeBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: _Tk.manrope(
+                  size: 13,
+                  weight: active ? FontWeight.w800 : FontWeight.w600,
+                  color: active ? activeFg : muted,
+                  letterSpacing: -0.13,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                count,
+                style: _Tk.manrope(
+                  size: 11,
+                  weight: FontWeight.w700,
+                  color: (active ? activeFg : muted).withOpacity(0.7),
+                  letterSpacing: -0.11,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+// Search pill
+// ───────────────────────────────────────────────────────────────
+
+class _SearchPill extends StatelessWidget {
+  final bool dark;
+  final String hint;
+  final ValueChanged<String> onChanged;
+  const _SearchPill({
+    required this.dark,
+    required this.hint,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = _Tk.fg(dark);
+    final sub = _Tk.sub(dark);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: dark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.white.withOpacity(0.55),
+            border: Border.all(color: _Tk.glassBorder(dark)),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, size: 16, color: sub),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  onChanged: onChanged,
+                  cursorColor: fg,
+                  style: _Tk.manrope(
+                    size: 13.5,
+                    weight: FontWeight.w500,
+                    color: fg,
+                    letterSpacing: -0.135,
+                  ),
+                  decoration: InputDecoration(
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    hintText: hint,
+                    hintStyle: _Tk.manrope(
+                      size: 13.5,
+                      weight: FontWeight.w500,
+                      color: sub,
+                      letterSpacing: -0.135,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+// Row card
+// ───────────────────────────────────────────────────────────────
+
+class _UserRowCard extends StatelessWidget {
+  final _UserRow u;
+  final int i;
+  final bool dark;
+  final VoidCallback onToggle;
+  const _UserRowCard({
+    required this.u,
+    required this.i,
+    required this.dark,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = _Tk.fg(dark);
+    final sub = _Tk.sub(dark);
+    final muted = _Tk.muted(dark);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: _Tk.glassBg(dark),
+            ),
+            border: Border.all(color: _Tk.glassBorder(dark)),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [_Tk.cardShadow(dark)],
+          ),
+          child: Stack(
+            children: [
+              // top sheen
+              Positioned(
+                top: 0,
+                left: 18,
+                right: 18,
+                height: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: dark
+                          ? [
+                              Colors.transparent,
+                              Colors.white.withOpacity(0.14),
+                              Colors.transparent,
+                            ]
+                          : [
+                              Colors.transparent,
+                              Colors.white.withOpacity(0.95),
+                              Colors.transparent,
+                            ],
+                    ),
+                  ),
+                ),
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // avatar
+                  SizedBox(
+                    width: 46,
+                    height: 46,
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: _Tk.monoAvatar(dark, i),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            u.name.isEmpty ? '•' : u.name[0],
+                            style: _Tk.manrope(
+                              size: 17,
+                              weight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: -0.34,
+                            ),
+                          ),
+                        ),
+                        if (u.isNew)
+                          Positioned(
+                            right: -1,
+                            top: -1,
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: dark
+                                    ? Colors.white
+                                    : const Color(0xFF0A0A0A),
+                                border: Border.all(
+                                  width: 2,
+                                  color: dark
+                                      ? const Color(0xFF0A0A0C)
+                                      : const Color(0xFFF3F3F5),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+
+                  // text
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                u.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: _Tk.manrope(
+                                  size: 14,
+                                  weight: FontWeight.w700,
+                                  color: fg,
+                                  letterSpacing: -0.21,
+                                ),
+                              ),
+                            ),
+                            if (u.verified) ...[
+                              const SizedBox(width: 5),
+                              Icon(Icons.verified_rounded, size: 12, color: fg),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          u.bio.isEmpty
+                              ? '@${u.handle}'
+                              : '@${u.handle} · ${u.bio}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _Tk.manrope(
+                            size: 12,
+                            weight: FontWeight.w500,
+                            color: sub,
+                            letterSpacing: -0.06,
+                          ),
+                        ),
+                        if (u.mutual.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            u.mutual,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: _Tk.manrope(
+                              size: 10.5,
+                              weight: FontWeight.w600,
+                              color: muted,
+                              letterSpacing: 0.21,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // CTA + more
+                  _FollowCta(state: u.state, dark: dark, onTap: onToggle),
+                  const SizedBox(width: 2),
+                  Icon(Icons.more_horiz_rounded, size: 18, color: sub),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FollowCta extends StatelessWidget {
+  final _FollowState state;
+  final bool dark;
+  final VoidCallback onTap;
+  const _FollowCta({
+    required this.state,
+    required this.dark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isPrimary =
+        state == _FollowState.follow || state == _FollowState.followBack;
+    final label = state == _FollowState.follow
+        ? 'Follow'
+        : state == _FollowState.followBack
+        ? 'Follow back'
+        : 'Following';
+    final fg = _Tk.fg(dark);
+
+    if (isPrimary) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: dark ? Colors.white : const Color(0xFF0A0A0A),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            label,
+            style: _Tk.manrope(
+              size: 12,
+              weight: FontWeight.w700,
+              color: dark ? const Color(0xFF0A0A0A) : Colors.white,
+              letterSpacing: -0.12,
+            ),
+          ),
+        ),
+      );
+    }
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: dark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.white.withOpacity(0.6),
+              border: Border.all(
+                color: dark
+                    ? Colors.white.withOpacity(0.18)
+                    : Colors.black.withOpacity(0.10),
+              ),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              label,
+              style: _Tk.manrope(
+                size: 12,
+                weight: FontWeight.w700,
+                color: fg,
+                letterSpacing: -0.12,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

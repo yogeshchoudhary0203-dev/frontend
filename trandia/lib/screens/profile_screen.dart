@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'glass_common.dart';
+import 'followers_screen(1).dart';
 import 'setting_screen.dart';
 
 // ───────────────────────────────────────────────────────────────
@@ -42,9 +43,13 @@ List<ProfileTile> _buildProfileTiles() => List.generate(12, (i) {
   final kind = (i == 1 || i == 7)
       ? ProfileTileKind.carousel
       : (i == 4 || i == 10)
-          ? ProfileTileKind.reel
-          : ProfileTileKind.photo;
-  final count = i == 1 ? 4 : i == 7 ? 3 : null;
+      ? ProfileTileKind.reel
+      : ProfileTileKind.photo;
+  final count = i == 1
+      ? 4
+      : i == 7
+      ? 3
+      : null;
   return ProfileTile(kind: kind, count: count);
 });
 
@@ -61,17 +66,17 @@ LinearGradient _tileGradient(bool dark, int i) {
   final begin = (i % 4 == 0)
       ? Alignment.topLeft
       : (i % 4 == 1)
-          ? Alignment.topCenter
-          : (i % 4 == 2)
-              ? Alignment.topRight
-              : Alignment.centerLeft;
+      ? Alignment.topCenter
+      : (i % 4 == 2)
+      ? Alignment.topRight
+      : Alignment.centerLeft;
   final end = (i % 4 == 0)
       ? Alignment.bottomRight
       : (i % 4 == 1)
-          ? Alignment.bottomCenter
-          : (i % 4 == 2)
-              ? Alignment.bottomLeft
-              : Alignment.centerRight;
+      ? Alignment.bottomCenter
+      : (i % 4 == 2)
+      ? Alignment.bottomLeft
+      : Alignment.centerRight;
   return LinearGradient(
     begin: begin,
     end: end,
@@ -97,23 +102,56 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   String _tab = 'Posts';
   final _tiles = _buildProfileTiles();
+  static const int _followersCount = 0;
+  static const int _followingCount = 0;
+
+  void _openFollowers(FollowersTab initialTab) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, animation, __) => FollowersScreen(
+          dark: widget.dark,
+          initialTab: initialTab,
+          totalFollowers: _followersCount,
+          totalFollowing: _followingCount,
+        ),
+        transitionDuration: const Duration(milliseconds: 320),
+        reverseTransitionDuration: const Duration(milliseconds: 260),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.05),
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final dark = widget.dark;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
-    final muted = dark ? Colors.white.withOpacity(0.72) : Colors.black.withOpacity(0.72);
-    final hairline = dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06);
+    final muted = dark
+        ? Colors.white.withOpacity(0.72)
+        : Colors.black.withOpacity(0.72);
+    final hairline = dark
+        ? Colors.white.withOpacity(0.08)
+        : Colors.black.withOpacity(0.06);
 
     return Scaffold(
       backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
       body: Center(
         child: SingleChildScrollView(
           child: DefaultTextStyle(
-            style: const TextStyle(
-              decoration: TextDecoration.none,
-            ),
+            style: const TextStyle(decoration: TextDecoration.none),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -134,9 +172,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onTap: () {
                           Navigator.of(context).push(
                             PageRouteBuilder(
-                              pageBuilder: (_, animation, __) => SettingsScreen(dark: dark),
-                              transitionDuration: const Duration(milliseconds: 320),
-                              reverseTransitionDuration: const Duration(milliseconds: 260),
+                              pageBuilder: (_, animation, __) =>
+                                  SettingsScreen(dark: dark),
+                              transitionDuration: const Duration(
+                                milliseconds: 320,
+                              ),
+                              reverseTransitionDuration: const Duration(
+                                milliseconds: 260,
+                              ),
                               transitionsBuilder: (_, animation, __, child) {
                                 final curved = CurvedAnimation(
                                   parent: animation,
@@ -148,7 +191,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     begin: const Offset(0, 0.05),
                                     end: Offset.zero,
                                   ).animate(curved),
-                                  child: FadeTransition(opacity: curved, child: child),
+                                  child: FadeTransition(
+                                    opacity: curved,
+                                    child: child,
+                                  ),
                                 );
                               },
                             ),
@@ -172,6 +218,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fg: fg,
                           sub: sub,
                           hairline: hairline,
+                          followersCount: _followersCount,
+                          followingCount: _followingCount,
+                          onFollowersTap: () =>
+                              _openFollowers(FollowersTab.followers),
+                          onFollowingTap: () =>
+                              _openFollowers(FollowersTab.following),
                         ),
                         Positioned(
                           top: 96,
@@ -181,12 +233,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: dark ? const Color(0xFF0A0A0C) : const Color(0xFFFAFAFA),
+                              color: dark
+                                  ? const Color(0xFF0A0A0C)
+                                  : const Color(0xFFFAFAFA),
                               boxShadow: [
                                 BoxShadow(
                                   color: dark
                                       ? Colors.black.withOpacity(0.8)
-                                      : const Color(0xFF14161E).withOpacity(0.25),
+                                      : const Color(
+                                          0xFF14161E,
+                                        ).withOpacity(0.25),
                                   blurRadius: 36,
                                   offset: const Offset(0, 18),
                                   spreadRadius: -16,
@@ -232,7 +288,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 12),
 
                 // TITLE CHIP
-                Center(child: _TitleChip(dark: dark, muted: muted, fg: fg)),
+                Center(
+                  child: _TitleChip(dark: dark, muted: muted, fg: fg),
+                ),
 
                 // BIO
                 Padding(
@@ -255,22 +313,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 // SOCIAL LINKS
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
-                  child: _SocialLinksRow(
-                    dark: dark,
-                    fg: fg,
-                  ),
+                  child: _SocialLinksRow(dark: dark, fg: fg),
                 ),
 
                 const SizedBox(height: 18),
 
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: _PostsBox(
-                    dark: dark,
-                    fg: fg,
-                    sub: sub,
-                    tiles: _tiles,
-                  ),
+                  child: _PostsBox(dark: dark, fg: fg, sub: sub, tiles: _tiles),
                 ),
 
                 const SizedBox(height: 16),
@@ -371,9 +421,13 @@ class _SocialButton extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: dark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.8),
+            color: dark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.white.withOpacity(0.8),
             border: Border.all(
-              color: dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
+              color: dark
+                  ? Colors.white.withOpacity(0.12)
+                  : Colors.black.withOpacity(0.08),
             ),
             boxShadow: [
               BoxShadow(
@@ -410,35 +464,40 @@ class _PostsBox extends StatelessWidget {
       radius: 28,
       padding: const EdgeInsets.all(10),
       blurSigma: 28,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
-          child: Row(children: [
-            Icon(Icons.grid_on_rounded, size: 15, color: fg),
-            const SizedBox(width: 7),
-            Text(
-              'Posts',
-              style: manrope(
-                size: 14,
-                weight: FontWeight.w800,
-                color: fg,
-                letterSpacing: -0.14,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+            child: Row(
+              children: [
+                Icon(Icons.grid_on_rounded, size: 15, color: fg),
+                const SizedBox(width: 7),
+                Text(
+                  'Posts',
+                  style: manrope(
+                    size: 14,
+                    weight: FontWeight.w800,
+                    color: fg,
+                    letterSpacing: -0.14,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${tiles.length}',
+                  style: manrope(
+                    size: 12,
+                    weight: FontWeight.w700,
+                    color: sub,
+                    letterSpacing: -0.12,
+                  ),
+                ),
+              ],
             ),
-            const Spacer(),
-            Text(
-              '${tiles.length}',
-              style: manrope(
-                size: 12,
-                weight: FontWeight.w700,
-                color: sub,
-                letterSpacing: -0.12,
-              ),
-            ),
-          ]),
-        ),
-        _ProfileGrid(dark: dark, tiles: tiles),
-      ]),
+          ),
+          _ProfileGrid(dark: dark, tiles: tiles),
+        ],
+      ),
     );
   }
 }
@@ -452,11 +511,19 @@ class _CoverBand extends StatelessWidget {
   final Color fg;
   final Color sub;
   final Color hairline;
+  final int followersCount;
+  final int followingCount;
+  final VoidCallback onFollowersTap;
+  final VoidCallback onFollowingTap;
   const _CoverBand({
     required this.dark,
     required this.fg,
     required this.sub,
     required this.hairline,
+    required this.followersCount,
+    required this.followingCount,
+    required this.onFollowersTap,
+    required this.onFollowingTap,
   });
 
   @override
@@ -474,11 +541,15 @@ class _CoverBand extends StatelessWidget {
           stops: dark ? const [0.0, 0.6, 1.0] : const [0.0, 1.0],
         ),
         border: Border.all(
-          color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.95),
+          color: dark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.95),
         ),
         boxShadow: [
           BoxShadow(
-            color: dark ? Colors.black.withOpacity(0.7) : const Color(0xFF14161E).withOpacity(0.18),
+            color: dark
+                ? Colors.black.withOpacity(0.7)
+                : const Color(0xFF14161E).withOpacity(0.18),
             blurRadius: 30,
             offset: const Offset(0, 14),
             spreadRadius: -16,
@@ -487,53 +558,53 @@ class _CoverBand extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: Stack(children: [
-          // top sheen
-          Positioned(
-            top: 0, left: 24, right: 24, height: 1,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: dark
-                    ? [Colors.transparent, Colors.white.withOpacity(0.18), Colors.transparent]
-                    : [Colors.transparent, Colors.white, Colors.transparent]),
+        child: Stack(
+          children: [
+            // top sheen
+            Positioned(
+              top: 0,
+              left: 24,
+              right: 24,
+              height: 1,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: dark
+                        ? [
+                            Colors.transparent,
+                            Colors.white.withOpacity(0.18),
+                            Colors.transparent,
+                          ]
+                        : [
+                            Colors.transparent,
+                            Colors.white,
+                            Colors.transparent,
+                          ],
+                  ),
+                ),
               ),
             ),
-          ),
-          // diagonal stripe texture
-          CustomPaint(
-            painter: _DiagonalStripesPainter(dark: dark),
-            size: Size.infinite,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-             
-          ),
-          Positioned(
-            left: 18,
-            right: 18,
-            top: 42,
-            child: _CoverStatsRow(
-              fg: fg,
-              sub: sub,
-              hairline: hairline,
+            // diagonal stripe texture
+            CustomPaint(
+              painter: _DiagonalStripesPainter(dark: dark),
+              size: Size.infinite,
             ),
-          ),
-        ]),
+            Positioned(
+              left: 18,
+              right: 18,
+              top: 42,
+              child: _CoverStatsRow(
+                fg: fg,
+                sub: sub,
+                hairline: hairline,
+                followersCount: followersCount,
+                followingCount: followingCount,
+                onFollowersTap: onFollowersTap,
+                onFollowingTap: onFollowingTap,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -543,21 +614,55 @@ class _CoverStatsRow extends StatelessWidget {
   final Color fg;
   final Color sub;
   final Color hairline;
+  final int followersCount;
+  final int followingCount;
+  final VoidCallback onFollowersTap;
+  final VoidCallback onFollowingTap;
   const _CoverStatsRow({
     required this.fg,
     required this.sub,
     required this.hairline,
+    required this.followersCount,
+    required this.followingCount,
+    required this.onFollowersTap,
+    required this.onFollowingTap,
   });
+
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return '$n';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Row(children: [
-      Expanded(child: _Stat(value: '24.3K', label: 'Followers', fg: fg, sub: sub)),
-      Container(width: 1, height: 30, color: hairline),
-      Expanded(child: _Stat(value: '482', label: 'Following', fg: fg, sub: sub)),
-      Container(width: 1, height: 30, color: hairline),
-      Expanded(child: _Stat(value: '168', label: 'Posts', fg: fg, sub: sub)),
-    ]);
+    return Row(
+      children: [
+        Expanded(
+          child: _Stat(
+            value: _fmt(followersCount),
+            label: 'Followers',
+            fg: fg,
+            sub: sub,
+            onTap: onFollowersTap,
+          ),
+        ),
+        Container(width: 1, height: 30, color: hairline),
+        Expanded(
+          child: _Stat(
+            value: _fmt(followingCount),
+            label: 'Following',
+            fg: fg,
+            sub: sub,
+            onTap: onFollowingTap,
+          ),
+        ),
+        Container(width: 1, height: 30, color: hairline),
+        Expanded(
+          child: _Stat(value: '168', label: 'Posts', fg: fg, sub: sub),
+        ),
+      ],
+    );
   }
 }
 
@@ -568,7 +673,9 @@ class _DiagonalStripesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = (dark ? Colors.white : Colors.black).withOpacity(dark ? 0.04 : 0.025)
+      ..color = (dark ? Colors.white : Colors.black).withOpacity(
+        dark ? 0.04 : 0.025,
+      )
       ..strokeWidth = 1;
     const step = 19.0;
     // diagonal at 135deg
@@ -600,34 +707,38 @@ class _NameBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Flexible(child: Text(
-              'Sarah Dietrich',
-              style: manrope(
-                size: 24,
-                weight: FontWeight.w800,
-                color: fg,
-                letterSpacing: -0.6,
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  'Sarah Dietrich',
+                  style: manrope(
+                    size: 24,
+                    weight: FontWeight.w800,
+                    color: fg,
+                    letterSpacing: -0.6,
+                  ),
+                ),
               ),
-            )),
-            const SizedBox(width: 6),
-            Icon(Icons.verified_rounded, size: 18, color: fg),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text(
-          '@sarah.d · she/her',
-          style: manrope(
-            size: 13,
-            weight: FontWeight.w500,
-            color: sub,
-            letterSpacing: -0.065,
+              const SizedBox(width: 6),
+              Icon(Icons.verified_rounded, size: 18, color: fg),
+            ],
           ),
-        ),
-      ]),
+          const SizedBox(height: 2),
+          Text(
+            '@sarah.d · she/her',
+            style: manrope(
+              size: 13,
+              weight: FontWeight.w500,
+              color: sub,
+              letterSpacing: -0.065,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -652,31 +763,39 @@ class _TitleChip extends StatelessWidget {
           height: 28,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
+            color: dark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.white.withOpacity(0.6),
             border: Border.all(
-              color: dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06),
+              color: dark
+                  ? Colors.white.withOpacity(0.10)
+                  : Colors.black.withOpacity(0.06),
             ),
             borderRadius: BorderRadius.circular(999),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              width: 5, height: 5,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: fg.withOpacity(0.85),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: fg.withOpacity(0.85),
+                ),
               ),
-            ),
-            const SizedBox(width: 7),
-            Text(
-              'Designer · Studio Atelier',
-              style: manrope(
-                size: 12,
-                weight: FontWeight.w600,
-                color: muted,
-                letterSpacing: -0.12,
+              const SizedBox(width: 7),
+              Text(
+                'Designer · Studio Atelier',
+                style: manrope(
+                  size: 12,
+                  weight: FontWeight.w600,
+                  color: muted,
+                  letterSpacing: -0.12,
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         ),
       ),
     );
@@ -706,13 +825,30 @@ class _StatsCard extends StatelessWidget {
       radius: 20,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
       blurSigma: 28,
-      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Expanded(child: _Stat(value: '168', label: 'Posts', fg: fg, sub: sub)),
-        Container(width: 1, color: hairline, margin: const EdgeInsets.symmetric(vertical: 4)),
-        Expanded(child: _Stat(value: '24.3K', label: 'Followers', fg: fg, sub: sub)),
-        Container(width: 1, color: hairline, margin: const EdgeInsets.symmetric(vertical: 4)),
-        Expanded(child: _Stat(value: '482', label: 'Following', fg: fg, sub: sub)),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _Stat(value: '168', label: 'Posts', fg: fg, sub: sub),
+          ),
+          Container(
+            width: 1,
+            color: hairline,
+            margin: const EdgeInsets.symmetric(vertical: 4),
+          ),
+          Expanded(
+            child: _Stat(value: '0', label: 'Followers', fg: fg, sub: sub),
+          ),
+          Container(
+            width: 1,
+            color: hairline,
+            margin: const EdgeInsets.symmetric(vertical: 4),
+          ),
+          Expanded(
+            child: _Stat(value: '0', label: 'Following', fg: fg, sub: sub),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -722,11 +858,18 @@ class _Stat extends StatelessWidget {
   final String label;
   final Color fg;
   final Color sub;
-  const _Stat({required this.value, required this.label, required this.fg, required this.sub});
+  final VoidCallback? onTap;
+  const _Stat({
+    required this.value,
+    required this.label,
+    required this.fg,
+    required this.sub,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final content = Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
@@ -751,6 +894,12 @@ class _Stat extends StatelessWidget {
         ),
       ],
     );
+    if (onTap == null) return content;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: content,
+    );
   }
 }
 
@@ -768,18 +917,19 @@ class _PrimaryCta extends StatelessWidget {
     return SizedBox(
       height: 44,
       child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: dark ? Colors.white : const Color(0xFF0A0A0A),
-          foregroundColor: dark ? const Color(0xFF0A0A0A) : Colors.white,
-          elevation: 0,
-          padding: EdgeInsets.zero,
-          shape: const StadiumBorder(),
-          shadowColor: Colors.transparent,
-        ).copyWith(
-          overlayColor: MaterialStateProperty.all(
-            (dark ? Colors.black : Colors.white).withOpacity(0.06),
-          ),
-        ),
+        style:
+            ElevatedButton.styleFrom(
+              backgroundColor: dark ? Colors.white : const Color(0xFF0A0A0A),
+              foregroundColor: dark ? const Color(0xFF0A0A0A) : Colors.white,
+              elevation: 0,
+              padding: EdgeInsets.zero,
+              shape: const StadiumBorder(),
+              shadowColor: Colors.transparent,
+            ).copyWith(
+              overlayColor: MaterialStateProperty.all(
+                (dark ? Colors.black : Colors.white).withOpacity(0.06),
+              ),
+            ),
         onPressed: () {},
         child: Text(
           label,
@@ -811,9 +961,13 @@ class _GhostCta extends StatelessWidget {
           height: 44,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.6),
+            color: dark
+                ? Colors.white.withOpacity(0.08)
+                : Colors.white.withOpacity(0.6),
             border: Border.all(
-              color: dark ? Colors.white.withOpacity(0.14) : Colors.black.withOpacity(0.08),
+              color: dark
+                  ? Colors.white.withOpacity(0.14)
+                  : Colors.black.withOpacity(0.08),
             ),
             borderRadius: BorderRadius.circular(999),
           ),
@@ -838,7 +992,10 @@ class _CircleGlassBtn extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
   const _CircleGlassBtn({
-    required this.dark, required this.size, required this.child, this.onTap,
+    required this.dark,
+    required this.size,
+    required this.child,
+    this.onTap,
   });
 
   @override
@@ -849,17 +1006,24 @@ class _CircleGlassBtn extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            width: size, height: size,
+            width: size,
+            height: size,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.6),
+              color: dark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.white.withOpacity(0.6),
               border: Border.all(
-                color: dark ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95),
+                color: dark
+                    ? Colors.white.withOpacity(0.10)
+                    : Colors.white.withOpacity(0.95),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: dark ? Colors.black.withOpacity(0.7) : const Color(0xFF14161E).withOpacity(0.18),
+                  color: dark
+                      ? Colors.black.withOpacity(0.7)
+                      : const Color(0xFF14161E).withOpacity(0.18),
                   blurRadius: 24,
                   offset: const Offset(0, 10),
                   spreadRadius: -14,
@@ -882,75 +1046,90 @@ class _HighlightsRow extends StatelessWidget {
   final bool dark;
   final Color sub;
   final Color muted;
-  const _HighlightsRow({required this.dark, required this.sub, required this.muted});
+  const _HighlightsRow({
+    required this.dark,
+    required this.sub,
+    required this.muted,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
-          child: Text(
-            'HIGHLIGHTS',
-            style: manrope(
-              size: 11,
-              weight: FontWeight.w700,
-              color: sub,
-              letterSpacing: 1.1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+            child: Text(
+              'HIGHLIGHTS',
+              style: manrope(
+                size: 11,
+                weight: FontWeight.w700,
+                color: sub,
+                letterSpacing: 1.1,
+              ),
             ),
           ),
-        ),
-        SizedBox(
-          height: 96,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _highlights.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, i) {
-              final h = _highlights[i];
-              return SizedBox(
-                width: 72,
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                    width: 64, height: 64,
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: dark ? Colors.white.withOpacity(0.14) : Colors.black.withOpacity(0.14),
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: dark ? const Color(0xFF0A0A0C) : const Color(0xFFFAFAFA),
-                      ),
-                      child: Container(
+          SizedBox(
+            height: 96,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _highlights.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (_, i) {
+                final h = _highlights[i];
+                return SizedBox(
+                  width: 72,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient: monoAvatar(dark, h.seed),
+                          color: dark
+                              ? Colors.white.withOpacity(0.14)
+                              : Colors.black.withOpacity(0.14),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: dark
+                                ? const Color(0xFF0A0A0C)
+                                : const Color(0xFFFAFAFA),
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: monoAvatar(dark, h.seed),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      Text(
+                        h.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: manrope(
+                          size: 11.5,
+                          weight: FontWeight.w600,
+                          color: muted,
+                          letterSpacing: -0.06,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    h.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: manrope(
-                      size: 11.5,
-                      weight: FontWeight.w600,
-                      color: muted,
-                      letterSpacing: -0.06,
-                    ),
-                  ),
-                ]),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -981,17 +1160,44 @@ class _TabsPill extends StatelessWidget {
           height: 48,
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
+            color: dark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.white.withOpacity(0.6),
             border: Border.all(
-              color: dark ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95),
+              color: dark
+                  ? Colors.white.withOpacity(0.10)
+                  : Colors.white.withOpacity(0.95),
             ),
             borderRadius: BorderRadius.circular(999),
           ),
-          child: Row(children: [
-            _TabButton(label: 'Posts',  icon: Icons.grid_on_rounded,         active: active=='Posts',  dark: dark, muted: muted, onTap: () => onChange('Posts')),
-            _TabButton(label: 'Reels',  icon: Icons.movie_creation_outlined,  active: active=='Reels',  dark: dark, muted: muted, onTap: () => onChange('Reels')),
-            _TabButton(label: 'Tagged', icon: Icons.local_offer_outlined,     active: active=='Tagged', dark: dark, muted: muted, onTap: () => onChange('Tagged')),
-          ]),
+          child: Row(
+            children: [
+              _TabButton(
+                label: 'Posts',
+                icon: Icons.grid_on_rounded,
+                active: active == 'Posts',
+                dark: dark,
+                muted: muted,
+                onTap: () => onChange('Posts'),
+              ),
+              _TabButton(
+                label: 'Reels',
+                icon: Icons.movie_creation_outlined,
+                active: active == 'Reels',
+                dark: dark,
+                muted: muted,
+                onTap: () => onChange('Reels'),
+              ),
+              _TabButton(
+                label: 'Tagged',
+                icon: Icons.local_offer_outlined,
+                active: active == 'Tagged',
+                dark: dark,
+                muted: muted,
+                onTap: () => onChange('Tagged'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1006,8 +1212,12 @@ class _TabButton extends StatelessWidget {
   final Color muted;
   final VoidCallback onTap;
   const _TabButton({
-    required this.label, required this.icon, required this.active,
-    required this.dark, required this.muted, required this.onTap,
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.dark,
+    required this.muted,
+    required this.onTap,
   });
 
   @override
@@ -1077,7 +1287,11 @@ class _ProfileTileView extends StatelessWidget {
   final ProfileTile t;
   final int i;
   final bool dark;
-  const _ProfileTileView({required this.t, required this.i, required this.dark});
+  const _ProfileTileView({
+    required this.t,
+    required this.i,
+    required this.dark,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1088,55 +1302,66 @@ class _ProfileTileView extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           gradient: _tileGradient(dark, i),
         ),
-        child: Stack(fit: StackFit.expand, children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: const Alignment(-0.4, -1),
-                radius: 1.2,
-                colors: dark
-                    ? [Colors.white.withOpacity(0.06), Colors.transparent]
-                    : [Colors.white.withOpacity(0.55), Colors.transparent],
-                stops: const [0.0, 0.55],
-              ),
-            ),
-          ),
-          if (t.kind != ProfileTileKind.photo)
-            Positioned(
-              top: 6, right: 6,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    color: Colors.black.withOpacity(0.42),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(
-                        t.kind == ProfileTileKind.reel
-                            ? Icons.play_arrow_rounded
-                            : Icons.collections_outlined,
-                        size: 11,
-                        color: Colors.white,
-                      ),
-                      if (t.kind == ProfileTileKind.carousel && t.count != null) ...[
-                        const SizedBox(width: 3),
-                        Text(
-                          '${t.count}',
-                          style: manrope(
-                            size: 10,
-                            weight: FontWeight.w700,
-                            color: Colors.white,
-                            letterSpacing: -0.1,
-                          ),
-                        ),
-                      ],
-                    ]),
-                  ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(-0.4, -1),
+                  radius: 1.2,
+                  colors: dark
+                      ? [Colors.white.withOpacity(0.06), Colors.transparent]
+                      : [Colors.white.withOpacity(0.55), Colors.transparent],
+                  stops: const [0.0, 0.55],
                 ),
               ),
             ),
-        ]),
+            if (t.kind != ProfileTileKind.photo)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      color: Colors.black.withOpacity(0.42),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            t.kind == ProfileTileKind.reel
+                                ? Icons.play_arrow_rounded
+                                : Icons.collections_outlined,
+                            size: 11,
+                            color: Colors.white,
+                          ),
+                          if (t.kind == ProfileTileKind.carousel &&
+                              t.count != null) ...[
+                            const SizedBox(width: 3),
+                            Text(
+                              '${t.count}',
+                              style: manrope(
+                                size: 10,
+                                weight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: -0.1,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -288,8 +288,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 duration: const Duration(milliseconds: 200),
                                 curve: Curves.elasticOut,
                                 builder: (_, scale, child) => Transform.scale(
-                                  scale: scale,
-                                  child: child,
+                                  scale: scale, child: child,
                                 ),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 180),
@@ -313,7 +312,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                         : null,
                                   ),
                                   alignment: Alignment.center,
-                                  // High-quality emoji: no font scaling, crisp render
                                   child: Text(
                                     emoji,
                                     style: const TextStyle(
@@ -354,8 +352,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(widget.dark ? 0.5 : 0.10),
-                            blurRadius: 20,
-                            offset: const Offset(0, 6),
+                            blurRadius: 20, offset: const Offset(0, 6),
                           ),
                         ],
                       ),
@@ -374,8 +371,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           if (isMe) ...[
                             Divider(
-                              height: 1,
-                              indent: 56,
+                              height: 1, indent: 56,
                               color: widget.dark
                                   ? Colors.white.withOpacity(0.08)
                                   : Colors.black.withOpacity(0.06),
@@ -423,16 +419,12 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
 
     showDialog(
-      context: context,
-      barrierDismissible: false,
+      context: context, barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
     try {
       await ChatService().deleteConversation(widget.conversation.id);
-      if (mounted) {
-        Navigator.pop(context);
-        Navigator.pop(context, true);
-      }
+      if (mounted) { Navigator.pop(context); Navigator.pop(context, true); }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
@@ -543,11 +535,8 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: GestureDetector(
                               onLongPress: () => _showMessageOptions(msg),
                               child: _Bubble(
-                                m: msg,
-                                isMe: isMe,
-                                dark: widget.dark,
-                                last: last,
-                                isPending: isPending,
+                                m: msg, isMe: isMe, dark: widget.dark,
+                                last: last, isPending: isPending,
                                 myUserId: widget.myUserId,
                                 onReact: (emoji) => _onReact(msg, emoji),
                               ),
@@ -585,8 +574,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(otherUser.username,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: manrope(size: 15, weight: FontWeight.w800, color: fg, letterSpacing: -0.225)),
                     const SizedBox(height: 2),
                     Row(children: [
@@ -626,7 +614,7 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
 
-              // ── Reply preview strip ── clearly visible glass box
+              // ── Reply preview strip (input box ke upar) ───────
               if (_replyingTo != null)
                 _ReplyPreview(
                   dark: widget.dark,
@@ -647,15 +635,12 @@ class _ChatScreenState extends State<ChatScreen> {
                     color: widget.dark
                         ? Colors.black.withOpacity(0.6)
                         : const Color(0xFF14161E).withOpacity(0.20),
-                    blurRadius: 30,
-                    offset: const Offset(0, -10),
-                    spreadRadius: -16,
+                    blurRadius: 30, offset: const Offset(0, -10), spreadRadius: -16,
                   ),
                   child: Row(children: [
                     const SizedBox(width: 2),
                     GlassCircleButton(
-                      dark: widget.dark,
-                      icon: Icons.add_rounded,
+                      dark: widget.dark, icon: Icons.add_rounded,
                       size: 38, iconSize: 22,
                       bg: widget.dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
                     ),
@@ -680,8 +665,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     GestureDetector(
                       onTap: _sendMessage,
                       child: GlassCircleButton(
-                        dark: widget.dark,
-                        icon: Icons.send_rounded,
+                        dark: widget.dark, icon: Icons.send_rounded,
                         size: 38, iconSize: 18,
                         bg: widget.dark ? Colors.white : const Color(0xFF0A0A0A),
                         fg: widget.dark ? const Color(0xFF0A0A0A) : Colors.white,
@@ -699,8 +683,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// ── Reply preview strip (input bar ke upar) ──────────────────
-// FIX: Clearly visible glass box — not transparent
+// ─────────────────────────────────────────────────────────────
+// Reply preview strip — above the input bar
+// Fully opaque, clearly visible on any background (dark or light)
+// ─────────────────────────────────────────────────────────────
 
 class _ReplyPreview extends StatelessWidget {
   final bool dark;
@@ -709,18 +695,20 @@ class _ReplyPreview extends StatelessWidget {
   final VoidCallback onCancel;
 
   const _ReplyPreview({
-    required this.dark,
-    required this.text,
-    required this.height,
-    required this.onCancel,
+    required this.dark, required this.text,
+    required this.height, required this.onCancel,
   });
 
   @override
   Widget build(BuildContext context) {
-    final accentBar = dark ? Colors.white : const Color(0xFF0A0A0A);
-    final labelColor = dark ? Colors.white.withOpacity(0.55) : Colors.black.withOpacity(0.45);
-    final textColor  = dark ? Colors.white : Colors.black87;
-    final closeColor = dark ? Colors.white.withOpacity(0.45) : Colors.black.withOpacity(0.35);
+    final accentBar  = dark ? Colors.white        : const Color(0xFF0A0A0A);
+    final labelColor = dark
+        ? Colors.white.withOpacity(0.55)
+        : Colors.black.withOpacity(0.45);
+    final textColor  = dark ? Colors.white        : Colors.black87;
+    final closeColor = dark
+        ? Colors.white.withOpacity(0.45)
+        : Colors.black.withOpacity(0.35);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
@@ -730,7 +718,7 @@ class _ReplyPreview extends StatelessWidget {
           height: height,
           margin: const EdgeInsets.only(bottom: 8, left: 2, right: 2),
           decoration: BoxDecoration(
-            // Solid-enough background — clearly visible on any bg
+            // 0.95 opacity → fully readable on glass backdrop
             color: dark
                 ? const Color(0xFF2A2A2E).withOpacity(0.95)
                 : Colors.white.withOpacity(0.96),
@@ -744,20 +732,15 @@ class _ReplyPreview extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(dark ? 0.40 : 0.10),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
+                blurRadius: 16, offset: const Offset(0, 4),
               ),
             ],
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(children: [
-            // Accent left bar
             Container(
               width: 3.5, height: 28,
-              decoration: BoxDecoration(
-                color: accentBar,
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(color: accentBar, borderRadius: BorderRadius.circular(4)),
             ),
             const SizedBox(width: 12),
             Icon(Icons.reply_rounded, size: 15, color: accentBar.withOpacity(0.7)),
@@ -767,17 +750,12 @@ class _ReplyPreview extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    'Replying to',
-                    style: manrope(size: 10.5, weight: FontWeight.w700, color: labelColor),
-                  ),
+                  Text('Replying to',
+                      style: manrope(size: 10.5, weight: FontWeight.w700, color: labelColor)),
                   const SizedBox(height: 2),
-                  Text(
-                    text,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: manrope(size: 13, weight: FontWeight.w600, color: textColor),
-                  ),
+                  Text(text,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: manrope(size: 13, weight: FontWeight.w600, color: textColor)),
                 ],
               ),
             ),
@@ -801,7 +779,9 @@ class _ReplyPreview extends StatelessWidget {
   }
 }
 
-// ── Bubble ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Bubble
+// ─────────────────────────────────────────────────────────────
 
 class _Bubble extends StatelessWidget {
   final ChatMessage m;
@@ -813,12 +793,8 @@ class _Bubble extends StatelessWidget {
   final void Function(String emoji) onReact;
 
   const _Bubble({
-    required this.m,
-    required this.isMe,
-    required this.dark,
-    required this.last,
-    required this.myUserId,
-    required this.onReact,
+    required this.m, required this.isMe, required this.dark,
+    required this.last, required this.myUserId, required this.onReact,
     this.isPending = false,
   });
 
@@ -853,11 +829,11 @@ class _Bubble extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
 
-              // ── Reply quote inside bubble ──────────────────
+              // ── Reply quote (renders above bubble, needs own solid bg) ──
               if (m.replyToId != null && m.replyToText != null && m.replyToText!.isNotEmpty)
-                _ReplyQuote(text: m.replyToText!, isMe: isMe, dark: dark, radius: radius),
+                _ReplyQuote(text: m.replyToText!, isMe: isMe, dark: dark),
 
-              // ── Main bubble + floating reaction chips ──────
+              // ── Main bubble ────────────────────────────────
               Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -885,7 +861,6 @@ class _Bubble extends StatelessWidget {
                               margin: const EdgeInsets.symmetric(horizontal: 2),
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
                               decoration: BoxDecoration(
-                                // Clean visible chip — same as Instagram
                                 color: dark
                                     ? (hasMyReaction
                                         ? Colors.white.withOpacity(0.22)
@@ -907,35 +882,25 @@ class _Bubble extends StatelessWidget {
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withOpacity(dark ? 0.35 : 0.08),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
+                                    blurRadius: 8, offset: const Offset(0, 2),
                                   ),
                                 ],
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  // High-quality emoji render
-                                  Text(
-                                    emoji,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      height: 1.0,
-                                      fontFamilyFallback: ['Apple Color Emoji', 'Noto Color Emoji'],
-                                    ),
-                                  ),
+                                  Text(emoji,
+                                      style: const TextStyle(
+                                        fontSize: 15, height: 1.0,
+                                        fontFamilyFallback: ['Apple Color Emoji', 'Noto Color Emoji'],
+                                      )),
                                   if (count > 1) ...[
                                     const SizedBox(width: 4),
-                                    Text(
-                                      '$count',
-                                      style: manrope(
-                                        size: 11.5,
-                                        weight: FontWeight.w700,
-                                        color: dark
-                                            ? Colors.white.withOpacity(0.9)
-                                            : Colors.black87,
-                                      ),
-                                    ),
+                                    Text('$count',
+                                        style: manrope(
+                                          size: 11.5, weight: FontWeight.w700,
+                                          color: dark ? Colors.white.withOpacity(0.9) : Colors.black87,
+                                        )),
                                   ],
                                 ],
                               ),
@@ -1021,68 +986,70 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-// ── Reply quote shown inside bubble ──────────────────────────
-// FIX: Properly visible background — was near-invisible before
+// ─────────────────────────────────────────────────────────────
+// Reply quote — shown ABOVE the bubble (not inside it).
+// Renders directly on the glass backdrop → needs fully opaque bg.
+//
+// FIX: replaced near-invisible withOpacity(0.07–0.22) values with
+// solid Color values that are clearly readable in both dark & light.
+// ─────────────────────────────────────────────────────────────
 
 class _ReplyQuote extends StatelessWidget {
   final String text;
   final bool isMe;
   final bool dark;
-  final BorderRadius radius;
 
   const _ReplyQuote({
-    required this.text,
-    required this.isMe,
-    required this.dark,
-    required this.radius,
+    required this.text, required this.isMe, required this.dark,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Clearly readable text + accent bar colors based on bubble type
-    final textColor = isMe
-        ? (dark ? Colors.black.withOpacity(0.75) : Colors.white.withOpacity(0.85))
-        : (dark ? Colors.white.withOpacity(0.80) : Colors.black.withOpacity(0.70));
+    // ── Solid opaque backgrounds ──────────────────────────────
+    // Dark mode glass backdrop ≈ #000000 → use a clearly lighter solid
+    // Light mode glass backdrop ≈ #FAFAFA → use a clearly darker solid
+    final bgColor = dark
+        ? const Color(0xFF2B2B2F)  // dark: clearly visible on near-black bg
+        : const Color(0xFFE8E8EC); // light: clearly visible on near-white bg
 
-    final labelColor = isMe
-        ? (dark ? Colors.black.withOpacity(0.50) : Colors.white.withOpacity(0.60))
-        : (dark ? Colors.white.withOpacity(0.50) : Colors.black.withOpacity(0.45));
+    final borderColor = dark
+        ? Colors.white.withOpacity(0.14)
+        : Colors.black.withOpacity(0.09);
 
-    // Solid visible background — not transparent
-    final bgColor = isMe
-        ? (dark
-            ? Colors.black.withOpacity(0.22)  // inside white bubble → dark strip
-            : Colors.white.withOpacity(0.22)) // inside black bubble → white strip
-        : (dark
-            ? Colors.white.withOpacity(0.10)  // inside dark grey bubble
-            : Colors.black.withOpacity(0.07)); // inside white bubble
+    final accentBar = dark
+        ? Colors.white.withOpacity(0.60)
+        : Colors.black.withOpacity(0.40);
 
-    final accentBar = isMe
-        ? (dark ? Colors.black.withOpacity(0.50) : Colors.white.withOpacity(0.60))
-        : (dark ? Colors.white.withOpacity(0.45) : Colors.black.withOpacity(0.35));
+    final labelColor = dark
+        ? Colors.white.withOpacity(0.45)
+        : Colors.black.withOpacity(0.42);
+
+    final textColor = dark
+        ? Colors.white.withOpacity(0.92)   // bright white on dark card
+        : Colors.black.withOpacity(0.82);  // near-black on light card
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
+      margin: const EdgeInsets.only(bottom: 5),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isMe
-              ? (dark ? Colors.black.withOpacity(0.15) : Colors.white.withOpacity(0.20))
-              : (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06)),
-          width: 0.6,
-        ),
+        border: Border.all(color: borderColor, width: 0.7),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(dark ? 0.28 : 0.07),
+            blurRadius: 8, offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Accent left bar
+          // Left accent bar
           Container(
-            width: 2.5, height: 30,
+            width: 2.5, height: 32,
             decoration: BoxDecoration(
-              color: accentBar,
-              borderRadius: BorderRadius.circular(4),
+              color: accentBar, borderRadius: BorderRadius.circular(4),
             ),
           ),
           const SizedBox(width: 8),
@@ -1091,18 +1058,13 @@ class _ReplyQuote extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Reply',
-                  style: manrope(size: 10, weight: FontWeight.w700, color: labelColor),
-                ),
+                Text('Replying to',
+                    style: manrope(size: 10, weight: FontWeight.w700, color: labelColor)),
                 const SizedBox(height: 2),
-                Text(
-                  text,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: manrope(size: 12.5, weight: FontWeight.w500,
-                      color: textColor, height: 1.3),
-                ),
+                Text(text,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: manrope(size: 12.5, weight: FontWeight.w500,
+                        color: textColor, height: 1.3)),
               ],
             ),
           ),
@@ -1112,7 +1074,9 @@ class _ReplyQuote extends StatelessWidget {
   }
 }
 
-// ── Bottom-sheet tile ────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Bottom-sheet tile
+// ─────────────────────────────────────────────────────────────
 
 class _SheetTile extends StatelessWidget {
   final bool dark;
@@ -1122,11 +1086,8 @@ class _SheetTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _SheetTile({
-    required this.dark,
-    required this.icon,
-    required this.label,
-    required this.fg,
-    required this.onTap,
+    required this.dark, required this.icon,
+    required this.label, required this.fg, required this.onTap,
   });
 
   @override
@@ -1147,7 +1108,9 @@ class _SheetTile extends StatelessWidget {
   }
 }
 
-// ── Typing bubble ────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Typing bubble
+// ─────────────────────────────────────────────────────────────
 
 class _BubbleTyping extends StatelessWidget {
   final bool dark;
@@ -1232,7 +1195,9 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
   }
 }
 
-// ── Swipe to Reply ────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Swipe to Reply
+// ─────────────────────────────────────────────────────────────
 
 class SwipeToReply extends StatefulWidget {
   final Widget child;
@@ -1241,11 +1206,8 @@ class SwipeToReply extends StatefulWidget {
   final bool dark;
 
   const SwipeToReply({
-    super.key,
-    required this.child,
-    required this.onReply,
-    required this.dark,
-    this.enabled = true,
+    super.key, required this.child, required this.onReply,
+    required this.dark, this.enabled = true,
   });
 
   @override

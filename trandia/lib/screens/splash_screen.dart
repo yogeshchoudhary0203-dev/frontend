@@ -188,10 +188,6 @@ class _SplashScreenState extends State<SplashScreen>
           final totalScale = entryScale * breatheScale * exitScale;
           final totalOpacity = entryOpacity * exitOpacity;
 
-          // Mark reveal — driven by entry progress after a small delay.
-          final markProgress = Curves.easeOutCubic
-              .transform(((_entry.value - 0.25).clamp(0.0, 1.0)) / 0.75);
-
           return Stack(
             children: [
               // LOGO
@@ -205,12 +201,7 @@ class _SplashScreenState extends State<SplashScreen>
                       angle: entryRotate,
                       child: Transform.scale(
                         scale: totalScale,
-                        child: _SquircleLogo(
-                          size: logoSize,
-                          background: fg,
-                          markColor: bg,
-                          markProgress: markProgress,
-                        ),
+                        child: _SquircleLogo(size: logoSize),
                       ),
                     ),
                   ),
@@ -239,99 +230,49 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 // ---------------------------------------------------------------------------
-// SQUIRCLE LOGO  (superellipse outer shape + abstract inner mark)
+// SQUIRCLE LOGO
 // ---------------------------------------------------------------------------
 
 class _SquircleLogo extends StatelessWidget {
-  const _SquircleLogo({
-    required this.size,
-    required this.background,
-    required this.markColor,
-    required this.markProgress,
-  });
+  const _SquircleLogo({required this.size});
 
   final double size;
-  final Color background;
-  final Color markColor;
-  final double markProgress;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(
-        painter: _SquirclePainter(
-          background: background,
-          markColor: markColor,
-          markProgress: markProgress,
+      child: ClipPath(
+        clipper: _SquircleClipper(),
+        child: Image.asset(
+          'assets/icons/app_icon.png',
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.high,
         ),
       ),
     );
   }
 }
 
-class _SquirclePainter extends CustomPainter {
-  _SquirclePainter({
-    required this.background,
-    required this.markColor,
-    required this.markProgress,
-  });
-
-  final Color background;
-  final Color markColor;
-  final double markProgress;
-
+class _SquircleClipper extends CustomClipper<Path> {
   @override
-  void paint(Canvas canvas, Size size) {
+  Path getClip(Size size) {
     final w = size.width, h = size.height;
 
-    // Outer squircle (iOS-style superellipse via cubic bezier).
-    final path = Path()
+    return Path()
       ..moveTo(w * 0.5, 0)
       ..cubicTo(w * 0.84, 0, w, h * 0.16, w, h * 0.5)
       ..cubicTo(w, h * 0.84, w * 0.84, h, w * 0.5, h)
       ..cubicTo(w * 0.16, h, 0, h * 0.84, 0, h * 0.5)
       ..cubicTo(0, h * 0.16, w * 0.16, 0, w * 0.5, 0)
       ..close();
-    canvas.drawPath(path, Paint()..color = background);
-
-    // Inner mark — pops in with markProgress.
-    if (markProgress <= 0) return;
-    final markPaint = Paint()
-      ..color = markColor.withValues(alpha: 0.96 * markProgress);
-
-    canvas.save();
-    final center = Offset(w / 2, h / 2);
-    canvas.translate(center.dx, center.dy);
-    final s = 0.6 + 0.4 * markProgress;
-    canvas.scale(s, s);
-    canvas.translate(-center.dx, -center.dy);
-
-    final mark = Path()
-      ..moveTo(w * 0.35, h * 0.35)
-      ..lineTo(w * 0.65, h * 0.35)
-      ..cubicTo(w * 0.69, h * 0.35, w * 0.69, h * 0.41, w * 0.65, h * 0.41)
-      ..lineTo(w * 0.475, h * 0.41)
-      ..cubicTo(w * 0.435, h * 0.41, w * 0.435, h * 0.47, w * 0.475, h * 0.47)
-      ..lineTo(w * 0.65, h * 0.47)
-      ..cubicTo(w * 0.69, h * 0.47, w * 0.69, h * 0.65, w * 0.65, h * 0.65)
-      ..lineTo(w * 0.35, h * 0.65)
-      ..cubicTo(w * 0.31, h * 0.65, w * 0.31, h * 0.59, w * 0.35, h * 0.59)
-      ..lineTo(w * 0.525, h * 0.59)
-      ..cubicTo(w * 0.565, h * 0.59, w * 0.565, h * 0.53, w * 0.525, h * 0.53)
-      ..lineTo(w * 0.35, h * 0.53)
-      ..cubicTo(w * 0.31, h * 0.53, w * 0.31, h * 0.35, w * 0.35, h * 0.35)
-      ..close();
-    canvas.drawPath(mark, markPaint);
-    canvas.restore();
   }
 
   @override
-  bool shouldRepaint(_SquirclePainter old) =>
-      old.markProgress != markProgress ||
-      old.background != background ||
-      old.markColor != markColor;
+  bool shouldReclip(_SquircleClipper oldClipper) => false;
 }
 
 // ---------------------------------------------------------------------------

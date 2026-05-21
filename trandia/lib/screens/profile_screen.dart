@@ -118,7 +118,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  padding: EdgeInsets.fromLTRB(
+                    12,
+                    MediaQuery.paddingOf(context).top + 12,
+                    12,
+                    10,
+                  ),
                   child: Row(
                     children: [
                       const Spacer(),

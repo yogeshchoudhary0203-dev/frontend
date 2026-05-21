@@ -95,6 +95,8 @@ class _ShotsScreenState extends State<ShotsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.of(context).viewPadding.top;
+
     // Shots is always over a black video frame regardless of theme.
     return Scaffold(
       backgroundColor: Colors.black,
@@ -104,7 +106,9 @@ class _ShotsScreenState extends State<ShotsScreen>
         _bottomFade(),
         // Top: search slot · pill · camera
         Positioned(
-          top: 14, left: 16, right: 16,
+          top: topInset == 0 ? 14 : topInset + 10,
+          left: 16,
+          right: 16,
           child: _TopBar(feed: _feed, onTap: _setFeed),
         ),
         // Right rail

@@ -59,8 +59,6 @@ IconData _kindIcon(NfKind k) {
 const double _kCardHeight = 76;
 const double _kCardGap    = 10;
 const double _kListStartY = 112; // header(48) + 12 + chips(30) + 22 spacing
-const double _kStackPinY  = 0;   // where the top-most stacked card visually sits, relative to list viewport top
-const double _kPeek       = 5;
 const int    _kMaxStack   = 4;
 
 class NotificationsScreen extends StatefulWidget {
@@ -93,6 +91,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final dark = widget.dark;
     final items = _filtered;
+    final topPad = MediaQuery.paddingOf(context).top;
+    final headerTop = topPad + 10;
+    final chipsTop = topPad + 70;
+    final listTop = topPad + 104;
+    const listInnerTopPadding = _kListStartY - 104;
+    final listStartGlobalY = listTop + listInnerTopPadding;
 
     return Container(
       color: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
@@ -101,7 +105,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
         // ── Cascade list (positioned below header to prevent overlap) ──
         Positioned(
-          top: 104, bottom: 0, left: 0, right: 0,
+          top: listTop, bottom: 0, left: 0, right: 0,
           child: AnimatedBuilder(
             animation: _scroll,
             builder: (context, _) {
@@ -109,13 +113,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               final viewportHeight = MediaQuery.of(context).size.height;
               return SingleChildScrollView(
                 controller: _scroll,
-                padding: const EdgeInsets.only(top: _kListStartY - 104, bottom: 40, left: 10, right: 10),
+                padding: const EdgeInsets.only(top: listInnerTopPadding, bottom: 40, left: 10, right: 10),
                 child: SizedBox(
                   // explicit height so we can absolute-position cards inside
                   height: items.length * (_kCardHeight + _kCardGap),
                   child: Stack(clipBehavior: Clip.none, children: [
                     for (int i = items.length - 1; i >= 0; i--)
-                      _buildCascadeCard(items[i], i, offset, dark, viewportHeight),
+                      _buildCascadeCard(items[i], i, offset, dark, viewportHeight, listStartGlobalY),
                   ]),
                 ),
               );
@@ -125,7 +129,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
         // ── Floating header pill ──
         Positioned(
-          top: 10, left: 12, right: 12,
+          top: headerTop, left: 12, right: 12,
           child: GlassHeader(
             dark: dark,
             child: Row(children: [
@@ -144,7 +148,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
         // ── Filter chips ──
         Positioned(
-          top: 70, left: 0, right: 0,
+          top: chipsTop, left: 0, right: 0,
           child: SizedBox(
             height: 30,
             child: ListView(
@@ -167,12 +171,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   /// Computes per-card transform & places each card via Positioned + Transform.
-  Widget _buildCascadeCard(NfItem item, int i, double scrollOffset, bool dark, double viewportHeight) {
+  Widget _buildCascadeCard(NfItem item, int i, double scrollOffset, bool dark, double viewportHeight, double listStartGlobalY) {
     final stride = _kCardHeight + _kCardGap;
     final cardTop = i * stride;
     final card = _NfCardInner(n: item, i: i, dark: dark);
 
-    final screenY = _kListStartY - scrollOffset + cardTop;
+    final screenY = listStartGlobalY - scrollOffset + cardTop;
     final stackZoneScreenY = viewportHeight - 100.0;
 
     final overage = screenY - stackZoneScreenY;
@@ -191,7 +195,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     final pinScreenY = stackZoneScreenY + depth * 14.0;
-    final pinY = pinScreenY - (_kListStartY - scrollOffset);
+    final pinY = pinScreenY - (listStartGlobalY - scrollOffset);
     final ty = pinY - cardTop;
     final scale = 1.0 - depth * 0.05;
     final opacity = (1.0 - depth * 0.25).clamp(0.0, 1.0);

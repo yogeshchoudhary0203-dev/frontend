@@ -1101,6 +1101,7 @@ class _IslandNotificationOverlayState
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
+        final topPad = MediaQuery.paddingOf(context).top;
         final t = widget.controller.value; // 0→closed  1→open
 
         // ── Interpolated geometry ────────────────────
@@ -1173,7 +1174,7 @@ class _IslandNotificationOverlayState
                       // Drag handle pill (iPhone style)
                       if (contentAlpha > 0.1)
                         Positioned(
-                          top: 10, left: 0, right: 0,
+                          top: topPad + 6, left: 0, right: 0,
                           child: Opacity(
                             opacity: contentAlpha,
                             child: Center(

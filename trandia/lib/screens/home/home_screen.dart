@@ -855,19 +855,24 @@ class _SaveCirclePainter extends CustomPainter {
     final sy = size.height / 26.0;
 
     final bookmark = Path()
-      ..moveTo(7.0 * sx, 3.2 * sy)
-      ..lineTo(19.0 * sx, 3.2 * sy)
-      ..cubicTo(20.7 * sx, 3.2 * sy, 22.0 * sx, 4.5 * sy, 22.0 * sx, 6.2 * sy)
-      ..lineTo(22.0 * sx, 21.0 * sy)
-      ..cubicTo(22.0 * sx, 22.6 * sy, 20.2 * sx, 23.4 * sy, 19.0 * sx, 22.2 * sy)
-      ..lineTo(13.0 * sx, 16.6 * sy)
-      ..lineTo(7.0 * sx, 22.2 * sy)
-      ..cubicTo(5.8 * sx, 23.4 * sy, 4.0 * sx, 22.6 * sy, 4.0 * sx, 21.0 * sy)
-      ..lineTo(4.0 * sx, 6.2 * sy)
-      ..cubicTo(4.0 * sx, 4.5 * sy, 5.3 * sx, 3.2 * sy, 7.0 * sx, 3.2 * sy)
+      ..moveTo(5.0 * sx, 22.5 * sy)
+      ..lineTo(5.0 * sx, 6.8 * sy)
+      ..cubicTo(5.0 * sx, 4.0 * sy, 7.0 * sx, 2.7 * sy, 9.4 * sx, 2.7 * sy)
+      ..lineTo(16.6 * sx, 2.7 * sy)
+      ..cubicTo(19.0 * sx, 2.7 * sy, 21.0 * sx, 4.0 * sy, 21.0 * sx, 6.8 * sy)
+      ..lineTo(21.0 * sx, 22.5 * sy)
+      ..lineTo(13.0 * sx, 15.6 * sy)
       ..close();
 
-    canvas.drawPath(bookmark, Paint()..color = color);
+    canvas.drawPath(
+      bookmark,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
   }
 
   @override
@@ -1016,7 +1021,12 @@ class _NavIconPainter extends CustomPainter {
           ..lineTo(cx, cy + r * 0.50)
           ..lineTo(cx - r * 0.20, cy)
           ..close();
-        canvas.drawPath(needle, stroke);
+        canvas.drawPath(
+          play,
+          Paint()
+            ..color = Colors.black.op(alpha)
+            ..style = PaintingStyle.fill,
+        );
         break;
       case 2:
         final double inset = w * 0.12;

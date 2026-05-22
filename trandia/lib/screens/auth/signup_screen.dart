@@ -192,6 +192,51 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
+  Future<DateTime?> _showDobPicker(BuildContext context, _GlassTheme t) async {
+    final now = DateTime.now();
+    final initialDate = DateTime(now.year - 18, now.month, now.day);
+    final firstDate = DateTime(now.year - 100);
+    final lastDate = now;
+
+    return await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      helpText: 'SELECT YOUR DATE OF BIRTH',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: t.dark
+                ? ColorScheme.dark(
+                    primary: t.fg,
+                    onPrimary: t.bgStops.last,
+                    surface: t.bgStops.first,
+                    onSurface: t.fg,
+                    secondary: t.muted,
+                  )
+                : ColorScheme.light(
+                    primary: t.fg,
+                    onPrimary: t.bgStops.last,
+                    surface: t.bgStops.first,
+                    onSurface: t.fg,
+                    secondary: t.muted,
+                  ),
+            dialogTheme: DialogThemeData(
+              backgroundColor: t.bgStops.first,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: t.fg,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
+
   Future<void> _handleSignUp() async {
     final name     = _nameController.text.trim();
     final username = _usernameController.text.trim();
@@ -218,6 +263,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showError('Please fix the username before continuing.');
       return;
     }
+
+    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final t = _GlassTheme.of(isDark);
+    final dob = await _showDobPicker(context, t);
+    if (dob == null) return;
 
     setState(() => _isLoading = true);
     try {
@@ -252,6 +302,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _handleGoogleSignUp() async {
+    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final t = _GlassTheme.of(isDark);
+    final dob = await _showDobPicker(context, t);
+    if (dob == null) return;
+
     setState(() => _isLoading = true);
     try {
       final result = await AuthService.loginWithGoogle();

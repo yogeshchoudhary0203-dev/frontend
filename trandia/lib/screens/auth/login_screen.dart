@@ -52,12 +52,6 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await AuthService.login(email, password);
       if (!mounted) return;
-      
-      final isDark = Theme.of(context).brightness == Brightness.dark;
-      final t = _GlassTheme.of(isDark);
-      
-      final dob = await _showDobPopup(context, t);
-      if (dob == null || !mounted) return;
 
       Navigator.pushAndRemoveUntil(
         context,
@@ -79,12 +73,6 @@ class _LoginScreenState extends State<LoginScreen> {
       final result = await AuthService.loginWithGoogle();
       if (result == null) return;
       if (!mounted) return;
-      
-      final isDark = Theme.of(context).brightness == Brightness.dark;
-      final t = _GlassTheme.of(isDark);
-      
-      final dob = await _showDobPopup(context, t);
-      if (dob == null || !mounted) return;
 
       Navigator.pushAndRemoveUntil(
         context,
@@ -98,155 +86,6 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Future<DateTime?> _showDobPopup(BuildContext context, _GlassTheme t) async {
-    DateTime? tempDate;
-    return showDialog<DateTime>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Center(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 400),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: _GlassCard(
-                        t: t,
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                'Verify your age',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: t.fg,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Please enter your date of birth to continue.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: t.muted,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 24),
-                              // Glassmorphic Date Picker Button
-                              GestureDetector(
-                                onTap: () async {
-                                  final DateTime? picked = await showDatePicker(
-                                    context: context,
-                                    initialDate: tempDate ?? DateTime.now().subtract(const Duration(days: 365 * 18)),
-                                    firstDate: DateTime(1900),
-                                    lastDate: DateTime.now(),
-                                    builder: (context, child) {
-                                      final isDark = Theme.of(context).brightness == Brightness.dark;
-                                      return Theme(
-                                        data: isDark
-                                            ? ThemeData.dark().copyWith(
-                                                colorScheme: const ColorScheme.dark(
-                                                  primary: Colors.white,
-                                                  onPrimary: Colors.black,
-                                                  surface: Color(0xFF1E1E1E),
-                                                  onSurface: Colors.white,
-                                                ),
-                                                dialogTheme: const DialogThemeData(
-                                                  backgroundColor: Color(0xFF1A1A1A),
-                                                ),
-                                              )
-                                            : ThemeData.light().copyWith(
-                                                colorScheme: const ColorScheme.light(
-                                                  primary: Colors.black,
-                                                  onPrimary: Colors.white,
-                                                  surface: Colors.white,
-                                                  onSurface: Colors.black,
-                                                ),
-                                                dialogTheme: const DialogThemeData(
-                                                  backgroundColor: Colors.white,
-                                                ),
-                                              ),
-                                        child: child!,
-                                      );
-                                    },
-                                  );
-                                  if (picked != null) {
-                                    setDialogState(() {
-                                      tempDate = picked;
-                                    });
-                                  }
-                                },
-                                child: Container(
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(color: t.fieldBorder, width: 1),
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: t.fieldFill,
-                                    ),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          tempDate == null
-                                              ? 'Select Date of Birth'
-                                              : '${tempDate!.day.toString().padLeft(2, '0')}/${tempDate!.month.toString().padLeft(2, '0')}/${tempDate!.year}',
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            color: tempDate == null ? t.placeholder : t.fg,
-                                            fontWeight: FontWeight.normal,
-                                          ),
-                                        ),
-                                        Icon(
-                                          Icons.calendar_month_outlined,
-                                          color: t.muted,
-                                          size: 20,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              _PrimaryPillButton(
-                                t: t,
-                                label: 'Submit',
-                                onTap: tempDate == null
-                                    ? null
-                                    : () {
-                                        Navigator.pop(context, tempDate);
-                                      },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
   }
 
   @override

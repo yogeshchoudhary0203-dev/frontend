@@ -2,15 +2,12 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
-import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/intro_slides.dart';
-import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/fcm_service.dart';
 import 'utils/web_utils.dart';
@@ -92,20 +89,19 @@ class _TrandiaAppState extends State<TrandiaApp> {
         colorScheme: const ColorScheme.dark(surface: Color(0xFF111111)),
       ),
       themeMode: ThemeMode.system,
-      home: const SplashScreen(nextScreen: IntroSlidesScreen()),
+      home: const SplashScreen(nextScreen: _StartupRouter()),
     );
   }
 }
 
-// Retained original splash routing logic (unchanged)
-class _SplashRouter extends StatefulWidget {
-  const _SplashRouter();
+class _StartupRouter extends StatefulWidget {
+  const _StartupRouter();
 
   @override
-  State<_SplashRouter> createState() => _SplashRouterState();
+  State<_StartupRouter> createState() => _StartupRouterState();
 }
 
-class _SplashRouterState extends State<_SplashRouter> {
+class _StartupRouterState extends State<_StartupRouter> {
   @override
   void initState() {
     super.initState();
@@ -118,10 +114,22 @@ class _SplashRouterState extends State<_SplashRouter> {
       await ApiService.saveToken(params['token']!);
       clearUrlSearchParams();
       if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
       return;
     }
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const IntroSlidesScreen()),
+    );
   }
 
   @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: CircularProgressIndicator()));
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
 }

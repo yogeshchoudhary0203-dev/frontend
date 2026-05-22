@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'glass_common.dart';
+import 'parental_control_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool dark;
@@ -143,6 +144,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onChanged: (v) {
                             if (v != null) setState(() => selectedLanguage = v);
                           },
+                        ),
+                      ),
+                      // Parental Control option
+                      GestureDetector(
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParentalControlScreen(dark: dark))),
+                        child: _BaseRow(
+                          dark: dark,
+                          icon: Icons.supervised_user_circle,
+                          title: 'Parental Control',
+                          subtitle: '',
+                          trailing: Icon(Icons.chevron_right_rounded, color: GlassTokens.sub(dark), size: 24),
                         ),
                       ),
                       const SizedBox(height: 16),

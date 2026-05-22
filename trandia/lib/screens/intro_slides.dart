@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'auth/login_screen.dart';
-import 'home/home_screen.dart';
-import '../../services/auth_service.dart';
 
 class IntroSlidesScreen extends StatefulWidget {
   const IntroSlidesScreen({Key? key}) : super(key: key);
@@ -29,14 +27,23 @@ class _IntroSlidesScreenState extends State<IntroSlidesScreen> {
     ),
   ];
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   void _next() async {
     if (_page < _pages.length - 1) {
-      _controller.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      _controller.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     } else {
-      // after slides decide where to go based on auth
-      final loggedIn = await AuthService.isLoggedIn();
-      if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => loggedIn ? const HomeScreen() : const LoginScreen()));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
     }
   }
 

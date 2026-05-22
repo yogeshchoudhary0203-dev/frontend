@@ -228,6 +228,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  Future<void> _deleteNotification(NfItem item) async {
+    if (item.id.isEmpty) return;
+
+    final index = _items.indexWhere((n) => n.id == item.id);
+    if (index == -1) return;
+
+    final removed = _items[index];
+    setState(() { _items.removeAt(index); });
+
+    try {
+      await ApiService.delete('/notifications/${item.id}', requiresAuth: true);
+    } catch (e) {
+      debugPrint('[Notifications] delete error: $e');
+      if (!mounted) return;
+      final restoreIndex = index > _items.length ? _items.length : index;
+      setState(() { _items.insert(restoreIndex, removed); });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not delete notification')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dark = widget.dark;
@@ -437,7 +459,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget _buildCascadeCard(NfItem item, int i, double scrollOffset, bool dark, double viewportHeight, double listStartGlobalY) {
     final stride = _kCardHeight + _kCardGap;
     final cardTop = i * stride;
-    final card = _NfCardInner(n: item, i: i, dark: dark);
+    final card = _NfCardInner(
+      n: item,
+      i: i,
+      dark: dark,
+      onDelete: () => _deleteNotification(item),
+    );
 
     final screenY = listStartGlobalY - scrollOffset + cardTop;
     final stackZoneScreenY = viewportHeight - 100.0;
@@ -483,7 +510,13 @@ class _NfCardInner extends StatelessWidget {
   final NfItem n;
   final int i;
   final bool dark;
-  const _NfCardInner({required this.n, required this.i, required this.dark});
+  final VoidCallback onDelete;
+  const _NfCardInner({
+    required this.n,
+    required this.i,
+    required this.dark,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -571,6 +604,33 @@ class _NfCardInner extends StatelessWidget {
               gradient: monoAvatar(dark, i + 2),
             ),
           ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: onDelete,
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.black.withOpacity(0.05),
+              border: Border.all(
+                color: dark
+                    ? Colors.white.withOpacity(0.14)
+                    : Colors.black.withOpacity(0.08),
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.delete_outline_rounded,
+              size: 16,
+              color: dark
+                  ? Colors.white.withOpacity(0.72)
+                  : Colors.black.withOpacity(0.62),
+            ),
+          ),
+        ),
       ]),
     );
   }

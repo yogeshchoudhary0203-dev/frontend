@@ -31,6 +31,19 @@ class UserProfile {
       followingCount: json['following_count'] ?? 0,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'username': username,
+      'picture': picture,
+      'public_key': publicKey,
+      'is_following': isFollowing,
+      'followers_count': followersCount,
+      'following_count': followingCount,
+    };
+  }
 }
 
 class ChatConversation {

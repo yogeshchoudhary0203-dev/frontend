@@ -6,9 +6,11 @@
 
 import 'dart:ui';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
@@ -135,9 +137,46 @@ enum RecentKind { user, tag, place }
 
 class RecentItem {
   final RecentKind kind;
-  final String name;
+  final String name; // username for user, tag name for tag, place name for place
   final String sub;
-  const RecentItem({required this.kind, required this.name, required this.sub});
+  final String? id;
+  final String? picture;
+  final bool? isFollowing;
+  final String? displayName;
+
+  const RecentItem({
+    required this.kind,
+    required this.name,
+    required this.sub,
+    this.id,
+    this.picture,
+    this.isFollowing,
+    this.displayName,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'kind': kind.name,
+      'name': name,
+      'sub': sub,
+      'id': id,
+      'picture': picture,
+      'is_following': isFollowing,
+      'display_name': displayName,
+    };
+  }
+
+  factory RecentItem.fromJson(Map<String, dynamic> json) {
+    return RecentItem(
+      kind: RecentKind.values.firstWhere((e) => e.name == json['kind'], orElse: () => RecentKind.user),
+      name: json['name'],
+      sub: json['sub'],
+      id: json['id'],
+      picture: json['picture'],
+      isFollowing: json['is_following'] == true,
+      displayName: json['display_name'],
+    );
+  }
 }
 
 class SuggestedItem {
@@ -157,15 +196,6 @@ class DiscoverTile {
 }
 
 const _filters = ['Top', 'People', 'Tags', 'Posts', 'Places'];
-
-const _recents = <RecentItem>[
-  RecentItem(kind: RecentKind.user,  name: 'sarah.d',        sub: 'Sarah Dietrich · Following'),
-  RecentItem(kind: RecentKind.tag,   name: '#slowliving',    sub: '128K posts'),
-  RecentItem(kind: RecentKind.place, name: 'Studio Atelier', sub: 'Berlin, Germany'),
-  RecentItem(kind: RecentKind.user,  name: 'mikhail',        sub: 'Mikhail Volkov · 2 mutual'),
-  RecentItem(kind: RecentKind.tag,   name: '#interiors',     sub: '4.2M posts'),
-  RecentItem(kind: RecentKind.user,  name: 'aanya_',         sub: 'Aanya · Followed by devon.b'),
-];
 
 const _suggested = <SuggestedItem>[
   SuggestedItem(name: 'studio.atelier', sub: 'Suggested'),
@@ -235,11 +265,84 @@ class _SearchScreenState extends State<SearchScreen> {
   List<UserProfile> _searchResults = [];
   bool _isSearching = false;
   Timer? _debounce;
+  List<RecentItem> _recentItems = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSearchHistory();
+  }
 
   @override
   void dispose() {
     _debounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadSearchHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final historyStr = prefs.getString('search_history');
+      if (historyStr != null) {
+        final List decoded = jsonDecode(historyStr);
+        setState(() {
+          _recentItems = decoded.map((e) => RecentItem.fromJson(e as Map<String, dynamic>)).toList();
+        });
+      } else {
+        // Seed default recents if no search history exists yet
+        final defaultRecents = [
+          const RecentItem(kind: RecentKind.user, name: 'sarah.d', sub: 'Sarah Dietrich · Following', id: 'sarah_d_placeholder', displayName: 'Sarah Dietrich', isFollowing: true),
+          const RecentItem(kind: RecentKind.tag, name: '#slowliving', sub: '128K posts'),
+          const RecentItem(kind: RecentKind.place, name: 'Studio Atelier', sub: 'Berlin, Germany'),
+          const RecentItem(kind: RecentKind.user, name: 'mikhail', sub: 'Mikhail Volkov · 2 mutual', id: 'mikhail_placeholder', displayName: 'Mikhail Volkov', isFollowing: false),
+          const RecentItem(kind: RecentKind.tag, name: '#interiors', sub: '4.2M posts'),
+          const RecentItem(kind: RecentKind.user, name: 'aanya_', sub: 'Aanya · Followed by devon.b', id: 'aanya_placeholder', displayName: 'Aanya', isFollowing: false),
+        ];
+        setState(() {
+          _recentItems = defaultRecents;
+        });
+        await _saveSearchHistory(defaultRecents);
+      }
+    } catch (e) {
+      developer.log('Error loading search history: $e');
+    }
+  }
+
+  Future<void> _saveSearchHistory(List<RecentItem> items) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final historyStr = jsonEncode(items.map((e) => e.toJson()).toList());
+      await prefs.setString('search_history', historyStr);
+    } catch (e) {
+      developer.log('Error saving search history: $e');
+    }
+  }
+
+  void _addRecentItem(RecentItem item) {
+    setState(() {
+      // Remove if already exists (to bring it to top)
+      _recentItems.removeWhere((element) => element.name == item.name && element.kind == item.kind);
+      _recentItems.insert(0, item);
+      // Keep max 15 items
+      if (_recentItems.length > 15) {
+        _recentItems = _recentItems.sublist(0, 15);
+      }
+    });
+    _saveSearchHistory(_recentItems);
+  }
+
+  void _removeRecentItem(RecentItem item) {
+    setState(() {
+      _recentItems.removeWhere((element) => element.name == item.name && element.kind == item.kind);
+    });
+    _saveSearchHistory(_recentItems);
+  }
+
+  void _clearAllRecents() {
+    setState(() {
+      _recentItems = [];
+    });
+    _saveSearchHistory([]);
   }
 
   void _onSearchChanged(String query) {
@@ -287,7 +390,12 @@ class _SearchScreenState extends State<SearchScreen> {
             padding: const EdgeInsets.only(bottom: 16),
             children: [
               if (_query.isNotEmpty) ...[
-                _Section(title: 'Search Results', action: 'Clear', dark: dark),
+                _Section(
+                  title: 'Search Results',
+                  action: 'Clear',
+                  dark: dark,
+                  onActionTap: () => _onSearchChanged(''),
+                ),
                 if (_isSearching)
                   const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
                 else if (_searchResults.isEmpty)
@@ -298,16 +406,48 @@ class _SearchScreenState extends State<SearchScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Column(children: [
                       for (int i = 0; i < _searchResults.length; i++)
-                        _UserResultRow(u: _searchResults[i], i: i, dark: dark),
+                        _UserResultRow(
+                          u: _searchResults[i],
+                          i: i,
+                          dark: dark,
+                          onTap: () async {
+                            final u = _searchResults[i];
+                            _addRecentItem(RecentItem(
+                              kind: RecentKind.user,
+                              name: u.username,
+                              sub: '${u.name}${u.isFollowing ? " · Following" : ""}',
+                              id: u.id,
+                              picture: u.picture,
+                              isFollowing: u.isFollowing,
+                              displayName: u.name,
+                            ));
+                            await _startChat(context, u.username, dark, selectedUser: u);
+                          },
+                          onRemove: () {
+                            setState(() {
+                              _searchResults.removeAt(i);
+                            });
+                          },
+                        ),
                     ]),
                   ),
               ] else ...[
-                _Section(title: 'Recent', action: 'Clear all', dark: dark),
+                _Section(
+                  title: 'Recent',
+                  action: 'Clear all',
+                  dark: dark,
+                  onActionTap: _clearAllRecents,
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(children: [
-                    for (int i = 0; i < _recents.length; i++)
-                      _RecentRow(r: _recents[i], i: i, dark: dark),
+                    for (int i = 0; i < _recentItems.length; i++)
+                      _RecentRow(
+                        r: _recentItems[i],
+                        i: i,
+                        dark: dark,
+                        onRemove: () => _removeRecentItem(_recentItems[i]),
+                      ),
                   ]),
                 ),
               ],
@@ -320,7 +460,23 @@ class _SearchScreenState extends State<SearchScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   itemCount: _suggested.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, i) => _SuggestedCard(s: _suggested[i], i: i, dark: dark),
+                  itemBuilder: (_, i) {
+                    final s = _suggested[i];
+                    return _SuggestedCard(
+                      s: s,
+                      i: i,
+                      dark: dark,
+                      onTap: () async {
+                        _addRecentItem(RecentItem(
+                          kind: RecentKind.user,
+                          name: s.name,
+                          sub: s.sub,
+                          displayName: s.name,
+                        ));
+                        await _startChat(context, s.name, dark);
+                      },
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 14),
@@ -591,7 +747,8 @@ class _Section extends StatelessWidget {
   final String title;
   final String? action;
   final bool dark;
-  const _Section({required this.title, required this.dark, this.action});
+  final VoidCallback? onActionTap;
+  const _Section({required this.title, required this.dark, this.action, this.onActionTap});
 
   @override
   Widget build(BuildContext context) {
@@ -605,7 +762,7 @@ class _Section extends StatelessWidget {
         const Spacer(),
         if (action != null)
           GestureDetector(
-            onTap: () {},
+            onTap: onActionTap,
             child: Text(action!, style: manrope(size: 12, weight: FontWeight.w700, color: fg, letterSpacing: -0.12)),
           ),
       ]),
@@ -617,7 +774,8 @@ class _RecentRow extends StatelessWidget {
   final RecentItem r;
   final int i;
   final bool dark;
-  const _RecentRow({required this.r, required this.i, required this.dark});
+  final VoidCallback? onRemove;
+  const _RecentRow({required this.r, required this.i, required this.dark, this.onRemove});
 
   @override
   Widget build(BuildContext context) {
@@ -628,10 +786,18 @@ class _RecentRow extends StatelessWidget {
     if (r.kind == RecentKind.user) {
       leading = Container(
         width: 46, height: 46,
-        decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: monoAvatar(dark, i),
+          image: r.picture != null && r.picture!.isNotEmpty
+              ? DecorationImage(image: NetworkImage(r.picture!), fit: BoxFit.cover)
+              : null,
+        ),
         alignment: Alignment.center,
-        child: Text(r.name[0].toUpperCase(),
-          style: manrope(size: 17, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.34)),
+        child: (r.picture == null || r.picture!.isEmpty)
+          ? Text(r.name.isNotEmpty ? r.name[0].toUpperCase() : '?',
+              style: manrope(size: 17, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.34))
+          : null,
       );
     } else {
       leading = ClipOval(
@@ -653,10 +819,19 @@ class _RecentRow extends StatelessWidget {
     }
 
     return GestureDetector(
-      // FIX: async + await so Future exceptions surface properly
       onTap: () async {
         if (r.kind == RecentKind.user) {
-          await _startChat(context, r.name, dark);
+          UserProfile? u;
+          if (r.id != null && !r.id!.contains('_placeholder')) {
+            u = UserProfile(
+              id: r.id!,
+              name: r.displayName ?? r.name,
+              username: r.name,
+              picture: r.picture,
+              isFollowing: r.isFollowing ?? false,
+            );
+          }
+          await _startChat(context, r.name, dark, selectedUser: u);
         }
       },
       child: Padding(
@@ -665,15 +840,15 @@ class _RecentRow extends StatelessWidget {
           leading,
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+            Text(r.kind == RecentKind.user ? (r.displayName ?? r.name) : r.name, maxLines: 1, overflow: TextOverflow.ellipsis,
               style: manrope(size: 14, weight: FontWeight.w700, color: fg, letterSpacing: -0.14)),
             const SizedBox(height: 2),
-            Text(r.sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+            Text(r.kind == RecentKind.user ? '@${r.name}' : r.sub, maxLines: 1, overflow: TextOverflow.ellipsis,
               style: manrope(size: 11.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.06)),
           ])),
           const SizedBox(width: 8),
           GestureDetector(
-            onTap: () {},
+            onTap: onRemove,
             child: Container(width: 28, height: 28, alignment: Alignment.center,
               child: Icon(Icons.close_rounded, size: 14, color: sub)),
           ),
@@ -687,7 +862,15 @@ class _UserResultRow extends StatelessWidget {
   final UserProfile u;
   final int i;
   final bool dark;
-  const _UserResultRow({required this.u, required this.i, required this.dark});
+  final VoidCallback? onTap;
+  final VoidCallback? onRemove;
+  const _UserResultRow({
+    required this.u,
+    required this.i,
+    required this.dark,
+    this.onTap,
+    this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -696,7 +879,7 @@ class _UserResultRow extends StatelessWidget {
 
     return GestureDetector(
       // FIX: async + await — exceptions are surfaced, not silently dropped
-      onTap: () async {
+      onTap: onTap ?? () async {
         await _startChat(context, u.username, dark, selectedUser: u);
       },
       child: Padding(
@@ -730,6 +913,19 @@ class _UserResultRow extends StatelessWidget {
           ])),
           const SizedBox(width: 8),
           _FollowButton(userId: u.id, initialFollowing: u.isFollowing, dark: dark),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onRemove,
+            child: Container(
+              width: 28, height: 28,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+              ),
+              child: Icon(Icons.close_rounded, size: 14, color: sub),
+            ),
+          ),
         ]),
       ),
     );
@@ -806,14 +1002,15 @@ class _SuggestedCard extends StatelessWidget {
   final SuggestedItem s;
   final int i;
   final bool dark;
-  const _SuggestedCard({required this.s, required this.i, required this.dark});
+  final VoidCallback? onTap;
+  const _SuggestedCard({required this.s, required this.i, required this.dark, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
     return GestureDetector(
-      onTap: () async => await _startChat(context, s.name, dark),
+      onTap: onTap ?? () async => await _startChat(context, s.name, dark),
       child: SizedBox(
         width: 132,
         child: GlassSurface(

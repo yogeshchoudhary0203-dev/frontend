@@ -67,13 +67,43 @@ class AuthService {
         await FirebaseAuth.instance.signOut();
         rethrow;
       } on FirebaseAuthException catch (signInErr) {
-        // Wrong password → genuinely different user owns this email.
+        // Wrong password → could be an orphaned Firebase user with a different
+        // password, OR a genuinely registered account.
+        // Ask the backend to check MongoDB and clean up if orphaned.
         if (signInErr.code == 'wrong-password' ||
             signInErr.code == 'invalid-credential' ||
             signInErr.code == 'INVALID_LOGIN_CREDENTIALS') {
-          // Re-throw the original email-already-in-use so the UI
-          // shows the correct "already registered" message.
-          throw e;
+          // Call backend to check if email exists in MongoDB
+          try {
+            final cleanupResult = await ApiService.post(
+              '/auth/cleanup-orphaned-firebase',
+              {'email': email},
+            );
+            // If cleanup succeeded, retry signup
+            if (cleanupResult['cleaned'] == true) {
+              final fresh = await FirebaseAuth.instance
+                  .createUserWithEmailAndPassword(
+                      email: email, password: password);
+              await fresh.user!.sendEmailVerification();
+              return email;
+            }
+            // Cleanup couldn't delete (no Admin SDK) — but email is NOT
+            // in MongoDB, so it's definitely orphaned. Try password reset
+            // approach: send reset email so user can reclaim with new password.
+            await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+            throw const ApiException(
+              'A previous incomplete signup was found. We sent a password reset email. '
+              'Please reset your password and try signing up again.',
+            );
+          } on ApiException {
+            // ApiException from cleanup endpoint (409 = email actually registered)
+            // or our own thrown ApiException (password reset email sent)
+            // → let it propagate to the UI
+            rethrow;
+          } catch (_) {
+            // For any other unexpected error, re-throw original Firebase error
+            throw e;
+          }
         }
         rethrow;
       }

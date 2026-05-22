@@ -17,11 +17,12 @@ class ChatService {
   WebSocketChannel? _channel;
   bool _isConnecting = false;
   Timer? _reconnectTimer;
-  int _reconnectDelay = 2; // seconds, doubles each attempt
+  int _reconnectDelay = 1; // seconds, doubles each attempt
 
   final _messageCtrl  = StreamController<ChatMessage>.broadcast();
   final _typingCtrl   = StreamController<Map<String, dynamic>>.broadcast();
   final _reactionCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _notificationCtrl = StreamController<Map<String, dynamic>>.broadcast();
 
   // Typing throttle — only send 1 event per 2 seconds
   DateTime? _lastTypingSent;
@@ -34,6 +35,7 @@ class ChatService {
   Stream<Map<String, dynamic>>   get typingStream   => _typingCtrl.stream;
   /// Emits: { "message_id": "...", "conversation_id": "...", "reactions": { emoji: [uids] } }
   Stream<Map<String, dynamic>>   get reactionStream => _reactionCtrl.stream;
+  Stream<Map<String, dynamic>>   get notificationStream => _notificationCtrl.stream;
   bool get isConnected => _channel != null;
 
   // ── WebSocket ────────────────────────────────────────────────
@@ -43,25 +45,28 @@ class ChatService {
     _isConnecting = true;
 
     try {
-      _myUserId = await AuthService.getCurrentUserId();
-      _localPublicKey = await CryptographyService().initKeys();
-      _localPrivateKey = await CryptographyService().getLocalPrivateKey();
-    } catch (e) {
-      developer.log('[ChatService] Failed to load local keys: $e');
-    }
+      // Load token + keys in parallel for speed
+      final results = await Future.wait([
+        AuthService.getCurrentUserId(),
+        CryptographyService().initKeys(),
+        CryptographyService().getLocalPrivateKey(),
+        ApiService.getToken(),
+      ]);
+      _myUserId      = results[0] as String?;
+      _localPublicKey  = results[1] as String?;
+      _localPrivateKey = results[2] as String?;
+      final token    = results[3] as String?;
 
-    final token = await ApiService.getToken();
-    if (token == null) { _isConnecting = false; return; }
+      if (token == null) { _isConnecting = false; return; }
 
-    final wsUri = Uri.parse('$wsUrl/chat/ws?token=$token');
-    developer.log('[ChatService] Connecting WebSocket: $wsUri');
+      final wsUri = Uri.parse('$wsUrl/chat/ws?token=$token');
+      developer.log('[ChatService] Connecting WebSocket: $wsUri');
 
-    try {
       _channel = WebSocketChannel.connect(wsUri);
 
       // Wait for connection to be ready (throws if server rejects)
-      await _channel!.ready.timeout(const Duration(seconds: 10));
-      _reconnectDelay = 2; // reset backoff on success
+      await _channel!.ready.timeout(const Duration(seconds: 8));
+      _reconnectDelay = 1; // reset backoff on success
       developer.log('[ChatService] WebSocket connected ✓');
 
       _channel!.stream.listen(
@@ -105,6 +110,8 @@ class ChatService {
           'conversation_id': data['conversation_id'] as String,
           'reactions':       reactions,
         });
+      } else if (type == 'notification') {
+        _notificationCtrl.add(data['notification'] as Map<String, dynamic>);
       }
     } catch (e) {
       developer.log('[ChatService] WS parse error: $e');
@@ -126,7 +133,7 @@ class ChatService {
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
     final delay = _reconnectDelay;
-    _reconnectDelay = (_reconnectDelay * 2).clamp(2, 60); // max 60s
+    _reconnectDelay = (_reconnectDelay * 2).clamp(1, 16); // max 16s
     developer.log('[ChatService] Reconnecting in ${delay}s…');
     _reconnectTimer = Timer(Duration(seconds: delay), connectWebSocket);
   }
@@ -245,7 +252,7 @@ class ChatService {
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       },
-    ).timeout(const Duration(seconds: 15));
+    ).timeout(const Duration(seconds: 8));
 
     if (res.statusCode == 200) {
       final List data = jsonDecode(res.body) as List;
@@ -284,7 +291,7 @@ class ChatService {
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       },
-    ).timeout(const Duration(seconds: 15));
+    ).timeout(const Duration(seconds: 8));
 
     if (res.statusCode == 200) {
       final List data = jsonDecode(res.body) as List;
@@ -357,7 +364,8 @@ class ChatService {
     for (var i = 0; i < data.length; i++) {
       final msg = ChatMessage.fromJson(data[i] as Map<String, dynamic>);
       messages.add(decryptMessage(msg));
-      if (i % 5 == 4) {
+      // yield every 10 messages to keep UI responsive without too much overhead
+      if (i % 10 == 9) {
         await Future<void>.delayed(Duration.zero);
       }
     }

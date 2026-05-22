@@ -719,19 +719,24 @@ class _SaveCirclePainter extends CustomPainter {
     final sy = size.height / 26.0;
 
     final bookmark = Path()
-      ..moveTo(7.0 * sx, 3.2 * sy)
-      ..lineTo(19.0 * sx, 3.2 * sy)
-      ..cubicTo(20.7 * sx, 3.2 * sy, 22.0 * sx, 4.5 * sy, 22.0 * sx, 6.2 * sy)
-      ..lineTo(22.0 * sx, 21.0 * sy)
-      ..cubicTo(22.0 * sx, 22.6 * sy, 20.2 * sx, 23.4 * sy, 19.0 * sx, 22.2 * sy)
-      ..lineTo(13.0 * sx, 16.6 * sy)
-      ..lineTo(7.0 * sx, 22.2 * sy)
-      ..cubicTo(5.8 * sx, 23.4 * sy, 4.0 * sx, 22.6 * sy, 4.0 * sx, 21.0 * sy)
-      ..lineTo(4.0 * sx, 6.2 * sy)
-      ..cubicTo(4.0 * sx, 4.5 * sy, 5.3 * sx, 3.2 * sy, 7.0 * sx, 3.2 * sy)
+      ..moveTo(5.0 * sx, 22.5 * sy)
+      ..lineTo(5.0 * sx, 6.8 * sy)
+      ..cubicTo(5.0 * sx, 4.0 * sy, 7.0 * sx, 2.7 * sy, 9.4 * sx, 2.7 * sy)
+      ..lineTo(16.6 * sx, 2.7 * sy)
+      ..cubicTo(19.0 * sx, 2.7 * sy, 21.0 * sx, 4.0 * sy, 21.0 * sx, 6.8 * sy)
+      ..lineTo(21.0 * sx, 22.5 * sy)
+      ..lineTo(13.0 * sx, 15.6 * sy)
       ..close();
 
-    canvas.drawPath(bookmark, Paint()..color = color);
+    canvas.drawPath(
+      bookmark,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
   }
 
   @override
@@ -876,18 +881,37 @@ class _NavIconPainter extends CustomPainter {
         canvas.drawPath(door, stroke);
         break;
 
-      // ── 1: Explore / Compass — minimal circle + needle ──
+      // 1: Trends rounded play logo
       case 1:
-        final double r = w * 0.42;
-        canvas.drawCircle(Offset(cx, cy), r, stroke);
-        // diamond / compass needle
-        final needle = Path()
-          ..moveTo(cx, cy - r * 0.50)      // top
-          ..lineTo(cx + r * 0.20, cy)      // right
-          ..lineTo(cx, cy + r * 0.50)      // bottom
-          ..lineTo(cx - r * 0.20, cy)      // left
+        final double inset = w * 0.04;
+        final Rect logoRect =
+            Rect.fromLTWH(inset, inset, w - inset * 2, h - inset * 2);
+        final RRect logo = RRect.fromRectAndRadius(
+          logoRect,
+          Radius.circular(w * 0.24),
+        );
+        final double alpha = active ? 1.0 : 0.72;
+        canvas.drawRRect(
+          logo,
+          Paint()
+            ..color = Colors.white.op(alpha)
+            ..style = PaintingStyle.fill,
+        );
+
+        final Path play = Path()
+          ..moveTo(w * 0.42, h * 0.32)
+          ..cubicTo(w * 0.42, h * 0.28, w * 0.46, h * 0.26, w * 0.50, h * 0.29)
+          ..lineTo(w * 0.72, h * 0.44)
+          ..cubicTo(w * 0.80, h * 0.49, w * 0.80, h * 0.51, w * 0.72, h * 0.56)
+          ..lineTo(w * 0.50, h * 0.71)
+          ..cubicTo(w * 0.46, h * 0.74, w * 0.42, h * 0.72, w * 0.42, h * 0.68)
           ..close();
-        canvas.drawPath(needle, stroke);
+        canvas.drawPath(
+          play,
+          Paint()
+            ..color = Colors.black.op(alpha)
+            ..style = PaintingStyle.fill,
+        );
         break;
 
       // ── 2: Create / Add — rounded square + thin plus ──

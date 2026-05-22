@@ -14,6 +14,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool privateAccount = true;
   bool activityStatus = false;
   bool notifications = true;
+  String selectedLanguage = 'English';
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +125,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onChanged: (v) => setState(() => privateAccount = v),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Language selection row
+                      _BaseRow(
+                        dark: dark,
+                        icon: Icons.language,
+                        title: 'Language',
+                        subtitle: selectedLanguage,
+                        trailing: DropdownButton<String>(
+                          value: selectedLanguage,
+                          underline: const SizedBox(),
+                          icon: Icon(Icons.arrow_drop_down, color: GlassTokens.sub(dark)),
+                          items: ['English', 'Hindi', 'Hinglish']
+                              .map((lang) => DropdownMenuItem(value: lang, child: Text(lang)))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setState(() => selectedLanguage = v);
+                          },
+                        ),
                       ),
                       const SizedBox(height: 16),
                       _SectionTitle('MORE', color: sub),

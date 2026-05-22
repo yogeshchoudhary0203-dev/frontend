@@ -20,15 +20,64 @@ class AuthService {
 
   // ── Firebase Email Verification Signup ─────────────────────────────────────
 
-  /// Step 1: Create Firebase user + send verification email
+  /// Step 1: Create Firebase user + send verification email.
+  ///
+  /// Handles orphaned Firebase users — when a previous signup attempt was
+  /// started but never completed (user went back / closed app), Firebase
+  /// retains the unverified user. This causes a false "email-already-in-use"
+  /// error even though MongoDB has no account for that email.
+  ///
+  /// Fix: if Firebase says email-already-in-use, try signing in with the
+  /// same credentials. If that succeeds AND the email is still unverified,
+  /// it's a stale orphaned account — delete it and create fresh.
   static Future<String> initiateFirebaseSignup({
     required String email,
     required String password,
   }) async {
-    final credential = await FirebaseAuth.instance
-        .createUserWithEmailAndPassword(email: email, password: password);
-    await credential.user!.sendEmailVerification();
-    return email;
+    try {
+      final credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
+      await credential.user!.sendEmailVerification();
+      return email;
+    } on FirebaseAuthException catch (e) {
+      if (e.code != 'email-already-in-use') rethrow;
+
+      // ── Orphaned signup check ─────────────────────────────────────────────
+      // Try signing in with the same password to inspect the Firebase user.
+      try {
+        final existing = await FirebaseAuth.instance
+            .signInWithEmailAndPassword(email: email, password: password);
+
+        final fbUser = existing.user!;
+        await fbUser.reload(); // ensure emailVerified is current
+        final refreshed = FirebaseAuth.instance.currentUser!;
+
+        if (!refreshed.emailVerified) {
+          // Unverified = orphaned / abandoned previous signup attempt.
+          // Safe to delete and start fresh.
+          await refreshed.delete();
+          final fresh = await FirebaseAuth.instance
+              .createUserWithEmailAndPassword(email: email, password: password);
+          await fresh.user!.sendEmailVerification();
+          return email;
+        }
+
+        // Email IS verified in Firebase → real account exists in MongoDB.
+        // Sign out and surface the original error.
+        await FirebaseAuth.instance.signOut();
+        rethrow;
+      } on FirebaseAuthException catch (signInErr) {
+        // Wrong password → genuinely different user owns this email.
+        if (signInErr.code == 'wrong-password' ||
+            signInErr.code == 'invalid-credential' ||
+            signInErr.code == 'INVALID_LOGIN_CREDENTIALS') {
+          // Re-throw the original email-already-in-use so the UI
+          // shows the correct "already registered" message.
+          throw e;
+        }
+        rethrow;
+      }
+    }
   }
 
   /// Step 2: Check if email is verified (no force refresh to avoid errors)

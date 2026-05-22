@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/fcm_service.dart';
@@ -111,7 +113,8 @@ class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin {
   bool _navOpen   = false;
   int  _activeNav = 0;
-  int  _totalUnread = 0; // 🔴 unread message badge count
+  int  _totalUnread = 0;      // 🔴 unread chat message badge count
+  int  _unreadNotifs = 0;     // 🔔 unread follow notification badge count
   late AnimationController      _navCtrl;
   final List<Animation<double>> _itemScales    = [];
   final List<Animation<double>> _itemOpacities = [];
@@ -123,6 +126,10 @@ class _HomeScreenState extends State<HomeScreen>
   // Island pill geometry (populated after first layout)
   Rect   _islandRect   = Rect.zero;
   final  GlobalKey _islandKey = GlobalKey();
+
+  // ── Real-time notification listeners ─────────────
+  StreamSubscription? _fcmNotifSub;
+  StreamSubscription? _wsNotifSub;
 
   @override
   void initState() {
@@ -146,12 +153,13 @@ class _HomeScreenState extends State<HomeScreen>
       duration: const Duration(milliseconds: 520),
     );
 
-    // Request notification permission + show queued welcome notification
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FcmService.setupForHomeScreen();
       CryptographyService().ensurePublicKeyRegistered();
       _loadUnreadCount();
+      _loadUnreadNotifCount();
       ChatService().connectWebSocket();
+      _listenForNewNotifications();
     });
   }
 
@@ -159,17 +167,52 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     _navCtrl.dispose();
     _islandCtrl.dispose();
+    _fcmNotifSub?.cancel();
+    _wsNotifSub?.cancel();
     super.dispose();
   }
 
-  // 🔔 Load unread conversation count (number of conversations that have unread msgs)
-  // — 1 conversation with 9 messages still shows as 1, not 9
+  // 🔔 Load unread follow notification count from backend
+  Future<void> _loadUnreadNotifCount() async {
+    // We count unread items from the already-loaded API response, but since
+    // we don't want a full fetch here we rely on real-time updates + island open.
+    // When the island opens, NotificationsScreen fetches and resets state.
+    // This method is a no-op placeholder kept for future REST polling.
+  }
+
+  // ── FIX: Listen for new notifications in real-time so the island badge updates ──
+  // Two channels:
+  //  1. Firebase foreground message (type=follow) → increment badge
+  //  2. WebSocket notification event               → increment badge
+  void _listenForNewNotifications() {
+    // Channel 1: FCM foreground
+    _fcmNotifSub = FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
+      final msgType = msg.data['type'] as String?;
+      if (msgType == 'follow') {
+        if (mounted && !_islandOpen) {
+          // Island is closed — user hasn't seen this yet → bump badge
+          setState(() => _unreadNotifs++);
+        }
+      }
+    });
+
+    // Channel 2: WebSocket notification stream
+    _wsNotifSub = ChatService().notificationStream.listen((data) {
+      final type = data['type'] as String?;
+      if (type == 'follow' || type == 'notification') {
+        if (mounted && !_islandOpen) {
+          setState(() => _unreadNotifs++);
+        }
+      }
+    });
+  }
+
+  // 🔴 Load unread conversation count
   Future<void> _loadUnreadCount() async {
     try {
       final myUserId = await AuthService.getCurrentUserId();
       final convs = await ChatService().getConversations();
       if (!mounted) return;
-      // Count CONVERSATIONS with unread messages, not total messages
       int unreadConversations = 0;
       for (final c in convs) {
         if ((c.unreadCounts[myUserId] ?? 0) > 0) {
@@ -186,10 +229,8 @@ class _HomeScreenState extends State<HomeScreen>
     _navOpen ? _navCtrl.forward(from: 0) : _navCtrl.reverse();
   }
 
-  /// Professional slide-fade push navigation.
   void _openScreen(BuildContext context, Widget screen) {
     HapticFeedback.selectionClick();
-    // Close nav first, then push
     if (_navOpen) {
       setState(() => _navOpen = false);
       _navCtrl.reverse();
@@ -217,15 +258,17 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  /// Called when user taps the Dynamic Island pill.
   void _openIsland() {
     _captureIslandRect();
     HapticFeedback.mediumImpact();
-    setState(() => _islandOpen = true);
+    // Reset badge when user opens notification screen
+    setState(() {
+      _islandOpen = true;
+      _unreadNotifs = 0;  // ← user is now viewing notifications
+    });
     _islandCtrl.forward(from: 0);
   }
 
-  /// Called when user swipes down / taps close inside notification overlay.
   void _closeIsland() {
     HapticFeedback.lightImpact();
     _islandCtrl.reverse().then((_) {
@@ -233,7 +276,6 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
-  /// Captures the Global position & size of the island pill.
   void _captureIslandRect() {
     final ro = _islandKey.currentContext?.findRenderObject() as RenderBox?;
     if (ro == null) return;
@@ -255,7 +297,6 @@ class _HomeScreenState extends State<HomeScreen>
       extendBody: true,
       body: Stack(children: [
 
-        // Background
         Positioned.fill(child: Container(
           decoration: BoxDecoration(
             gradient: RadialGradient(
@@ -276,13 +317,10 @@ class _HomeScreenState extends State<HomeScreen>
               color: (isDark ? Colors.black : Colors.white).op(0.1)),
         )),
 
-        // ── Feed scrolls behind island — content visible under glass ──
         Positioned.fill(
           child: ListView(
             physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics()),
-            // initial padding pushes content below the island,
-            // but as user scrolls, content flows up behind the glass island
             padding: EdgeInsets.only(top: topPad + 56),
             children: [
               _StorySection(isDark: isDark),
@@ -294,17 +332,51 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
 
-        // ── Fixed overlays float on top of scrolling feed ──
         SafeArea(child: Stack(children: [
 
-          // Island — glass, no bar — tappable
+          // ── Island pill — now with unread notification badge ──
           Align(alignment: Alignment.topCenter,
             child: Padding(padding: const EdgeInsets.only(top: 8),
               child: GestureDetector(
                 onTap: _islandOpen ? null : _openIsland,
-                child: _TrandiaIsland(key: _islandKey, isDark: isDark)))),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    _TrandiaIsland(key: _islandKey, isDark: isDark),
+                    // ── NEW: Unread notification dot on island ──
+                    if (_unreadNotifs > 0)
+                      Positioned(
+                        top: -4, right: -4,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 18),
+                          height: 18,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white : const Color(0xFF0A0A0A),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: isDark ? const Color(0xFF1C1C1F) : const Color(0xFFF8F8FA),
+                              width: 1.5,
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            _unreadNotifs > 9 ? '9+' : '$_unreadNotifs',
+                            style: TextStyle(
+                              color: isDark ? const Color(0xFF0A0A0A) : Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              height: 1.0,
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ))),
 
-          // Message icon — compact with unread badge
+          // Message icon
           Align(alignment: Alignment.topRight,
             child: Padding(padding: const EdgeInsets.only(top: 10, right: 14),
               child: GestureDetector(
@@ -332,7 +404,7 @@ class _HomeScreenState extends State<HomeScreen>
                       },
                     ),
                   );
-                  _loadUnreadCount(); // badge refresh after returning
+                  _loadUnreadCount();
                 },
                 child: Stack(
                   clipBehavior: Clip.none,
@@ -543,11 +615,9 @@ class _PostCardState extends State<_PostCard> {
   Widget build(BuildContext context) {
     final p    = widget.post;
     final dark = widget.isDark;
-    // final Color glass       = (dark ? Colors.white : Colors.black).op(0.07);
     final Color border      = (dark ? Colors.white : Colors.black).op(0.12);
     final Color textPrimary = (dark ? Colors.white : Colors.black).op(0.90);
     final Color textSub     = (dark ? Colors.white : Colors.black).op(0.45);
-    // Instagram-style icon color
     final Color iconCol     = (dark ? Colors.white : Colors.black).op(0.80);
     final Color likedCol    = dark ? const Color(0xFFFF3040) : const Color(0xFFED4956);
 
@@ -558,7 +628,6 @@ class _PostCardState extends State<_PostCard> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start,
         children: [
 
-            // User header — compact, Instagram style
             Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
               child: Row(children: [
                 Container(width: 30, height: 30,
@@ -577,7 +646,6 @@ class _PostCardState extends State<_PostCard> {
                     color: textSub, fontSize: 11)),
               ])),
 
-            // Media — full width, no horizontal padding, no border radius
             AspectRatio(aspectRatio: p.aspectRatio,
               child: Stack(fit: StackFit.expand, children: [
                 Container(decoration: BoxDecoration(
@@ -601,11 +669,9 @@ class _PostCardState extends State<_PostCard> {
                         Colors.black.op(0.18)]))),
               ])),
 
-            // ── Instagram-exact action icons ──────────────
             Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
               child: Row(children: [
 
-                // Like
                 GestureDetector(onTap: _toggleLike,
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
@@ -621,7 +687,6 @@ class _PostCardState extends State<_PostCard> {
 
                 const SizedBox(width: 16),
 
-                // Comment
                 GestureDetector(
                   onTap: () => HapticFeedback.lightImpact(),
                   child: SizedBox(width: 26, height: 26,
@@ -630,7 +695,6 @@ class _PostCardState extends State<_PostCard> {
 
                 const SizedBox(width: 16),
 
-                // Share / Send
                 GestureDetector(
                   onTap: () => HapticFeedback.lightImpact(),
                   child: SizedBox(width: 26, height: 26,
@@ -638,7 +702,6 @@ class _PostCardState extends State<_PostCard> {
 
                 const Spacer(),
 
-                // Bookmark (save) — Instagram right side
                 GestureDetector(
                   onTap: () => HapticFeedback.lightImpact(),
                   child: SizedBox(width: 26, height: 26,
@@ -646,13 +709,11 @@ class _PostCardState extends State<_PostCard> {
                         painter: _SaveCirclePainter(color: iconCol)))),
               ])),
 
-            // Like count + description
             Padding(padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
               child: Text('$_likeCount likes', style: TextStyle(
                   color: textPrimary, fontSize: 13,
                   fontWeight: FontWeight.w600))),
 
-            // Description
             Padding(padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
               child: GestureDetector(
                 onTap: () {
@@ -691,7 +752,7 @@ class _PostCardState extends State<_PostCard> {
   }
 }
 
-// ─── Instagram Heart (exact IG proportions) ──────────
+// ─── Instagram Heart ──────────────────────────────────
 class _IgHeartPainter extends CustomPainter {
   final Color color;
   final bool  filled;
@@ -701,29 +762,23 @@ class _IgHeartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final double w = size.width;
     final double h = size.height;
-    // Normalize to 26×26 reference grid
     final double sx = w / 26.0;
     final double sy = h / 26.0;
 
     final path = Path()
-      // bottom tip
       ..moveTo(13.0 * sx, 23.0 * sy)
-      // left side down-curve
       ..cubicTo(
          6.0 * sx, 19.0 * sy,
          1.0 * sx, 14.0 * sy,
          1.0 * sx, 9.5  * sy)
-      // left lobe
       ..cubicTo(
          1.0 * sx,  5.0 * sy,
          4.5 * sx,  2.5 * sy,
          7.5 * sx,  2.5 * sy)
-      // center dip
       ..cubicTo(
         10.0 * sx,  2.5 * sy,
         12.0 * sx,  4.0 * sy,
         13.0 * sx,  6.0 * sy)
-      // right lobe (mirror)
       ..cubicTo(
         14.0 * sx,  4.0 * sy,
         16.0 * sx,  2.5 * sy,
@@ -732,7 +787,6 @@ class _IgHeartPainter extends CustomPainter {
         21.5 * sx,  2.5 * sy,
         25.0 * sx,  5.0 * sy,
         25.0 * sx,  9.5 * sy)
-      // right side down-curve
       ..cubicTo(
         25.0 * sx, 14.0 * sy,
         20.0 * sx, 19.0 * sy,
@@ -791,7 +845,6 @@ class _CommentBubblePainter extends CustomPainter {
   bool shouldRepaint(_CommentBubblePainter o) => o.color != color;
 }
 
-// ─── Instagram Bookmark / Save ────────────────────────
 class _SaveCirclePainter extends CustomPainter {
   final Color color;
   const _SaveCirclePainter({required this.color});
@@ -918,7 +971,7 @@ class _EnvelopeIconPainter extends CustomPainter {
 }
 
 // ═════════════════════════════════════════════════════
-//  NAV ICON PAINTERS — modern minimal curved (IG-style)
+//  NAV ICON PAINTERS
 // ═════════════════════════════════════════════════════
 class _NavIconPainter extends CustomPainter {
   final int  index;
@@ -933,24 +986,20 @@ class _NavIconPainter extends CustomPainter {
     final Paint  stroke = Paint()..color = col..style = PaintingStyle.stroke
         ..strokeWidth = sw..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-    // final Paint  fill   = Paint()..color = col..style = PaintingStyle.fill;
     final double w = size.width; final double h = size.height;
     final double cx = w / 2;    final double cy = h / 2;
     switch (index) {
-
-      // ── 0: Home — modern curved house outline ──
       case 0:
         final home = Path()
-          ..moveTo(cx, h * 0.10)           // roof peak
-          ..lineTo(w * 0.90, h * 0.45)     // right eave
-          ..lineTo(w * 0.90, h * 0.82)     // right wall bottom
-          ..cubicTo(w * 0.90, h * 0.90, w * 0.85, h * 0.92, w * 0.78, h * 0.92) // bottom-right curve
-          ..lineTo(w * 0.22, h * 0.92)     // bottom edge
-          ..cubicTo(w * 0.15, h * 0.92, w * 0.10, h * 0.90, w * 0.10, h * 0.82) // bottom-left curve
-          ..lineTo(w * 0.10, h * 0.45)     // left wall top
+          ..moveTo(cx, h * 0.10)
+          ..lineTo(w * 0.90, h * 0.45)
+          ..lineTo(w * 0.90, h * 0.82)
+          ..cubicTo(w * 0.90, h * 0.90, w * 0.85, h * 0.92, w * 0.78, h * 0.92)
+          ..lineTo(w * 0.22, h * 0.92)
+          ..cubicTo(w * 0.15, h * 0.92, w * 0.10, h * 0.90, w * 0.10, h * 0.82)
+          ..lineTo(w * 0.10, h * 0.45)
           ..close();
         canvas.drawPath(home, stroke);
-        // door arch
         final door = Path()
           ..moveTo(cx - w * 0.10, h * 0.92)
           ..lineTo(cx - w * 0.10, h * 0.68)
@@ -958,22 +1007,17 @@ class _NavIconPainter extends CustomPainter {
           ..lineTo(cx + w * 0.10, h * 0.92);
         canvas.drawPath(door, stroke);
         break;
-
-      // ── 1: Explore / Compass — minimal circle + needle ──
       case 1:
         final double r = w * 0.42;
         canvas.drawCircle(Offset(cx, cy), r, stroke);
-        // diamond / compass needle
         final needle = Path()
-          ..moveTo(cx, cy - r * 0.50)      // top
-          ..lineTo(cx + r * 0.20, cy)      // right
-          ..lineTo(cx, cy + r * 0.50)      // bottom
-          ..lineTo(cx - r * 0.20, cy)      // left
+          ..moveTo(cx, cy - r * 0.50)
+          ..lineTo(cx + r * 0.20, cy)
+          ..lineTo(cx, cy + r * 0.50)
+          ..lineTo(cx - r * 0.20, cy)
           ..close();
         canvas.drawPath(needle, stroke);
         break;
-
-      // ── 2: Create / Add — rounded square + thin plus ──
       case 2:
         final double inset = w * 0.12;
         final rr = RRect.fromRectAndRadius(
@@ -984,14 +1028,11 @@ class _NavIconPainter extends CustomPainter {
         canvas.drawLine(Offset(cx, cy - arm), Offset(cx, cy + arm), stroke);
         canvas.drawLine(Offset(cx - arm, cy), Offset(cx + arm, cy), stroke);
         break;
-
-      // ── 3: Search — smooth magnifying glass ──
       case 3:
         final double r  = w * 0.30;
         final double ox = cx - w * 0.06;
         final double oy = cy - h * 0.06;
         canvas.drawCircle(Offset(ox, oy), r, stroke);
-        // handle — smooth diagonal
         final double hx = ox + r * 0.70;
         final double hy = oy + r * 0.70;
         canvas.drawLine(
@@ -1000,13 +1041,9 @@ class _NavIconPainter extends CustomPainter {
           Paint()..color = col..style = PaintingStyle.stroke
               ..strokeWidth = sw + 0.3..strokeCap = StrokeCap.round);
         break;
-
-      // ── 4: Profile — minimal person outline ──
       case 4:
-        // head circle
         final double headR = w * 0.16;
         canvas.drawCircle(Offset(cx, h * 0.30), headR, stroke);
-        // shoulders — smooth arc
         final body = Path()
           ..moveTo(w * 0.14, h * 0.92)
           ..cubicTo(w * 0.14, h * 0.60, w * 0.30, h * 0.52, cx, h * 0.52)
@@ -1108,7 +1145,7 @@ class _Orb extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════
-//  TRANDIA ISLAND — iPhone 15 Dynamic Island size
+//  TRANDIA ISLAND
 // ═════════════════════════════════════════════════════
 class _TrandiaIsland extends StatelessWidget {
   final bool isDark;
@@ -1147,8 +1184,6 @@ class _TrandiaIsland extends StatelessWidget {
 // ═════════════════════════════════════════════════════
 //  DYNAMIC ISLAND → NOTIFICATION SCREEN OVERLAY
 // ═════════════════════════════════════════════════════
-/// Animates the island pill expanding to a full-screen notification panel,
-/// mirroring the iPhone Dynamic Island music-player expand interaction.
 class _IslandNotificationOverlay extends StatefulWidget {
   final Rect               islandRect;
   final AnimationController controller;
@@ -1168,7 +1203,6 @@ class _IslandNotificationOverlay extends StatefulWidget {
 class _IslandNotificationOverlayState
     extends State<_IslandNotificationOverlay> {
 
-  // ── Drag-to-dismiss state ───────────────────────────
   double _dragY    = 0;
   bool   _dragging = false;
 
@@ -1178,17 +1212,14 @@ class _IslandNotificationOverlayState
     final screenRect = Rect.fromLTWH(
         0, 0, screenSize.width, screenSize.height);
 
-    // How far can we pull before triggering close
     const dismissThreshold = 80.0;
 
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
         final topPad = MediaQuery.paddingOf(context).top;
-        final t = widget.controller.value; // 0→closed  1→open
+        final t = widget.controller.value;
 
-        // ── Interpolated geometry ────────────────────
-        // Expand from island pill rect → full screen
         final double left   = ui.lerpDouble(
             widget.islandRect.left,   screenRect.left,   _expandCurve(t))!;
         final double top    = ui.lerpDouble(
@@ -1200,11 +1231,9 @@ class _IslandNotificationOverlayState
             widget.islandRect.bottom, screenRect.bottom, _expandCurve(t))!;
         final double borderR = ui.lerpDouble(19, 0, _expandCurve(t))!;
 
-        // Content fades in only in the last 30% of the animation
         final double contentAlpha =
             ((t - 0.70) / 0.30).clamp(0.0, 1.0);
 
-        // Drag-dismiss: fade overlay slightly when dragging down
         final double dragAlpha = _dragging
             ? (1.0 - (_dragY / (dismissThreshold * 2.0)).clamp(0.0, 0.5))
             : 1.0;
@@ -1228,7 +1257,6 @@ class _IslandNotificationOverlayState
                     borderRadius: BorderRadius.circular(borderR),
                   ),
                   child: GestureDetector(
-                    // ── Drag to dismiss ──
                     onVerticalDragStart: (_) {
                       setState(() { _dragging = true; _dragY = 0; });
                     },
@@ -1247,14 +1275,12 @@ class _IslandNotificationOverlayState
                       }
                     },
                     child: Stack(children: [
-                      // Notification screen content
                       AnimatedOpacity(
                         duration: const Duration(milliseconds: 180),
                         opacity: contentAlpha,
                         child: NotificationsScreen(dark: widget.isDark),
                       ),
 
-                      // Drag handle pill (iPhone style)
                       if (contentAlpha > 0.1)
                         Positioned(
                           top: topPad + 6, left: 0, right: 0,
@@ -1283,7 +1309,6 @@ class _IslandNotificationOverlayState
     );
   }
 
-  /// Spring-like curve: fast at start, then eases into full expand.
   static double _expandCurve(double t) =>
       Curves.fastEaseInToSlowEaseOut.transform(t);
 }

@@ -9,6 +9,7 @@ import 'screens/home/home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/intro_slides.dart';
 import 'services/api_service.dart';
+import 'services/auth_service.dart';
 import 'services/fcm_service.dart';
 import 'utils/web_utils.dart';
 
@@ -120,9 +121,13 @@ class _StartupRouterState extends State<_StartupRouter> {
       return;
     }
 
+    final isLoggedIn = await AuthService.isLoggedIn();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const IntroSlidesScreen()),
+      MaterialPageRoute(
+        builder: (_) =>
+            isLoggedIn ? const HomeScreen() : const IntroSlidesScreen(),
+      ),
     );
   }
 

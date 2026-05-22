@@ -102,8 +102,6 @@ class FcmService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // registerMessageTapHandler()
-  // Register a navigator callback so tapping a notification opens the chat.
-  // Call from HomeScreen / ChatListScreen.
   // ─────────────────────────────────────────────────────────────────────────
   static void registerMessageTapHandler(ConversationNavigator handler) {
     _onMessageTapped = handler;
@@ -111,9 +109,6 @@ class FcmService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // setActiveConversation()
-  // Call from ChatScreen.initState with the conversation id being viewed.
-  // Call with null from ChatScreen.dispose when leaving the screen.
-  // Notifications for the active conversation are suppressed automatically.
   // ─────────────────────────────────────────────────────────────────────────
   static void setActiveConversation(String? conversationId) {
     _activeConversationId = conversationId;
@@ -141,7 +136,28 @@ class FcmService {
 
     if (granted) await showPendingIfAny();
 
+    // ── FIX: ALWAYS sync token to DB on every home screen open ──
+    // Previously only synced if token changed — this caused FCM to break
+    // whenever DB was cleared or token wasn't in DB yet.
     unawaited(_syncLatestToken());
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // forceSyncToken()  — call explicitly after login/signup to ensure
+  // the fresh JWT reaches the backend with the FCM token.
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<void> forceSyncToken() async {
+    if (kIsWeb) return;
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null || token.isEmpty) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kTokenKey, token);
+      await _doSyncToken(token, prefs);
+      debugPrint('[FCM] ✅ forceSyncToken done');
+    } catch (e) {
+      debugPrint('[FCM] forceSyncToken error: $e');
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -158,7 +174,6 @@ class FcmService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // show()  — display a local notification immediately.
-  // [conversationId] optional — tapping navigates to that conversation.
   // ─────────────────────────────────────────────────────────────────────────
   static Future<void> show({
     required String title,
@@ -175,7 +190,6 @@ class FcmService {
 
     final int id = DateTime.now().millisecondsSinceEpoch % 100000;
 
-    // Build Android details — non-const when groupKey is dynamic
     final androidDetails = AndroidNotificationDetails(
       _kChannelId,
       _kChannelName,
@@ -198,9 +212,9 @@ class FcmService {
         body,
         NotificationDetails(
           android: androidDetails,
-          iOS: _kIosDetails,        // ← named parameter 'iOS:' required
+          iOS: _kIosDetails,
         ),
-        payload: conversationId,    // ← tapped → onDidReceiveNotificationResponse
+        payload: conversationId,
       );
       debugPrint('[FCM] ✅ show(): "$title"  conv=$conversationId');
     } catch (e, st) {
@@ -210,22 +224,18 @@ class FcmService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // startForegroundListener()
-  // Call from main() after Firebase.initializeApp.
-  // Handles FCM pushes when app is in foreground.
-  // Welcome pushes are suppressed (shown locally via queueWelcome).
   // ─────────────────────────────────────────────────────────────────────────
   static void startForegroundListener() {
     if (_listenerOn) return;
     _listenerOn = true;
 
-    // Foreground FCM message received
     FirebaseMessaging.onMessage.listen((RemoteMessage msg) async {
       final msgType = msg.data['type'] as String?;
       debugPrint('[FCM] onMessage type=$msgType title="${msg.notification?.title}"');
 
       if (msgType == 'welcome') return; // shown locally — suppress duplicate
 
-      // Follow notification — show always
+      // Follow notification — show system notification always
       if (msgType == 'follow') {
         final title = msg.data['title'] as String? ?? msg.notification?.title ?? 'New follower';
         final body  = msg.data['body']  as String? ?? msg.notification?.body  ?? 'started following you';
@@ -241,7 +251,6 @@ class FcmService {
           ?? '';
       final conversationId = msg.data['conversation_id'] as String?;
 
-      // ── Smart suppress: user is already viewing this conversation ──────────
       if (conversationId != null &&
           conversationId == _activeConversationId) {
         debugPrint('[FCM] suppressed notification — user is in conversation $conversationId');
@@ -251,7 +260,6 @@ class FcmService {
       await show(title: title, body: body, conversationId: conversationId);
     });
 
-    // App opened by tapping background notification
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage msg) {
       final conversationId = msg.data['conversation_id'] as String?;
       debugPrint('[FCM] onMessageOpenedApp conv=$conversationId');
@@ -262,7 +270,7 @@ class FcmService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // listenForTokenRefresh()  — call from main()
+  // listenForTokenRefresh()
   // ─────────────────────────────────────────────────────────────────────────
   static void listenForTokenRefresh() {
     if (kIsWeb) return;
@@ -275,7 +283,7 @@ class FcmService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // getCachedToken()  — returns FCM token from SharedPreferences
+  // getCachedToken()
   // ─────────────────────────────────────────────────────────────────────────
   static Future<String?> getCachedToken() async {
     if (kIsWeb) return null;
@@ -307,7 +315,6 @@ class FcmService {
           settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional;
 
-      // Android 13+ — also request local notifications permission
       final androidImpl = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       if (androidImpl != null) {
@@ -334,14 +341,20 @@ class FcmService {
     }
   }
 
+  // ── FIX: Removed "only sync if changed" logic. ──────────────────────────
+  // Old behavior: `if (old != token) await _doSyncToken(token, prefs)` 
+  //   → Token in DB could go missing (DB reset, new deployment) and
+  //     never get re-synced because prefs cache matched Firebase token.
+  // New behavior: Always sync to DB on every setupForHomeScreen() call.
+  //   → One extra PUT request per session open — completely acceptable.
   static Future<void> _syncLatestToken() async {
     try {
       final token = await FirebaseMessaging.instance.getToken();
       if (token == null || token.isEmpty) return;
       final prefs = await SharedPreferences.getInstance();
-      final old   = prefs.getString(_kTokenKey);
       await prefs.setString(_kTokenKey, token);
-      if (old != token) await _doSyncToken(token, prefs);
+      // ✅ Always sync — no "if old != token" check
+      await _doSyncToken(token, prefs);
     } catch (e) {
       debugPrint('[FCM] _syncLatestToken error: $e');
     }
@@ -350,7 +363,10 @@ class FcmService {
   static Future<void> _doSyncToken(String token, SharedPreferences prefs) async {
     try {
       final jwt = prefs.getString(_kJwtKey);
-      if (jwt == null) return;
+      if (jwt == null) {
+        debugPrint('[FCM] _doSyncToken: no JWT — skipping');
+        return;
+      }
       final r = await http.put(
         Uri.parse('$_kBackendUrl/users/me/fcm-token'),
         headers: {
@@ -359,7 +375,7 @@ class FcmService {
         },
         body: '{"fcm_token": "$token"}',
       ).timeout(const Duration(seconds: 8));
-      debugPrint('[FCM] token synced to backend: ${r.statusCode}');
+      debugPrint('[FCM] ✅ token synced to backend: ${r.statusCode}');
     } catch (e) {
       debugPrint('[FCM] _doSyncToken error: $e');
     }

@@ -12,6 +12,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/api_service.dart';
+import '../services/chat_service.dart';
 import 'glass_common.dart';
 
 enum NfKind { like, comment, follow, mention, live, msg, system }
@@ -118,6 +119,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _loading = true;
   bool _error = false;
   StreamSubscription? _fcmSub;
+  StreamSubscription? _wsNotifSub;
 
   @override
   void initState() {
@@ -130,6 +132,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void dispose() {
     _scroll.dispose();
     _fcmSub?.cancel();
+    _wsNotifSub?.cancel();
     super.dispose();
   }
 
@@ -154,21 +157,48 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  /// Listen for FCM foreground messages and prepend follow notifications in real-time.
+  /// Returns true if this notification id already exists in the list.
+  /// An empty id is NEVER treated as duplicate — it would suppress all
+  /// notifications from older backend versions that didn't send an id.
+  bool _isDuplicate(String id) {
+    if (id.isEmpty) return false;
+    return _items.any((item) => item.id == id);
+  }
+
+  /// Listen for FCM foreground messages and WebSocket events.
+  /// Both paths carry the same `id` so duplicates are filtered out.
   void _listenForRealtimeNotifications() {
+    // ── FCM foreground ──────────────────────────────────────────────────────
     _fcmSub = FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
       final msgType = msg.data['type'] as String?;
-      if (msgType == 'follow') {
-        final newItem = NfItem(
-          kind: NfKind.follow,
-          name: msg.data['username'] ?? msg.data['title'] ?? '',
-          text: msg.data['body'] ?? 'started following you',
-          time: 'just now',
-          unread: true,
-        );
+      if (msgType != 'follow') return;
+
+      final String notifId = msg.data['id'] ?? '';
+      if (_isDuplicate(notifId)) return;
+
+      final newItem = NfItem(
+        id: notifId,
+        kind: NfKind.follow,
+        name: msg.data['username'] ?? msg.data['title'] ?? '',
+        text: msg.data['body'] ?? 'started following you',
+        time: 'just now',
+        unread: true,
+      );
+      if (mounted) {
+        setState(() { _items.insert(0, newItem); });
+      }
+    });
+
+    // ── WebSocket real-time ─────────────────────────────────────────────────
+    _wsNotifSub = ChatService().notificationStream.listen((data) {
+      try {
+        final newItem = NfItem.fromJson(data);
+        if (_isDuplicate(newItem.id)) return;
         if (mounted) {
           setState(() { _items.insert(0, newItem); });
         }
+      } catch (e) {
+        debugPrint('[Notifications] WS parse error: $e');
       }
     });
   }
@@ -467,11 +497,25 @@ class _NfCardInner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       blurSigma: 28,
       child: Row(children: [
-        if (n.unread) Positioned(
-          // unread dot rendered via Stack overlay below; use SizedBox here
-          child: Container(),
-        ),
-        // avatar + chip
+        // ── Unread indicator dot ──────────────────────────────────────────
+        // Rendered as a simple circle INSIDE the Row (not Positioned).
+        // We use a tiny animated dot on the very left.
+        if (n.unread) ...[
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark ? Colors.white : const Color(0xFF0A0A0A),
+            ),
+          ),
+        ] else ...[
+          // Spacer so layout stays consistent when there's no dot
+          const SizedBox(width: 14),
+        ],
+
+        // ── Avatar + kind chip ────────────────────────────────────────────
         SizedBox(width: 44, height: 44, child: Stack(clipBehavior: Clip.none, children: [
           Container(
             width: 44, height: 44,
@@ -497,7 +541,7 @@ class _NfCardInner extends StatelessWidget {
         ])),
         const SizedBox(width: 12),
 
-        // text
+        // ── Text ──────────────────────────────────────────────────────────
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           RichText(
             maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -514,7 +558,7 @@ class _NfCardInner extends StatelessWidget {
 
         const SizedBox(width: 10),
 
-        // trailing
+        // ── Trailing action ───────────────────────────────────────────────
         if (n.kind == NfKind.follow && !n.unread)
           _ActionButton(label: 'Follow', filled: false, dark: dark)
         else if (n.kind == NfKind.follow && n.unread)

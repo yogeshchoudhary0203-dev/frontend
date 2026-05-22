@@ -22,6 +22,7 @@ class ChatService {
   final _messageCtrl  = StreamController<ChatMessage>.broadcast();
   final _typingCtrl   = StreamController<Map<String, dynamic>>.broadcast();
   final _reactionCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _notificationCtrl = StreamController<Map<String, dynamic>>.broadcast();
 
   // Typing throttle — only send 1 event per 2 seconds
   DateTime? _lastTypingSent;
@@ -34,6 +35,7 @@ class ChatService {
   Stream<Map<String, dynamic>>   get typingStream   => _typingCtrl.stream;
   /// Emits: { "message_id": "...", "conversation_id": "...", "reactions": { emoji: [uids] } }
   Stream<Map<String, dynamic>>   get reactionStream => _reactionCtrl.stream;
+  Stream<Map<String, dynamic>>   get notificationStream => _notificationCtrl.stream;
   bool get isConnected => _channel != null;
 
   // ── WebSocket ────────────────────────────────────────────────
@@ -108,6 +110,8 @@ class ChatService {
           'conversation_id': data['conversation_id'] as String,
           'reactions':       reactions,
         });
+      } else if (type == 'notification') {
+        _notificationCtrl.add(data['notification'] as Map<String, dynamic>);
       }
     } catch (e) {
       developer.log('[ChatService] WS parse error: $e');

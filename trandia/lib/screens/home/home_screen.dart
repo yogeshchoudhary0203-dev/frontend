@@ -10,6 +10,7 @@ import '../search_screen.dart';
 import '../shots_screen.dart';
 import '../profile_screen.dart';
 import '../chat_list_screen.dart';
+import '../create_post_screens.dart';
 import '../../services/cryptography_service.dart';
 
 extension _ColorOp on Color {
@@ -384,6 +385,7 @@ class _HomeScreenState extends State<HomeScreen>
                   onTap: (i) {
                     setState(() => _activeNav = i);
                     if (i == 1) _openScreen(context, ShotsScreen(dark: isDark));
+                    if (i == 2) _openScreen(context, CreatePostHubScreen(dark: isDark));
                     if (i == 3) _openScreen(context, SearchScreen(dark: isDark));
                     if (i == 4) _openScreen(context, ProfileScreen(dark: isDark));
                   })))),
@@ -898,19 +900,46 @@ class _EnvelopeIconPainter extends CustomPainter {
   const _EnvelopeIconPainter({required this.isDark});
   @override
   void paint(Canvas canvas, Size size) {
-    final Color  color = isDark ? Colors.white : const Color(0xFF2A2A2A);
+    final Color  color = isDark ? Colors.white : const Color(0xFF1A1A1A);
     final double w = size.width;
     final double h = size.height;
     final Paint  p = Paint()
-      ..color = color.op(0.90)..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5..strokeCap = StrokeCap.round
+      ..color = color.op(0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-    canvas.drawRRect(RRect.fromRectAndRadius(
-        Rect.fromLTWH(0.5, 1.0, w - 1.0, h - 2.0),
-        const Radius.circular(5.0)), p);
-    canvas.drawPath(Path()
-      ..moveTo(5.0, 1.0)
-      ..quadraticBezierTo(w / 2, h * 0.56, w - 5.0, 1.0), p);
+
+    final bubble = Path()
+      ..moveTo(w * 0.28, h * 0.08)
+      ..lineTo(w * 0.72, h * 0.08)
+      ..quadraticBezierTo(w * 0.92, h * 0.08, w * 0.92, h * 0.28)
+      ..lineTo(w * 0.92, h * 0.62)
+      ..quadraticBezierTo(w * 0.92, h * 0.82, w * 0.72, h * 0.82)
+      ..lineTo(w * 0.38, h * 0.82)
+      // Tail
+      ..quadraticBezierTo(w * 0.34, h * 0.90, w * 0.28, h * 0.94)
+      ..quadraticBezierTo(w * 0.24, h * 0.96, w * 0.22, h * 0.92)
+      ..quadraticBezierTo(w * 0.18, h * 0.85, w * 0.08, h * 0.72)
+      ..lineTo(w * 0.08, h * 0.28)
+      ..quadraticBezierTo(w * 0.08, h * 0.08, w * 0.28, h * 0.08)
+      ..close();
+
+    canvas.drawPath(bubble, p);
+
+    // Inner horizontal lines
+    // Line 1: top
+    canvas.drawLine(
+      Offset(w * 0.32, h * 0.36),
+      Offset(w * 0.68, h * 0.36),
+      p,
+    );
+    // Line 2: bottom
+    canvas.drawLine(
+      Offset(w * 0.32, h * 0.54),
+      Offset(w * 0.68, h * 0.54),
+      p,
+    );
   }
   @override
   bool shouldRepaint(_EnvelopeIconPainter o) => o.isDark != isDark;
@@ -958,18 +987,15 @@ class _NavIconPainter extends CustomPainter {
         canvas.drawPath(door, stroke);
         break;
 
-      // ── 1: Explore / Compass — minimal circle + needle ──
+      // ── 1: Trends — play triangle ──
       case 1:
-        final double r = w * 0.42;
-        canvas.drawCircle(Offset(cx, cy), r, stroke);
-        // diamond / compass needle
-        final needle = Path()
-          ..moveTo(cx, cy - r * 0.50)      // top
-          ..lineTo(cx + r * 0.20, cy)      // right
-          ..lineTo(cx, cy + r * 0.50)      // bottom
-          ..lineTo(cx - r * 0.20, cy)      // left
+        final playFill = Paint()..color = col..style = PaintingStyle.fill;
+        final play = Path()
+          ..moveTo(w * 0.22, h * 0.12)
+          ..lineTo(w * 0.85, cy)
+          ..lineTo(w * 0.22, h * 0.88)
           ..close();
-        canvas.drawPath(needle, stroke);
+        canvas.drawPath(play, playFill);
         break;
 
       // ── 2: Create / Add — rounded square + thin plus ──
@@ -1057,17 +1083,14 @@ class _InfinityBtnState extends State<_InfinityBtn>
             filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(width: _kBtnSize, height: _kBtnSize,
               decoration: BoxDecoration(shape: BoxShape.circle,
-                color: glass, border: Border.all(color: border, width: 0.9),
+                color: glass,
                 boxShadow: [BoxShadow(color: Colors.black.op(0.22),
                     blurRadius: 12, offset: const Offset(0, 4))]),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: ClipOval(
-                  child: Image.asset(
-                    'assets/icons/app_icon.png',
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                  ),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/icons/app_icon.png',
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
                 ),
               )))))));
   }

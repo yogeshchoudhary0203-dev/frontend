@@ -4,15 +4,22 @@
 // • Auto theme: follows device system brightness
 // • Backdrop fills full screen incl. behind gesture nav (no white strip)
 // • Black/white shades only (Google glyph keeps brand colors)
+// • Real-time username availability check with debounce (500ms)
 
+import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 import 'email_verification_pending_screen.dart';
 import '../home/home_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
+
+// ── Username check status ─────────────────────────────────────────────────────
+enum _UStatus { idle, typing, loading, available, taken, error }
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -28,14 +35,155 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _obscurePassword     = true;
   bool _isLoading           = false;
 
+  // ── Username availability state ─────────────────────────────────────────────
+  _UStatus _uStatus        = _UStatus.idle;
+  String   _uMessage       = '';
+  List<String> _uSuggestions = [];
+  Timer?   _uDebounce;
+  // In-memory cache: username → available bool
+  final Map<String, bool> _uCache = {};
+
   @override
   void dispose() {
     _nameController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _uDebounce?.cancel();
     super.dispose();
   }
+
+  // ── Username input handler ──────────────────────────────────────────────────
+
+  void _onUsernameChanged(String raw) {
+    // 1. Sanitize on the fly
+    final cleaned = _sanitize(raw);
+    if (cleaned != raw) {
+      _usernameController.value = TextEditingValue(
+        text: cleaned,
+        selection: TextSelection.collapsed(offset: cleaned.length),
+      );
+    }
+
+    // 2. Immediate feedback for short/empty input
+    if (cleaned.isEmpty) {
+      _uDebounce?.cancel();
+      setState(() { _uStatus = _UStatus.idle; _uMessage = ''; _uSuggestions = []; });
+      return;
+    }
+    if (cleaned.length < 3) {
+      _uDebounce?.cancel();
+      setState(() { _uStatus = _UStatus.typing; _uMessage = 'Keep typing…'; _uSuggestions = []; });
+      return;
+    }
+
+    // 3. Cache hit → instant result
+    if (_uCache.containsKey(cleaned)) {
+      _uDebounce?.cancel();
+      final avail = _uCache[cleaned]!;
+      setState(() {
+        _uStatus    = avail ? _UStatus.available : _UStatus.taken;
+        _uMessage   = avail ? '@$cleaned is available' : '@$cleaned is taken';
+        _uSuggestions = [];
+      });
+      return;
+    }
+
+    // 4. Start debounce (500 ms)
+    setState(() { _uStatus = _UStatus.typing; _uMessage = ''; });
+    _uDebounce?.cancel();
+    _uDebounce = Timer(const Duration(milliseconds: 500), () => _checkUsername(cleaned));
+  }
+
+  static String _sanitize(String raw) {
+    String s = raw.trim().toLowerCase();
+    s = s.replaceAll(RegExp(r'[\s\-]+'), '_');
+    s = s.replaceAll(RegExp(r'[^a-z0-9_.]'), '');
+    s = s.replaceAll(RegExp(r'[_.]{2,}'), '_');
+    s = s.replaceAll(RegExp(r'^[_.]|[_.]$'), '');
+    if (s.length > 20) s = s.substring(0, 20);
+    return s;
+  }
+
+  Future<void> _checkUsername(String username) async {
+    if (!mounted) return;
+    // Guard: if user typed something else while we were waiting, skip
+    if (_usernameController.text != username) return;
+
+    setState(() { _uStatus = _UStatus.loading; });
+
+    try {
+      final uri = Uri.parse('$baseUrl/users/check-username').replace(
+        queryParameters: {'username': username},
+      );
+      final res = await http.get(uri).timeout(const Duration(seconds: 8));
+
+      if (!mounted) return;
+      // Guard: user may have typed something different while request was in flight
+      if (_usernameController.text != username) return;
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        if (data['success'] == true) {
+          final avail = data['available'] as bool;
+          final sanitized = (data['sanitized_username'] as String?) ?? username;
+          final suggestions = List<String>.from(data['suggestions'] ?? []);
+
+          // Update text field to server-sanitized version
+          if (sanitized != username) {
+            _usernameController.value = TextEditingValue(
+              text: sanitized,
+              selection: TextSelection.collapsed(offset: sanitized.length),
+            );
+          }
+
+          _uCache[sanitized] = avail;
+          setState(() {
+            _uStatus      = avail ? _UStatus.available : _UStatus.taken;
+            _uMessage     = avail ? '@$sanitized is available' : '@$sanitized is already taken';
+            _uSuggestions = avail ? [] : suggestions;
+          });
+        } else {
+          setState(() {
+            _uStatus  = _UStatus.error;
+            _uMessage = (data['message'] as String?) ?? 'Invalid username';
+            _uSuggestions = [];
+          });
+        }
+      } else if (res.statusCode == 429) {
+        setState(() { _uStatus = _UStatus.error; _uMessage = 'Too many requests, slow down'; });
+      } else {
+        setState(() { _uStatus = _UStatus.error; _uMessage = 'Could not check — tap to retry'; });
+      }
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() { _uStatus = _UStatus.error; _uMessage = 'Timeout — tap to retry'; });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() { _uStatus = _UStatus.error; _uMessage = 'Network error — tap to retry'; });
+    }
+  }
+
+  void _retryUsernameCheck() {
+    final u = _usernameController.text;
+    if (u.length < 3) return;
+    _uCache.remove(u);
+    _checkUsername(u);
+  }
+
+  void _selectSuggestion(String s) {
+    _usernameController.value = TextEditingValue(
+      text: s, selection: TextSelection.collapsed(offset: s.length),
+    );
+    _uCache[s] = true;
+    setState(() {
+      _uStatus      = _UStatus.available;
+      _uMessage     = '@$s is available';
+      _uSuggestions = [];
+    });
+  }
+
+  // ── Auth handlers ───────────────────────────────────────────────────────────
 
   void _showError(String message) {
     if (!mounted) return;
@@ -90,9 +238,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _handleSignUp() async {
-    final name = _nameController.text.trim();
+    final name     = _nameController.text.trim();
     final username = _usernameController.text.trim();
-    final email = _emailController.text.trim();
+    final email    = _emailController.text.trim();
     final password = _passwordController.text;
 
     if (name.isEmpty || username.isEmpty || email.isEmpty || password.isEmpty) {
@@ -101,6 +249,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
     if (password.length < 6) {
       _showError('Password must be at least 6 characters');
+      return;
+    }
+    if (_uStatus == _UStatus.taken) {
+      _showError('That username is taken. Choose another.');
+      return;
+    }
+    if (_uStatus == _UStatus.loading || _uStatus == _UStatus.typing) {
+      _showError('Please wait while we check your username…');
+      return;
+    }
+    if (_uStatus == _UStatus.error) {
+      _showError('Please fix the username before continuing.');
       return;
     }
 
@@ -246,13 +406,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           const SizedBox(height: 12),
                           _FieldLabel(label: 'Username', color: t.muted),
                           const SizedBox(height: 8),
-                          _GlassField(
-                            t: t, controller: _usernameController,
-                            hint: 'username',
-                            prefixIcon: Icons.alternate_email_rounded,
-                            keyboardType: TextInputType.text,
-                            textInputAction: TextInputAction.next,
+                          // ── Username field with availability indicator ──────
+                          _UsernameField(
+                            t: t,
+                            controller: _usernameController,
+                            status: _uStatus,
+                            onChanged: _onUsernameChanged,
+                            onRetry: _retryUsernameCheck,
                           ),
+                          // ── Status message ──────────────────────────────────
+                          if (_uMessage.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            _UStatusMessage(status: _uStatus, message: _uMessage, t: t),
+                          ],
+                          // ── Suggestions ─────────────────────────────────────
+                          if (_uSuggestions.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            _USuggestions(
+                              suggestions: _uSuggestions,
+                              t: t,
+                              onSelect: _selectSuggestion,
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           _FieldLabel(label: 'Email', color: t.muted),
                           const SizedBox(height: 8),
@@ -281,9 +456,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           const SizedBox(height: 18),
                           _PrimaryPillButton(
                             t: t,
-                            label: _isLoading
-                                ? 'Sending verification…'
-                                : 'Continue',
+                            label: _isLoading ? 'Sending verification…' : 'Continue',
                             onTap: _isLoading ? null : _handleSignUp,
                           ),
                           const SizedBox(height: 18),
@@ -291,8 +464,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           const SizedBox(height: 18),
                           _GooglePillButton(
                             t: t,
-                            onTap:
-                                _isLoading ? null : _handleGoogleSignUp,
+                            onTap: _isLoading ? null : _handleGoogleSignUp,
                           ),
                           const SizedBox(height: 18),
                           Center(
@@ -307,9 +479,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           const SizedBox(height: 12),
                           Center(
                             child: GestureDetector(
-                              onTap: _isLoading
-                                  ? null
-                                  : () => Navigator.pop(context),
+                              onTap: _isLoading ? null : () => Navigator.pop(context),
                               behavior: HitTestBehavior.opaque,
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -321,8 +491,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                       TextSpan(
                                         text: 'Sign in',
                                         style: TextStyle(
-                                          color: t.fg,
-                                          fontWeight: FontWeight.w700,
+                                          color: t.fg, fontWeight: FontWeight.w700,
                                         ),
                                       ),
                                     ],
@@ -341,6 +510,198 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         ]),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERNAME FIELD  (with availability suffix indicator)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _UsernameField extends StatelessWidget {
+  const _UsernameField({
+    required this.t,
+    required this.controller,
+    required this.status,
+    required this.onChanged,
+    required this.onRetry,
+  });
+  final _GlassTheme t;
+  final TextEditingController controller;
+  final _UStatus status;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onRetry;
+
+  Color get _borderColor {
+    return switch (status) {
+      _UStatus.available => const Color(0xFF22C55E),
+      _UStatus.taken     => const Color(0xFFEF4444),
+      _UStatus.error     => const Color(0xFFF97316),
+      _UStatus.loading   => const Color(0xFF3B82F6),
+      _                  => t.fieldBorder,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: t.fieldShadow,
+        border: Border.all(color: _borderColor, width: 1.4),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            height: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: t.fieldFill,
+              ),
+            ),
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              autocorrect: false,
+              enableSuggestions: false,
+              keyboardType: TextInputType.visiblePassword,
+              textInputAction: TextInputAction.next,
+              style: TextStyle(fontSize: 15, color: t.fg),
+              cursorColor: t.fg,
+              textAlignVertical: TextAlignVertical.center,
+              inputFormatters: [
+                // Allow a-z A-Z 0-9 _ . space (sanitizer cleans rest)
+                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_.\s]')),
+              ],
+              decoration: InputDecoration(
+                contentPadding: const EdgeInsets.only(top: 15, bottom: 15, right: 16),
+                hintText: 'username',
+                hintStyle: TextStyle(fontSize: 15, color: t.placeholder),
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.only(left: 18, right: 8),
+                  child: Text('@',
+                    style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w700,
+                      color: t.fg.withOpacity(0.7),
+                    ),
+                  ),
+                ),
+                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                suffixIcon: Padding(
+                  padding: const EdgeInsets.only(right: 14),
+                  child: _UIndicator(status: status, onRetry: onRetry, t: t),
+                ),
+                suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                filled: false,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Trailing icon / spinner
+class _UIndicator extends StatelessWidget {
+  const _UIndicator({required this.status, required this.onRetry, required this.t});
+  final _UStatus status;
+  final VoidCallback onRetry;
+  final _GlassTheme t;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      transitionBuilder: (child, anim) =>
+          ScaleTransition(scale: anim, child: FadeTransition(opacity: anim, child: child)),
+      child: switch (status) {
+        _UStatus.loading => const SizedBox(
+            key: ValueKey('loading'), width: 18, height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        _UStatus.available => const Icon(
+            Icons.check_circle_rounded,
+            key: ValueKey('ok'),
+            color: Color(0xFF22C55E), size: 20,
+          ),
+        _UStatus.taken => const Icon(
+            Icons.cancel_rounded,
+            key: ValueKey('taken'),
+            color: Color(0xFFEF4444), size: 20,
+          ),
+        _UStatus.error => GestureDetector(
+            key: const ValueKey('err'),
+            onTap: onRetry,
+            child: const Icon(Icons.refresh_rounded, color: Color(0xFFF97316), size: 20),
+          ),
+        _ => const SizedBox.shrink(key: ValueKey('none')),
+      },
+    );
+  }
+}
+
+// Status message below field
+class _UStatusMessage extends StatelessWidget {
+  const _UStatusMessage({required this.status, required this.message, required this.t});
+  final _UStatus status; final String message; final _GlassTheme t;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status) {
+      _UStatus.available => const Color(0xFF22C55E),
+      _UStatus.taken     => const Color(0xFFEF4444),
+      _UStatus.error     => const Color(0xFFF97316),
+      _                  => t.muted,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Text(message, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500)),
+    );
+  }
+}
+
+// Suggestion chips
+class _USuggestions extends StatelessWidget {
+  const _USuggestions({required this.suggestions, required this.t, required this.onSelect});
+  final List<String> suggestions;
+  final _GlassTheme t;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 6, bottom: 6),
+          child: Text('Try instead:', style: TextStyle(fontSize: 11, color: t.muted)),
+        ),
+        Wrap(
+          spacing: 6, runSpacing: 6,
+          children: suggestions.map((s) => GestureDetector(
+            onTap: () => onSelect(s),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: t.fieldBorder.withOpacity(0.6)),
+                color: t.fieldFill.first.withOpacity(0.3),
+              ),
+              child: Text('@$s',
+                style: TextStyle(fontSize: 12, color: t.fg.withOpacity(0.8), fontWeight: FontWeight.w500)),
+            ),
+          )).toList(),
+        ),
+      ],
     );
   }
 }

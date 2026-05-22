@@ -1022,9 +1022,9 @@ class _NavIconPainter extends CustomPainter {
           ..lineTo(cx - r * 0.20, cy)
           ..close();
         canvas.drawPath(
-          play,
+          needle,
           Paint()
-            ..color = Colors.black.op(alpha)
+            ..color = col
             ..style = PaintingStyle.fill,
         );
         break;

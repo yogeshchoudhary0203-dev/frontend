@@ -13,6 +13,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/chat_model.dart';
+import '../services/user_service.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Public API
@@ -23,6 +25,7 @@ enum FollowersTab { followers, following }
 class FollowersScreen extends StatefulWidget {
   final bool dark;
   final FollowersTab initialTab;
+  final String userId;
   final String userHandle;
   final int totalFollowers;
   final int totalFollowing;
@@ -30,6 +33,7 @@ class FollowersScreen extends StatefulWidget {
   const FollowersScreen({
     super.key,
     required this.dark,
+    required this.userId,
     this.initialTab = FollowersTab.followers,
     this.userHandle = '',
     this.totalFollowers = 0,
@@ -150,8 +154,122 @@ class _FollowersScreenState extends State<FollowersScreen> {
   late FollowersTab _tab = widget.initialTab;
   String _query = '';
 
-  // overrides per "tab:handle" so toggles persist across switches
-  final Map<String, _FollowState> _overrides = {};
+  List<UserProfile> _followers = [];
+  List<UserProfile> _following = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final fers = await UserService.getFollowers(widget.userId);
+      final fing = await UserService.getFollowing(widget.userId);
+      if (mounted) {
+        setState(() {
+          _followers = fers;
+          _following = fing;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleFollow(UserProfile user) async {
+    final originalState = user.isFollowing;
+    final targetId = user.id;
+
+    // Optimistically update local state
+    setState(() {
+      _followers = _followers.map((u) {
+        if (u.id == targetId) {
+          return UserProfile(
+            id: u.id,
+            name: u.name,
+            username: u.username,
+            picture: u.picture,
+            publicKey: u.publicKey,
+            isFollowing: !originalState,
+            followersCount: u.followersCount,
+            followingCount: u.followingCount,
+          );
+        }
+        return u;
+      }).toList();
+
+      _following = _following.map((u) {
+        if (u.id == targetId) {
+          return UserProfile(
+            id: u.id,
+            name: u.name,
+            username: u.username,
+            picture: u.picture,
+            publicKey: u.publicKey,
+            isFollowing: !originalState,
+            followersCount: u.followersCount,
+            followingCount: u.followingCount,
+          );
+        }
+        return u;
+      }).toList();
+    });
+
+    bool success = false;
+    if (originalState) {
+      success = await UserService.unfollowUser(targetId);
+    } else {
+      success = await UserService.followUser(targetId);
+    }
+
+    if (!success && mounted) {
+      // Revert on failure
+      setState(() {
+        _followers = _followers.map((u) {
+          if (u.id == targetId) {
+            return UserProfile(
+              id: u.id,
+              name: u.name,
+              username: u.username,
+              picture: u.picture,
+              publicKey: u.publicKey,
+              isFollowing: originalState,
+              followersCount: u.followersCount,
+              followingCount: u.followingCount,
+            );
+          }
+          return u;
+        }).toList();
+
+        _following = _following.map((u) {
+          if (u.id == targetId) {
+            return UserProfile(
+              id: u.id,
+              name: u.name,
+              username: u.username,
+              picture: u.picture,
+              publicKey: u.publicKey,
+              isFollowing: originalState,
+              followersCount: u.followersCount,
+              followingCount: u.followingCount,
+            );
+          }
+          return u;
+        }).toList();
+      });
+    }
+  }
 
   String _fmt(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
@@ -159,31 +277,14 @@ class _FollowersScreenState extends State<FollowersScreen> {
     return '$n';
   }
 
-  List<_UserRow> _currentList() {
-    final src = _tab == FollowersTab.followers
-        ? _seedFollowers
-        : _seedFollowing;
-    final tabKey = _tab == FollowersTab.followers ? 'F' : 'G';
+  List<UserProfile> _currentList() {
+    final src = _tab == FollowersTab.followers ? _followers : _following;
     final q = _query.trim().toLowerCase();
-    return src
-        .map((u) {
-          final ov = _overrides['$tabKey:${u.handle}'];
-          return ov == null ? u : u.copyWith(state: ov);
-        })
-        .where((u) {
-          if (q.isEmpty) return true;
-          return u.name.toLowerCase().contains(q) ||
-              u.handle.toLowerCase().contains(q);
-        })
-        .toList();
-  }
-
-  void _toggle(_UserRow u) {
-    final tabKey = _tab == FollowersTab.followers ? 'F' : 'G';
-    final next = u.state == _FollowState.following
-        ? _FollowState.follow
-        : _FollowState.following;
-    setState(() => _overrides['$tabKey:${u.handle}'] = next);
+    if (q.isEmpty) return src;
+    return src.where((u) {
+      return u.name.toLowerCase().contains(q) ||
+          u.username.toLowerCase().contains(q);
+    }).toList();
   }
 
   @override
@@ -196,7 +297,6 @@ class _FollowersScreenState extends State<FollowersScreen> {
       body: Stack(
         children: [
           const _Backdrop(),
-          // backdrop needs dark; pass via Theme-like InheritedWidget would be overkill — just rebuild it
           Positioned.fill(child: _Backdrop(dark: dark)),
 
           // SCROLLABLE LIST
@@ -205,42 +305,41 @@ class _FollowersScreenState extends State<FollowersScreen> {
               bottom: false,
               child: Padding(
                 padding: const EdgeInsets.only(top: 192, bottom: 16),
-                child: list.isEmpty
+                child: _isLoading
                     ? Center(
-                        child: Text(
-                          _query.trim().isEmpty
-                              ? (_tab == FollowersTab.followers
-                                    ? 'No followers yet.'
-                                    : 'Not following anyone yet.')
-                              : 'No one matches "${_query.trim()}".',
-                          style: _Tk.manrope(
-                            size: 13,
-                            weight: FontWeight.w500,
-                            color: _Tk.sub(dark),
-                          ),
+                        child: CircularProgressIndicator(
+                          color: dark ? Colors.white : Colors.black,
                         ),
                       )
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        itemCount: list.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (_, i) {
-                          final u = list[i];
-                          // find seed index for stable avatar gradient
-                          final src = _tab == FollowersTab.followers
-                              ? _seedFollowers
-                              : _seedFollowing;
-                          final seedIdx = src.indexWhere(
-                            (x) => x.handle == u.handle,
-                          );
-                          return _UserRowCard(
-                            u: u,
-                            i: seedIdx < 0 ? i : seedIdx,
-                            dark: dark,
-                            onToggle: () => _toggle(u),
-                          );
-                        },
-                      ),
+                    : list.isEmpty
+                        ? Center(
+                            child: Text(
+                              _query.trim().isEmpty
+                                  ? (_tab == FollowersTab.followers
+                                      ? 'No followers yet.'
+                                      : 'Not following anyone yet.')
+                                  : 'No one matches "${_query.trim()}".',
+                              style: _Tk.manrope(
+                                size: 13,
+                                weight: FontWeight.w500,
+                                color: _Tk.sub(dark),
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            itemCount: list.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            itemBuilder: (_, i) {
+                              final u = list[i];
+                              return _UserRowCard(
+                                u: u,
+                                i: i,
+                                dark: dark,
+                                onToggle: () => _toggleFollow(u),
+                              );
+                            },
+                          ),
               ),
             ),
           ),
@@ -252,10 +351,10 @@ class _FollowersScreenState extends State<FollowersScreen> {
             right: 12,
             child: _TopBar(
               dark: dark,
-              handle: widget.userHandle,
+              handle: widget.userHandle.isNotEmpty ? '@${widget.userHandle}' : 'Profile',
               subtitle: _tab == FollowersTab.followers
-                  ? '${_fmt(widget.totalFollowers)} followers'
-                  : '${_fmt(widget.totalFollowing)} following',
+                  ? '${_fmt(_isLoading ? widget.totalFollowers : _followers.length)} followers'
+                  : '${_fmt(_isLoading ? widget.totalFollowing : _following.length)} following',
               onBack: () => Navigator.of(context).maybePop(),
             ),
           ),
@@ -268,8 +367,8 @@ class _FollowersScreenState extends State<FollowersScreen> {
             child: _SegmentedTabs(
               dark: dark,
               active: _tab,
-              followerCount: _fmt(widget.totalFollowers),
-              followingCount: _fmt(widget.totalFollowing),
+              followerCount: _fmt(_isLoading ? widget.totalFollowers : _followers.length),
+              followingCount: _fmt(_isLoading ? widget.totalFollowing : _following.length),
               onChange: (t) => setState(() => _tab = t),
             ),
           ),
@@ -719,7 +818,7 @@ class _SearchPill extends StatelessWidget {
 // ───────────────────────────────────────────────────────────────
 
 class _UserRowCard extends StatelessWidget {
-  final _UserRow u;
+  final UserProfile u;
   final int i;
   final bool dark;
   final VoidCallback onToggle;
@@ -735,6 +834,7 @@ class _UserRowCard extends StatelessWidget {
     final fg = _Tk.fg(dark);
     final sub = _Tk.sub(dark);
     final muted = _Tk.muted(dark);
+    final state = u.isFollowing ? _FollowState.following : _FollowState.follow;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -796,7 +896,7 @@ class _UserRowCard extends StatelessWidget {
                           ),
                           alignment: Alignment.center,
                           child: Text(
-                            u.name.isEmpty ? '•' : u.name[0],
+                            u.name.isEmpty ? '•' : u.name[0].toUpperCase(),
                             style: _Tk.manrope(
                               size: 17,
                               weight: FontWeight.w700,
@@ -805,27 +905,6 @@ class _UserRowCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (u.isNew)
-                          Positioned(
-                            right: -1,
-                            top: -1,
-                            child: Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: dark
-                                    ? Colors.white
-                                    : const Color(0xFF0A0A0A),
-                                border: Border.all(
-                                  width: 2,
-                                  color: dark
-                                      ? const Color(0xFF0A0A0C)
-                                      : const Color(0xFFF3F3F5),
-                                ),
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -852,17 +931,11 @@ class _UserRowCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (u.verified) ...[
-                              const SizedBox(width: 5),
-                              Icon(Icons.verified_rounded, size: 12, color: fg),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 1),
                         Text(
-                          u.bio.isEmpty
-                              ? '@${u.handle}'
-                              : '@${u.handle} · ${u.bio}',
+                          '@${u.username}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: _Tk.manrope(
@@ -872,20 +945,6 @@ class _UserRowCard extends StatelessWidget {
                             letterSpacing: -0.06,
                           ),
                         ),
-                        if (u.mutual.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            u.mutual,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: _Tk.manrope(
-                              size: 10.5,
-                              weight: FontWeight.w600,
-                              color: muted,
-                              letterSpacing: 0.21,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -893,7 +952,7 @@ class _UserRowCard extends StatelessWidget {
                   const SizedBox(width: 8),
 
                   // CTA + more
-                  _FollowCta(state: u.state, dark: dark, onTap: onToggle),
+                  _FollowCta(state: state, dark: dark, onTap: onToggle),
                   const SizedBox(width: 2),
                   Icon(Icons.more_horiz_rounded, size: 18, color: sub),
                 ],

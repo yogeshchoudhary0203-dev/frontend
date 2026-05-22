@@ -87,4 +87,75 @@ class UserService {
       rethrow;
     }
   }
+
+  // ── Profile and Follower Lists ──────────────────────────────────────────
+
+  static Future<UserProfile?> getMyProfile() async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return null;
+      final res = await http.get(
+        Uri.parse('$baseUrl/users/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      developer.log('getMyProfile → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+        return UserProfile.fromJson(decoded);
+      }
+      return null;
+    } catch (e) {
+      developer.log('getMyProfile error: $e');
+      return null;
+    }
+  }
+
+  static Future<List<UserProfile>> getFollowers(String userId) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return [];
+      final res = await http.get(
+        Uri.parse('$baseUrl/users/$userId/followers'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      developer.log('getFollowers → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final List decoded = jsonDecode(res.body) as List;
+        return decoded.map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (e) {
+      developer.log('getFollowers error: $e');
+      return [];
+    }
+  }
+
+  static Future<List<UserProfile>> getFollowing(String userId) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return [];
+      final res = await http.get(
+        Uri.parse('$baseUrl/users/$userId/following'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      developer.log('getFollowing → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final List decoded = jsonDecode(res.body) as List;
+        return decoded.map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (e) {
+      developer.log('getFollowing error: $e');
+      return [];
+    }
+  }
 }

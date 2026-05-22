@@ -5,6 +5,8 @@ class UserProfile {
   final String? picture;
   final String? publicKey;
   final bool isFollowing;
+  final int followersCount;
+  final int followingCount;
 
   UserProfile({
     required this.id,
@@ -13,6 +15,8 @@ class UserProfile {
     this.picture,
     this.publicKey,
     this.isFollowing = false,
+    this.followersCount = 0,
+    this.followingCount = 0,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -23,6 +27,8 @@ class UserProfile {
       picture: json['picture'],
       publicKey: json['public_key'],
       isFollowing: json['is_following'] == true,
+      followersCount: json['followers_count'] ?? 0,
+      followingCount: json['following_count'] ?? 0,
     );
   }
 }

@@ -12,6 +12,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'glass_common.dart';
 import 'followers_screen(1).dart';
 import 'setting_screen.dart';
+import '../models/chat_model.dart';
+import '../services/user_service.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Models
@@ -102,17 +104,48 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   String _tab = 'Posts';
   final _tiles = _buildProfileTiles();
-  static const int _followersCount = 0;
-  static const int _followingCount = 0;
+  UserProfile? _profile;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final profile = await UserService.getMyProfile();
+      if (mounted) {
+        setState(() {
+          _profile = profile;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   void _openFollowers(FollowersTab initialTab) {
+    if (_profile == null) return;
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, animation, __) => FollowersScreen(
           dark: widget.dark,
+          userId: _profile!.id,
+          userHandle: _profile!.username,
           initialTab: initialTab,
-          totalFollowers: _followersCount,
-          totalFollowing: _followingCount,
+          totalFollowers: _profile!.followersCount,
+          totalFollowing: _profile!.followingCount,
         ),
         transitionDuration: const Duration(milliseconds: 320),
         reverseTransitionDuration: const Duration(milliseconds: 260),
@@ -131,7 +164,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           );
         },
       ),
-    );
+    ).then((_) {
+      _loadProfile();
+    });
   }
 
   @override
@@ -148,187 +183,241 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
-      body: Center(
-        child: SingleChildScrollView(
-          child: DefaultTextStyle(
-            style: const TextStyle(decoration: TextDecoration.none),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    12,
-                    MediaQuery.paddingOf(context).top + 12,
-                    12,
-                    10,
-                  ),
-                  child: Row(
+      body: _isLoading && _profile == null
+          ? Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(fg),
+              ),
+            )
+          : _profile == null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Spacer(),
-                      GlassCircleButton(
-                        dark: dark,
-                        icon: Icons.settings_outlined,
-                        iconSize: 19,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            PageRouteBuilder(
-                              pageBuilder: (_, animation, __) =>
-                                  SettingsScreen(dark: dark),
-                              transitionDuration: const Duration(
-                                milliseconds: 320,
-                              ),
-                              reverseTransitionDuration: const Duration(
-                                milliseconds: 260,
-                              ),
-                              transitionsBuilder: (_, animation, __, child) {
-                                final curved = CurvedAnimation(
-                                  parent: animation,
-                                  curve: Curves.easeOutCubic,
-                                  reverseCurve: Curves.easeInCubic,
-                                );
-                                return SlideTransition(
-                                  position: Tween<Offset>(
-                                    begin: const Offset(0, 0.05),
-                                    end: Offset.zero,
-                                  ).animate(curved),
-                                  child: FadeTransition(
-                                    opacity: curved,
-                                    child: child,
-                                  ),
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                // COVER BAND + AVATAR
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: SizedBox(
-                    height: 218,
-                    child: Stack(
-                      alignment: Alignment.topCenter,
-                      children: [
-                        _CoverBand(
-                          dark: dark,
-                          fg: fg,
-                          sub: sub,
-                          hairline: hairline,
-                          followersCount: _followersCount,
-                          followingCount: _followingCount,
-                          onFollowersTap: () =>
-                              _openFollowers(FollowersTab.followers),
-                          onFollowingTap: () =>
-                              _openFollowers(FollowersTab.following),
+                      Text(
+                        'Failed to load profile',
+                        style: manrope(
+                          size: 16,
+                          weight: FontWeight.w600,
+                          color: fg,
                         ),
-                        Positioned(
-                          top: 96,
-                          child: Container(
-                            width: 116,
-                            height: 116,
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: dark
-                                  ? const Color(0xFF0A0A0C)
-                                  : const Color(0xFFFAFAFA),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: dark
-                                      ? Colors.black.withOpacity(0.8)
-                                      : const Color(
-                                          0xFF14161E,
-                                        ).withOpacity(0.25),
-                                  blurRadius: 36,
-                                  offset: const Offset(0, 18),
-                                  spreadRadius: -16,
-                                ),
-                              ],
-                            ),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: monoAvatar(dark, 0),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.white.withOpacity(0.22),
-                                    blurRadius: 0,
-                                    offset: const Offset(0, 1),
-                                    spreadRadius: -1,
-                                  ),
-                                ],
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                'S',
-                                style: manrope(
-                                  size: 42,
-                                  weight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: -1.26,
-                                ),
-                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      GestureDetector(
+                        onTap: _loadProfile,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: dark
+                                ? Colors.white.withOpacity(0.08)
+                                : Colors.black.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'Retry',
+                            style: manrope(
+                              size: 14,
+                              weight: FontWeight.w700,
+                              color: fg,
                             ),
                           ),
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                )
+              : Center(
+                  child: SingleChildScrollView(
+                    child: DefaultTextStyle(
+                      style: const TextStyle(decoration: TextDecoration.none),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              12,
+                              MediaQuery.paddingOf(context).top + 12,
+                              12,
+                              10,
+                            ),
+                            child: Row(
+                              children: [
+                                const Spacer(),
+                                GlassCircleButton(
+                                  dark: dark,
+                                  icon: Icons.settings_outlined,
+                                  iconSize: 19,
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      PageRouteBuilder(
+                                        pageBuilder: (_, animation, __) =>
+                                            SettingsScreen(dark: dark),
+                                        transitionDuration: const Duration(
+                                          milliseconds: 320,
+                                        ),
+                                        reverseTransitionDuration: const Duration(
+                                          milliseconds: 260,
+                                        ),
+                                        transitionsBuilder: (_, animation, __, child) {
+                                          final curved = CurvedAnimation(
+                                            parent: animation,
+                                            curve: Curves.easeOutCubic,
+                                            reverseCurve: Curves.easeInCubic,
+                                          );
+                                          return SlideTransition(
+                                            position: Tween<Offset>(
+                                              begin: const Offset(0, 0.05),
+                                              end: Offset.zero,
+                                            ).animate(curved),
+                                            child: FadeTransition(
+                                              opacity: curved,
+                                              child: child,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // COVER BAND + AVATAR
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: SizedBox(
+                              height: 218,
+                              child: Stack(
+                                alignment: Alignment.topCenter,
+                                children: [
+                                  _CoverBand(
+                                    dark: dark,
+                                    fg: fg,
+                                    sub: sub,
+                                    hairline: hairline,
+                                    followersCount: _profile?.followersCount ?? 0,
+                                    followingCount: _profile?.followingCount ?? 0,
+                                    onFollowersTap: () =>
+                                        _openFollowers(FollowersTab.followers),
+                                    onFollowingTap: () =>
+                                        _openFollowers(FollowersTab.following),
+                                  ),
+                                  Positioned(
+                                    top: 96,
+                                    child: Container(
+                                      width: 116,
+                                      height: 116,
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: dark
+                                            ? const Color(0xFF0A0A0C)
+                                            : const Color(0xFFFAFAFA),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: dark
+                                                ? Colors.black.withOpacity(0.8)
+                                                : const Color(
+                                                    0xFF14161E,
+                                                  ).withOpacity(0.25),
+                                            blurRadius: 36,
+                                            offset: const Offset(0, 18),
+                                            spreadRadius: -16,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: monoAvatar(dark, 0),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.white.withOpacity(0.22),
+                                              blurRadius: 0,
+                                              offset: const Offset(0, 1),
+                                              spreadRadius: -1,
+                                            ),
+                                          ],
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          _profile?.name.isNotEmpty == true
+                                              ? _profile!.name[0].toUpperCase()
+                                              : '?',
+                                          style: manrope(
+                                            size: 42,
+                                            weight: FontWeight.w700,
+                                            color: Colors.white,
+                                            letterSpacing: -1.26,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // NAME + HANDLE
+                          _NameBlock(
+                            dark: dark,
+                            fg: fg,
+                            sub: sub,
+                            name: _profile?.name ?? '',
+                            username: _profile?.username ?? '',
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // TITLE CHIP
+                          Center(
+                            child: _TitleChip(dark: dark, muted: muted, fg: fg),
+                          ),
+
+                          // BIO
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
+                            child: Text(
+                              'Designer & art director.\n'
+                              'Currently leading visual identity at Studio Atelier — '
+                              'type, motion & quiet things.',
+                              textAlign: TextAlign.center,
+                              style: manrope(
+                                size: 13.5,
+                                weight: FontWeight.w500,
+                                color: muted,
+                                letterSpacing: -0.07,
+                                height: 1.55,
+                              ),
+                            ),
+                          ),
+
+                          // SOCIAL LINKS
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: _SocialLinksRow(dark: dark, fg: fg),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: _PostsBox(dark: dark, fg: fg, sub: sub, tiles: _tiles),
+                          ),
+
+                          const SizedBox(height: 16),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 18),
-
-                // NAME + HANDLE
-                _NameBlock(dark: dark, fg: fg, sub: sub),
-
-                const SizedBox(height: 12),
-
-                // TITLE CHIP
-                Center(
-                  child: _TitleChip(dark: dark, muted: muted, fg: fg),
-                ),
-
-                // BIO
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
-                  child: Text(
-                    'Designer & art director.\n'
-                    'Currently leading visual identity at Studio Atelier — '
-                    'type, motion & quiet things.',
-                    textAlign: TextAlign.center,
-                    style: manrope(
-                      size: 13.5,
-                      weight: FontWeight.w500,
-                      color: muted,
-                      letterSpacing: -0.07,
-                      height: 1.55,
-                    ),
-                  ),
-                ),
-
-                // SOCIAL LINKS
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: _SocialLinksRow(dark: dark, fg: fg),
-                ),
-
-                const SizedBox(height: 18),
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: _PostsBox(dark: dark, fg: fg, sub: sub, tiles: _tiles),
-                ),
-
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -701,7 +790,15 @@ class _NameBlock extends StatelessWidget {
   final bool dark;
   final Color fg;
   final Color sub;
-  const _NameBlock({required this.dark, required this.fg, required this.sub});
+  final String name;
+  final String username;
+  const _NameBlock({
+    required this.dark,
+    required this.fg,
+    required this.sub,
+    required this.name,
+    required this.username,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -714,7 +811,7 @@ class _NameBlock extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  'Sarah Dietrich',
+                  name,
                   style: manrope(
                     size: 24,
                     weight: FontWeight.w800,
@@ -729,7 +826,7 @@ class _NameBlock extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '@sarah.d · she/her',
+            '@$username',
             style: manrope(
               size: 13,
               weight: FontWeight.w500,

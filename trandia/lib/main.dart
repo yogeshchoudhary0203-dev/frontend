@@ -11,6 +11,7 @@ import 'screens/intro_slides.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/fcm_service.dart';
+import 'l10n/app_localizations.dart';
 import 'utils/web_utils.dart';
 
 @pragma('vm:entry-point')
@@ -60,10 +61,19 @@ class TrandiaApp extends StatefulWidget {
 }
 
 class _TrandiaAppState extends State<TrandiaApp> {
+  final AppLanguageController _languageController = AppLanguageController();
+
   @override
   void initState() {
     super.initState();
+    _languageController.load();
     _checkInitialNotification();
+  }
+
+  @override
+  void dispose() {
+    _languageController.dispose();
+    super.dispose();
   }
 
   Future<void> _checkInitialNotification() async {
@@ -75,22 +85,28 @@ class _TrandiaAppState extends State<TrandiaApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Trandia',
-      navigatorKey: navigatorKey,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFFFFFFF),
-        colorScheme: const ColorScheme.light(surface: Color(0xFFFFFFFF)),
+    return AnimatedBuilder(
+      animation: _languageController,
+      builder: (context, _) => AppLanguageScope(
+        controller: _languageController,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Trandia',
+          navigatorKey: navigatorKey,
+          theme: ThemeData(
+            brightness: Brightness.light,
+            scaffoldBackgroundColor: const Color(0xFFFFFFFF),
+            colorScheme: const ColorScheme.light(surface: Color(0xFFFFFFFF)),
+          ),
+          darkTheme: ThemeData(
+            brightness: Brightness.dark,
+            scaffoldBackgroundColor: const Color(0xFF111111),
+            colorScheme: const ColorScheme.dark(surface: Color(0xFF111111)),
+          ),
+          themeMode: ThemeMode.system,
+          home: const SplashScreen(nextScreen: _StartupRouter()),
+        ),
       ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF111111),
-        colorScheme: const ColorScheme.dark(surface: Color(0xFF111111)),
-      ),
-      themeMode: ThemeMode.system,
-      home: const SplashScreen(nextScreen: _StartupRouter()),
     );
   }
 }

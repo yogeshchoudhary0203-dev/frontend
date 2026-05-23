@@ -141,6 +141,7 @@ class ChatService {
   void disconnectWebSocket() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _reconnectDelay = 1; // reset backoff so next connect starts fast
     _channel?.sink.close();
     _channel = null;
   }

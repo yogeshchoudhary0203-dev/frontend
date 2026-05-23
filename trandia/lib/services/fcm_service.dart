@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' show Color;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -373,7 +374,7 @@ class FcmService {
           'Authorization': 'Bearer $jwt',
           'Content-Type':  'application/json',
         },
-        body: '{"fcm_token": "$token"}',
+        body: jsonEncode({'fcm_token': token}),
       ).timeout(const Duration(seconds: 8));
       debugPrint('[FCM] ✅ token synced to backend: ${r.statusCode}');
     } catch (e) {

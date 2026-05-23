@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
 import 'glass_common.dart';
 import 'chat_screen.dart';
@@ -156,13 +157,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                 dark: widget.dark,
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Row(children: [
-                  IconButton(
-                    icon: Icon(Icons.arrow_back_ios_new_rounded, color: fg, size: 18),
-                    onPressed: () => Navigator.of(context).pop(),
-                    splashRadius: 20,
-                  ),
-                  const SizedBox(width: 4),
-                  Text('Messages',
+                  Text('Messages'.tr(context),
                       style: manrope(
                           size: 17,
                           weight: FontWeight.w700,
@@ -215,7 +210,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                       child: Row(children: [
                         Icon(Icons.search_rounded, size: 18, color: sub),
                         const SizedBox(width: 10),
-                        Text('Search messages',
+                        Text('Search messages'.tr(context),
                             style: manrope(
                                 size: 14,
                                 weight: FontWeight.w500,
@@ -234,7 +229,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                child: Text('ACTIVE NOW',
+                child: Text('ACTIVE NOW'.tr(context),
                     style: manrope(
                         size: 11,
                         weight: FontWeight.w700,
@@ -263,12 +258,12 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                   : _hasError
                       ? Center(
                           child: Column(mainAxisSize: MainAxisSize.min, children: [
-                            Text('Could not load chats',
+                            Text('Could not load chats'.tr(context),
                                 style: manrope(size: 14, color: sub)),
                             const SizedBox(height: 8),
                             TextButton(
                               onPressed: _loadConversations,
-                              child: const Text('Retry'),
+                              child: Text('Retry'.tr(context)),
                             ),
                           ]),
                         )
@@ -283,7 +278,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                               if (index == 0) {
                                 return Padding(
                                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                  child: Text('CHATS',
+                                  child: Text('CHATS'.tr(context),
                                       style: manrope(
                                           size: 11,
                                           weight: FontWeight.w700,
@@ -298,14 +293,14 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                                   child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Text('No messages yet',
+                                        Text('No messages yet'.tr(context),
                                             style: manrope(
                                                 size: 14,
                                                 weight: FontWeight.w500,
                                                 color: sub),
                                             textAlign: TextAlign.center),
                                         const SizedBox(height: 8),
-                                        Text('Search for someone to start chatting',
+                                        Text('Search for someone to start chatting'.tr(context),
                                             style: manrope(
                                                 size: 12,
                                                 weight: FontWeight.w400,
@@ -446,8 +441,8 @@ class _ChatRow extends StatelessWidget {
     final unread    = c.unreadCounts[myUserId] ?? 0;
     // Clean up encrypted/failed preview — show plain fallback instead
     final rawLast   = c.lastMessage ?? '';
-    final lastText  = _cleanPreview(rawLast);
-    final timeStr   = _formatTime(c.lastMessageTime);
+    final lastText  = _cleanPreview(context, rawLast);
+    final timeStr   = _formatTime(context, c.lastMessageTime);
 
     final previewColor  = unread > 0 ? fg : sub;
     final previewWeight = unread > 0 ? FontWeight.w600 : FontWeight.w500;
@@ -570,28 +565,28 @@ class _ChatRow extends StatelessWidget {
     );
   }
 
-  String _cleanPreview(String raw) {
-    if (raw.isEmpty) return 'No messages yet';
+  String _cleanPreview(BuildContext context, String raw) {
+    if (raw.isEmpty) return 'No messages yet'.tr(context);
     // Hide raw encrypted payloads and fallback strings from chat_service
     if (raw.contains('[Encrypted Message]') ||
         raw.startsWith('{"ct":') ||
         raw.startsWith('{"ct" :')) {
-      return '\u{1F4AC} Message';
+      return '\u{1F4AC} ${'Message'.tr(context)}';
     }
     return raw;
   }
 
-  String _formatTime(DateTime? time) {
+  String _formatTime(BuildContext context, DateTime? time) {
     if (time == null) return '';
     final localTime = time.toLocal();
     final now = DateTime.now();
     final diff = now.difference(localTime);
     // Agar diff negative ho (future time) ya bahut chhota ho — 'now' dikhao
-    if (diff.isNegative || diff.inSeconds < 30) return 'now';
+    if (diff.isNegative || diff.inSeconds < 30) return 'now'.tr(context);
     if (diff.inDays > 7) return '${localTime.day}/${localTime.month}';
     if (diff.inDays > 0) return '${diff.inDays}d';
     if (diff.inHours > 0) return '${diff.inHours}h';
     if (diff.inMinutes > 0) return '${diff.inMinutes}m';
-    return 'now';
+    return 'now'.tr(context);
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import 'auth/login_screen.dart';
 
 class IntroSlidesScreen extends StatefulWidget {
@@ -12,16 +13,16 @@ class _IntroSlidesScreenState extends State<IntroSlidesScreen> {
   final PageController _controller = PageController();
   int _page = 0;
 
-  final List<Widget> _pages = [
-    _Slide(
+  final List<({String title, String description})> _pages = [
+    (
       title: 'Welcome to Trandia',
       description: 'Your social hub to connect and share.',
     ),
-    _Slide(
+    (
       title: 'Explore Features',
       description: 'Chat, follow, and discover new content daily.',
     ),
-    _Slide(
+    (
       title: 'Stay Updated',
       description: 'Receive notifications and never miss out.',
     ),
@@ -66,7 +67,7 @@ class _IntroSlidesScreenState extends State<IntroSlidesScreen> {
               alignment: Alignment.centerRight,
               child: TextButton(
                 onPressed: _skip,
-                child: const Text('Skip'),
+                child: Text('Skip'.tr(context)),
               ),
             ),
             Expanded(
@@ -74,7 +75,10 @@ class _IntroSlidesScreenState extends State<IntroSlidesScreen> {
                 controller: _controller,
                 itemCount: _pages.length,
                 onPageChanged: (i) => setState(() => _page = i),
-                itemBuilder: (c, i) => _pages[i],
+                itemBuilder: (c, i) => _Slide(
+                  title: _pages[i].title,
+                  description: _pages[i].description,
+                ),
               ),
             ),
             Row(
@@ -103,7 +107,7 @@ class _IntroSlidesScreenState extends State<IntroSlidesScreen> {
                   foregroundColor: theme.colorScheme.onPrimary,
                 ),
                 onPressed: _next,
-                child: Text(_page == _pages.length - 1 ? 'Get Started' : 'Next'),
+                child: Text((_page == _pages.length - 1 ? 'Get Started' : 'Next').tr(context)),
               ),
             ),
           ],
@@ -128,13 +132,13 @@ class _Slide extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
+            title.tr(context),
             style: theme.textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 16),
-          Text(description, style: theme.textTheme.bodyMedium),
+          Text(description.tr(context), style: theme.textTheme.bodyMedium),
         ],
       ),
     );

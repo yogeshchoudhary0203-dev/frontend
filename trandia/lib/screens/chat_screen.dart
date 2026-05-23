@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_model.dart';
 import '../services/chat_service.dart';
 import '../services/fcm_service.dart';
+import '../l10n/app_localizations.dart';
 import 'glass_common.dart';
 
 // ── Quick emoji choices ───────────────────────────────────────
@@ -535,13 +536,13 @@ class _ChatScreenState extends State<ChatScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Chat'),
-        content: const Text('Delete this conversation? This cannot be undone.'),
+        title: Text('Delete Chat'.tr(context)),
+        content: Text('Delete this conversation? This cannot be undone.'.tr(context)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel'.tr(context))),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('Delete'.tr(context), style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -569,13 +570,13 @@ class _ChatScreenState extends State<ChatScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Message'),
-        content: const Text('Delete this message for everyone?'),
+        title: Text('Delete Message'.tr(context)),
+        content: Text('Delete this message for everyone?'.tr(context)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel'.tr(context))),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('Delete'.tr(context), style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -637,9 +638,9 @@ class _ChatScreenState extends State<ChatScreen>
               : _hasError
                   ? Center(
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text('Could not load messages', style: manrope(size: 14, color: sub)),
+                        Text('Could not load messages'.tr(context), style: manrope(size: 14, color: sub)),
                         const SizedBox(height: 8),
-                        TextButton(onPressed: _loadMessages, child: const Text('Retry')),
+                        TextButton(onPressed: _loadMessages, child: Text('Retry'.tr(context))),
                       ]),
                     )
                   : ListView.builder(
@@ -908,7 +909,7 @@ class _ReplyPreview extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('Replying to',
+                  Text('Replying to'.tr(context),
                       style: manrope(size: 10.5, weight: FontWeight.w700, color: labelColor)),
                   const SizedBox(height: 2),
                   Text(text,
@@ -1218,7 +1219,7 @@ class _ReplyQuote extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Replying to',
+                Text('Replying to'.tr(context),
                     style: manrope(size: 10, weight: FontWeight.w700, color: labelColor)),
                 const SizedBox(height: 2),
                 Text(text,
@@ -1260,7 +1261,7 @@ class _SheetTile extends StatelessWidget {
         child: Row(children: [
           Icon(icon, color: fg, size: 22),
           const SizedBox(width: 16),
-          Text(label,
+          Text(label.tr(context),
               style: manrope(size: 15, weight: FontWeight.w600, color: fg, letterSpacing: -0.2)),
         ]),
       ),
@@ -1382,7 +1383,7 @@ class _E2EBanner extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'End-to-end encrypted',
+            'End-to-end encrypted'.tr(context),
             style: manrope(
                 size: 12.5,
                 weight: FontWeight.w700,
@@ -1391,7 +1392,7 @@ class _E2EBanner extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Messages are secured with end-to-end encryption.\nOnly you and the recipient can read them.',
+            'Messages are secured with end-to-end encryption.\nOnly you and the recipient can read them.'.tr(context),
             textAlign: TextAlign.center,
             style: manrope(
                 size: 11,

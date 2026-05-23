@@ -10,7 +10,9 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import 'glass_common.dart';
+import 'comments_screen.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Models
@@ -351,7 +353,7 @@ class _PillTab extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         child: Center(
           child: Text(
-            label,
+            label.tr(context),
             style: manrope(
               size: 13,
               weight: active ? FontWeight.w800 : FontWeight.w600,
@@ -398,7 +400,37 @@ class _RightRail extends StatelessWidget {
         const SizedBox(height: 18),
         _BareCustomIconWithCount(
           child: CustomPaint(painter: _CommentBubblePainter(color: Colors.white)),
-          size: 28, count: data.comments, onTap: () {},
+          size: 28,
+          count: data.comments,
+          onTap: () {
+            Navigator.of(context).push(
+              PageRouteBuilder(
+                pageBuilder: (_, animation, __) => CommentsScreen(
+                  dark: true,
+                  postUser: data.user,
+                  postDescription: data.caption,
+                  postInitials: data.user.substring(0, data.user.length >= 2 ? 2 : 1).toUpperCase(),
+                  postUserColor: const Color(0xFF2D3561),
+                ),
+                transitionDuration: const Duration(milliseconds: 380),
+                reverseTransitionDuration: const Duration(milliseconds: 300),
+                transitionsBuilder: (_, animation, __, child) {
+                  final curved = CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                    reverseCurve: Curves.easeInCubic,
+                  );
+                  return SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.06),
+                      end: Offset.zero,
+                    ).animate(curved),
+                    child: FadeTransition(opacity: curved, child: child),
+                  );
+                },
+              ),
+            );
+          },
         ),
         const SizedBox(height: 18),
         _BareIconWithCount(
@@ -739,7 +771,7 @@ class _CaptionBlock extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                 child: Text(
-                  'Follow',
+                  'Follow'.tr(context),
                   style: manrope(
                     size: 12, weight: FontWeight.w800,
                     color: const Color(0xFF0A0A0A), letterSpacing: -0.06,

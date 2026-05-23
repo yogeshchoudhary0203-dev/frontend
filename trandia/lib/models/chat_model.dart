@@ -21,14 +21,14 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      id: json['id'],
-      name: json['name'],
-      username: json['username'],
-      picture: json['picture'],
-      publicKey: json['public_key'],
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      username: json['username'] as String? ?? '',
+      picture: json['picture'] as String?,
+      publicKey: json['public_key'] as String?,
       isFollowing: json['is_following'] == true,
-      followersCount: json['followers_count'] ?? 0,
-      followingCount: json['following_count'] ?? 0,
+      followersCount: json['followers_count'] as int? ?? 0,
+      followingCount: json['following_count'] as int? ?? 0,
     );
   }
 
@@ -164,16 +164,18 @@ class ChatMessage {
     }
 
     return ChatMessage(
-      id: json['id'],
-      conversationId: json['conversation_id'],
-      senderId: json['sender_id'],
-      text: json['text'],
-      createdAt: DateTime.parse(json['created_at']).toLocal(),
+      id: json['id'] as String? ?? '',
+      conversationId: json['conversation_id'] as String? ?? '',
+      senderId: json['sender_id'] as String? ?? '',
+      text: json['text'] as String? ?? '',
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String).toLocal()
+          : DateTime.now(),
       readBy: List<String>.from(json['read_by'] ?? []),
       encryptedAesKeys: encryptedAesKeys,
       reactions: reactions,
-      replyToId: json['reply_to_id'],
-      replyToText: json['reply_to_text'],
+      replyToId: json['reply_to_id'] as String?,
+      replyToText: json['reply_to_text'] as String?,
     );
   }
 }

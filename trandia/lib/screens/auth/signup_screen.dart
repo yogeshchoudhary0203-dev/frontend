@@ -17,6 +17,7 @@ import 'email_verification_pending_screen.dart';
 import '../home/home_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
+import '../../l10n/app_localizations.dart';
 
 // ── Username check status ─────────────────────────────────────────────────────
 enum _UStatus { idle, typing, loading, available, taken, error }
@@ -203,7 +204,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       initialDate: initialDate,
       firstDate: firstDate,
       lastDate: lastDate,
-      helpText: 'SELECT YOUR DATE OF BIRTH',
+      helpText: 'SELECT YOUR DATE OF BIRTH'.tr(context),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -244,23 +245,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final password = _passwordController.text;
 
     if (name.isEmpty || username.isEmpty || email.isEmpty || password.isEmpty) {
-      _showError('Please fill in all fields');
+      _showError('Please fill in all fields'.tr(context));
       return;
     }
     if (password.length < 6) {
-      _showError('Password must be at least 6 characters');
+      _showError('Password must be at least 6 characters'.tr(context));
       return;
     }
     if (_uStatus == _UStatus.taken) {
-      _showError('That username is taken. Choose another.');
+      _showError('That username is taken. Choose another.'.tr(context));
       return;
     }
     if (_uStatus == _UStatus.loading || _uStatus == _UStatus.typing) {
-      _showError('Please wait while we check your username…');
+      _showError('Please wait while we check your username...'.tr(context));
       return;
     }
     if (_uStatus == _UStatus.error) {
-      _showError('Please fix the username before continuing.');
+      _showError('Please fix the username before continuing.'.tr(context));
       return;
     }
 
@@ -295,7 +296,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (_) {
-      _showError('Could not connect. Check your network.');
+      _showError('Could not connect. Check your network.'.tr(context));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -320,7 +321,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (_) {
-      _showError('Google sign-in failed. Try again.');
+      _showError('Google sign-in failed. Try again.'.tr(context));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -382,7 +383,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           Center(child: _GlassMark(t: t, size: 56, radius: 18)),
                           const SizedBox(height: 14),
                           Center(
-                            child: Text('Create account',
+                            child: Text('Create account'.tr(context),
                                 style: TextStyle(
                                   fontSize: 26, fontWeight: FontWeight.w700,
                                   letterSpacing: -0.5, color: t.fg,
@@ -390,21 +391,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                           const SizedBox(height: 4),
                           Center(
-                            child: Text('Join the conversation',
+                            child: Text('Join the conversation'.tr(context),
                                 style: TextStyle(fontSize: 13, color: t.muted)),
                           ),
                           const SizedBox(height: 18),
-                          _FieldLabel(label: 'Name', color: t.muted),
+                          _FieldLabel(label: 'Name'.tr(context), color: t.muted),
                           const SizedBox(height: 8),
                           _GlassField(
                             t: t, controller: _nameController,
-                            hint: 'Your full name',
+                            hint: 'Your full name'.tr(context),
                             prefixIcon: Icons.person_outline_rounded,
                             keyboardType: TextInputType.name,
                             textInputAction: TextInputAction.next,
                           ),
                           const SizedBox(height: 12),
-                          _FieldLabel(label: 'Username', color: t.muted),
+                          _FieldLabel(label: 'Username'.tr(context), color: t.muted),
                           const SizedBox(height: 8),
                           // ── Username field with availability indicator ──────
                           _UsernameField(
@@ -429,7 +430,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ),
                           ],
                           const SizedBox(height: 12),
-                          _FieldLabel(label: 'Email', color: t.muted),
+                          _FieldLabel(label: 'Email'.tr(context), color: t.muted),
                           const SizedBox(height: 8),
                           _GlassField(
                             t: t, controller: _emailController,
@@ -439,11 +440,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             textInputAction: TextInputAction.next,
                           ),
                           const SizedBox(height: 12),
-                          _FieldLabel(label: 'Password', color: t.muted),
+                          _FieldLabel(label: 'Password'.tr(context), color: t.muted),
                           const SizedBox(height: 8),
                           _GlassField(
                             t: t, controller: _passwordController,
-                            hint: 'Create a password',
+                            hint: 'Create a password'.tr(context),
                             prefixIcon: Icons.lock_outline_rounded,
                             obscureText: _obscurePassword,
                             textInputAction: TextInputAction.done,
@@ -456,7 +457,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           const SizedBox(height: 18),
                           _PrimaryPillButton(
                             t: t,
-                            label: _isLoading ? 'Sending verification…' : 'Continue',
+                            label: _isLoading ? 'Sending verification...'.tr(context) : 'Continue'.tr(context),
                             onTap: _isLoading ? null : _handleSignUp,
                           ),
                           const SizedBox(height: 18),
@@ -487,9 +488,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                   text: TextSpan(
                                     style: TextStyle(fontSize: 13, color: t.muted),
                                     children: [
-                                      const TextSpan(text: 'Already have an account?  '),
+                                      TextSpan(text: 'Already have an account?  '.tr(context)),
                                       TextSpan(
-                                        text: 'Sign in',
+                                        text: 'Sign in'.tr(context),
                                         style: TextStyle(
                                           color: t.fg, fontWeight: FontWeight.w700,
                                         ),
@@ -683,7 +684,7 @@ class _USuggestions extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 6, bottom: 6),
-          child: Text('Try instead:', style: TextStyle(fontSize: 11, color: t.muted)),
+          child: Text('Try instead:'.tr(context), style: TextStyle(fontSize: 11, color: t.muted)),
         ),
         Wrap(
           spacing: 6, runSpacing: 6,
@@ -1113,7 +1114,7 @@ class _OrDivider extends StatelessWidget {
       Expanded(child: Divider(color: lineColor, thickness: 1, height: 1)),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Text('OR',
+        child: Text('OR'.tr(context),
             style: TextStyle(
               fontSize: 11, fontWeight: FontWeight.w700,
               color: t.muted, letterSpacing: 2.0,
@@ -1160,7 +1161,7 @@ class _GooglePillButton extends StatelessWidget {
                   children: [
                     const _GoogleGlyph(size: 20),
                     const SizedBox(width: 12),
-                    Text('Continue with Google',
+                    Text('Continue with Google'.tr(context),
                         style: TextStyle(
                           fontSize: 16, fontWeight: FontWeight.w600,
                           letterSpacing: -0.2, color: t.fg,

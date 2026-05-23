@@ -9,13 +9,21 @@
 
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../services/user_service.dart';
+import '../services/auth_service.dart';
+import '../services/chat_service.dart';
+import '../models/chat_model.dart';
+import 'chat_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
+    this.userId = '',
+    this.username = '',
     this.displayName = 'Sarah Dietrich',
     this.handle = 'sarah.d',
     this.title = 'Designer · Studio Atelier',
@@ -29,6 +37,8 @@ class ProfileScreen extends StatefulWidget {
     this.initialFollowing = false,
   });
 
+  final String userId;
+  final String username;
   final String displayName;
   final String handle;
   final String title;
@@ -46,11 +56,102 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   late bool _isFollowing;
+  bool _isFollowLoading = false;
 
   @override
   void initState() {
     super.initState();
     _isFollowing = widget.initialFollowing;
+  }
+
+  Future<void> _handleFollow() async {
+    if (widget.userId.isEmpty || _isFollowLoading) return;
+    final wasFollowing = _isFollowing;
+    setState(() {
+      _isFollowing = !wasFollowing;
+      _isFollowLoading = true;
+    });
+    final success = wasFollowing
+        ? await UserService.unfollowUser(widget.userId)
+        : await UserService.followUser(widget.userId);
+    if (!mounted) return;
+    if (!success) {
+      setState(() => _isFollowing = wasFollowing);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(wasFollowing ? 'Failed to unfollow' : 'Failed to follow')),
+      );
+    }
+    setState(() => _isFollowLoading = false);
+  }
+
+  Future<void> _handleMessage() async {
+    if (widget.username.isEmpty) return;
+    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    try {
+      final myUserId = await AuthService.getCurrentUserId();
+      if (!mounted) return;
+      bool dialogOpen = false;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      dialogOpen = true;
+      final convId = await ChatService().startConversation(widget.username);
+      if (mounted && dialogOpen) {
+        Navigator.of(context).pop();
+        dialogOpen = false;
+      }
+      if (!mounted) return;
+      final conversation = ChatConversation(
+        id: convId,
+        participants: [
+          UserProfile(id: myUserId ?? '', name: 'Me', username: 'me'),
+          UserProfile(
+            id: widget.userId,
+            name: widget.displayName,
+            username: widget.username,
+          ),
+        ],
+        lastMessage: null,
+        lastMessageTime: null,
+        unreadCounts: {},
+        isGroup: false,
+      );
+      await Navigator.of(context).push(
+        PageRouteBuilder(
+          pageBuilder: (_, animation, __) => ChatScreen(
+            dark: isDark,
+            conversation: conversation,
+            myUserId: myUserId ?? '',
+          ),
+          transitionDuration: const Duration(milliseconds: 380),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (_, animation, __, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(1.0, 0),
+                end: Offset.zero,
+              ).animate(curved),
+              child: FadeTransition(opacity: curved, child: child),
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      developer.log('_handleMessage error: $e');
+      if (mounted) {
+        try { Navigator.of(context).pop(); } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start chat: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -129,13 +230,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: _FollowButton(
                             t: t,
                             following: _isFollowing,
-                            onTap: () =>
-                                setState(() => _isFollowing = !_isFollowing),
+                            onTap: _handleFollow,
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: _MessageButton(t: t, onTap: () {}),
+                          child: _MessageButton(t: t, onTap: _handleMessage),
                         ),
                       ]),
                     ),

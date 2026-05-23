@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import 'glass_common.dart';
+import 'edit_profile_screen.dart';
 import 'parental_control_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -78,11 +79,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _SectionCard(
                         dark: dark,
                         children: [
-                          _SettingRow(
-                            dark: dark,
-                            icon: Icons.person_outline_rounded,
-                            title: 'Edit profile',
-                            subtitle: 'Name, bio, links and photo',
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                PageRouteBuilder(
+                                  pageBuilder: (_, animation, __) =>
+                                      EditProfileScreen(dark: dark),
+                                  transitionDuration: const Duration(milliseconds: 320),
+                                  reverseTransitionDuration: const Duration(milliseconds: 260),
+                                  transitionsBuilder: (_, animation, __, child) {
+                                    final curved = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutCubic,
+                                      reverseCurve: Curves.easeInCubic,
+                                    );
+                                    return SlideTransition(
+                                      position: Tween<Offset>(
+                                        begin: const Offset(0, 0.05),
+                                        end: Offset.zero,
+                                      ).animate(curved),
+                                      child: FadeTransition(opacity: curved, child: child),
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                            child: _SettingRow(
+                              dark: dark,
+                              icon: Icons.person_outline_rounded,
+                              title: 'Edit profile',
+                              subtitle: 'Name, bio, links and photo',
+                            ),
                           ),
                           _SettingRow(
                             dark: dark,

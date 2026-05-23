@@ -9,6 +9,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import 'followers_screen(1).dart';
 import 'setting_screen.dart';
@@ -107,6 +108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _tiles = _buildProfileTiles();
   UserProfile? _profile;
   bool _isLoading = true;
+  List<String> _platformOrder = ['snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'];
 
   @override
   void initState() {
@@ -120,6 +122,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _isLoading = true;
     });
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedOrder = prefs.getStringList('social_platform_order');
+      if (savedOrder != null && savedOrder.isNotEmpty) {
+        final validPlatforms = {'snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'};
+        final loadedOrder = savedOrder.where((e) => validPlatforms.contains(e)).toList();
+        for (final p in validPlatforms) {
+          if (!loadedOrder.contains(p)) {
+            loadedOrder.add(p);
+          }
+        }
+        _platformOrder = loadedOrder;
+      }
       final profile = await UserService.getMyProfile();
       if (mounted) {
         setState(() {
@@ -394,9 +408,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Padding(
                             padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
                             child: Text(
-                              'Designer & art director.\n'
-                              'Currently leading visual identity at Studio Atelier — '
-                              'type, motion & quiet things.',
+                              _profile?.bio?.isNotEmpty == true
+                                  ? _profile!.bio!
+                                  : 'Designer & art director.\n'
+                                      'Currently leading visual identity at Studio Atelier — '
+                                      'type, motion & quiet things.',
                               textAlign: TextAlign.center,
                               style: manrope(
                                 size: 13.5,
@@ -411,7 +427,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           // SOCIAL LINKS
                           Padding(
                             padding: const EdgeInsets.only(top: 10),
-                            child: _SocialLinksRow(dark: dark, fg: fg),
+                            child: _SocialLinksRow(
+                              dark: dark,
+                              fg: fg,
+                              profile: _profile,
+                              platformOrder: _platformOrder,
+                            ),
                           ),
 
                           const SizedBox(height: 18),
@@ -431,62 +452,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-Future<void> _openSocialLink(String url) async {
-  final uri = Uri.parse(url);
-  await launchUrl(uri, mode: LaunchMode.externalApplication);
+Future<void> _openSocialLink(String url, String platform) async {
+  if (url.trim().isEmpty) return;
+  String finalUrl = url.trim();
+  if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
+    if (platform.toLowerCase() == 'whatsapp') {
+      if (finalUrl.startsWith('+') || RegExp(r'^\d+$').hasMatch(finalUrl)) {
+        finalUrl = 'https://wa.me/$finalUrl';
+      } else {
+        finalUrl = 'https://$finalUrl';
+      }
+    } else {
+      finalUrl = 'https://$finalUrl';
+    }
+  }
+  final uri = Uri.parse(finalUrl);
+  try {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } catch (_) {}
 }
 
 class _SocialLinksRow extends StatelessWidget {
   final bool dark;
   final Color fg;
-  const _SocialLinksRow({required this.dark, required this.fg});
+  final UserProfile? profile;
+  final List<String> platformOrder;
+  const _SocialLinksRow({
+    required this.dark,
+    required this.fg,
+    required this.platformOrder,
+    this.profile,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    final buttons = <Widget>[];
+
+    for (int i = 0; i < platformOrder.length; i++) {
+      final platform = platformOrder[i];
+      if (platform == 'snapchat') {
+        buttons.add(
           _SocialButton(
             dark: dark,
             icon: FontAwesomeIcons.snapchat,
             color: const Color(0xFFFFFC00),
             label: 'Snapchat',
-            url: 'https://www.snapchat.com/add/sarah.d',
+            url: profile?.snapchatLink?.isNotEmpty == true
+                ? profile!.snapchatLink!
+                : 'https://www.snapchat.com/add/sarah.d',
+            platform: 'snapchat',
           ),
-          const SizedBox(width: 10),
+        );
+      } else if (platform == 'instagram') {
+        buttons.add(
           _SocialButton(
             dark: dark,
             icon: FontAwesomeIcons.instagram,
             color: const Color(0xFFE4405F),
             label: 'Instagram',
-            url: 'https://www.instagram.com/sarah.d',
+            url: profile?.instagramLink?.isNotEmpty == true
+                ? profile!.instagramLink!
+                : 'https://www.instagram.com/sarah.d',
+            platform: 'instagram',
           ),
-          const SizedBox(width: 10),
+        );
+      } else if (platform == 'whatsapp') {
+        buttons.add(
           _SocialButton(
             dark: dark,
             icon: FontAwesomeIcons.whatsapp,
             color: const Color(0xFF25D366),
             label: 'WhatsApp',
-            url: 'https://wa.me/15551234567',
+            url: profile?.whatsappLink?.isNotEmpty == true
+                ? profile!.whatsappLink!
+                : 'https://wa.me/15551234567',
+            platform: 'whatsapp',
           ),
-          const SizedBox(width: 10),
+        );
+      } else if (platform == 'facebook') {
+        buttons.add(
           _SocialButton(
             dark: dark,
             icon: FontAwesomeIcons.facebookF,
             color: const Color(0xFF1877F2),
             label: 'Facebook',
-            url: 'https://www.facebook.com/sarah.d',
+            url: profile?.facebookLink?.isNotEmpty == true
+                ? profile!.facebookLink!
+                : 'https://www.facebook.com/sarah.d',
+            platform: 'facebook',
           ),
-          const SizedBox(width: 10),
+        );
+      } else if (platform == 'twitter') {
+        buttons.add(
           _SocialButton(
             dark: dark,
             icon: FontAwesomeIcons.xTwitter,
             color: dark ? Colors.white : const Color(0xFF000000),
             label: 'Twitter',
-            url: 'https://twitter.com/sarah_d',
+            url: profile?.twitterLink?.isNotEmpty == true
+                ? profile!.twitterLink!
+                : 'https://twitter.com/sarah_d',
+            platform: 'twitter',
           ),
-        ],
+        );
+      } else if (platform == 'youtube') {
+        buttons.add(
+          _SocialButton(
+            dark: dark,
+            icon: FontAwesomeIcons.youtube,
+            color: const Color(0xFFFF0000),
+            label: 'YouTube',
+            url: profile?.youtubeLink?.isNotEmpty == true
+                ? profile!.youtubeLink!
+                : 'https://www.youtube.com',
+            platform: 'youtube',
+          ),
+        );
+      }
+
+      if (i < platformOrder.length - 1) {
+        buttons.add(const SizedBox(width: 10));
+      }
+    }
+
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: buttons,
       ),
     );
   }
@@ -498,12 +590,14 @@ class _SocialButton extends StatelessWidget {
   final Color color;
   final String label;
   final String url;
+  final String platform;
   const _SocialButton({
     required this.dark,
     required this.icon,
     required this.color,
     required this.label,
     required this.url,
+    required this.platform,
   });
 
   @override
@@ -511,7 +605,7 @@ class _SocialButton extends StatelessWidget {
     return Tooltip(
       message: label,
       child: InkWell(
-        onTap: () => _openSocialLink(url),
+        onTap: () => _openSocialLink(url, platform),
         customBorder: const CircleBorder(),
         child: Container(
           width: 38,

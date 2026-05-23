@@ -7,6 +7,14 @@ class UserProfile {
   final bool isFollowing;
   final int followersCount;
   final int followingCount;
+  final String? bio;
+  final String? link;
+  final String? snapchatLink;
+  final String? instagramLink;
+  final String? whatsappLink;
+  final String? facebookLink;
+  final String? twitterLink;
+  final String? youtubeLink;
 
   UserProfile({
     required this.id,
@@ -17,6 +25,14 @@ class UserProfile {
     this.isFollowing = false,
     this.followersCount = 0,
     this.followingCount = 0,
+    this.bio,
+    this.link,
+    this.snapchatLink,
+    this.instagramLink,
+    this.whatsappLink,
+    this.facebookLink,
+    this.twitterLink,
+    this.youtubeLink,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -42,6 +58,14 @@ class UserProfile {
       'is_following': isFollowing,
       'followers_count': followersCount,
       'following_count': followingCount,
+      'bio': bio,
+      'link': link,
+      'snapchat_link': snapchatLink,
+      'instagram_link': instagramLink,
+      'whatsapp_link': whatsappLink,
+      'facebook_link': facebookLink,
+      'twitter_link': twitterLink,
+      'youtube_link': youtubeLink,
     };
   }
 }

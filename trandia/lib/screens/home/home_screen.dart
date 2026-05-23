@@ -15,6 +15,7 @@ import '../user_profile_screen.dart' as user_profile;
 import '../chat_list_screen.dart';
 import '../create_post_screens.dart';
 import '../comments_screen.dart';
+import '../liked_by_screen.dart';
 import '../../services/cryptography_service.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -739,18 +740,40 @@ class _PostCardState extends State<_PostCard> {
             Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
               child: Row(children: [
 
-                GestureDetector(onTap: _toggleLike,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    transitionBuilder: (child, anim) =>
-                        ScaleTransition(scale: anim, child: child),
-                    child: SizedBox(
-                      key: ValueKey(_liked),
-                      width: 26, height: 26,
-                      child: CustomPaint(
-                        painter: _IgHeartPainter(
-                          color: _liked ? likedCol : iconCol,
-                          filled: _liked))))),
+                _LikeButton(
+                  isLiked: _liked,
+                  onTap: _toggleLike,
+                  onLongPress: () {
+                    HapticFeedback.heavyImpact();
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, animation, __) => LikedByScreen(
+                          dark: dark,
+                          postUser: p.user,
+                          likeCount: _likeCount,
+                        ),
+                        transitionDuration: const Duration(milliseconds: 380),
+                        reverseTransitionDuration: const Duration(milliseconds: 300),
+                        transitionsBuilder: (_, animation, __, child) {
+                          final curved = CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                            reverseCurve: Curves.easeInCubic,
+                          );
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0, 0.06),
+                              end: Offset.zero,
+                            ).animate(curved),
+                            child: FadeTransition(opacity: curved, child: child),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                  likedColor: likedCol,
+                  iconColor: iconCol,
+                ),
 
                 const SizedBox(width: 16),
 
@@ -845,6 +868,88 @@ class _PostCardState extends State<_PostCard> {
 
           ])
       );
+  }
+}
+
+// ─── Bouncy Like Button ──────────────────────────────
+class _LikeButton extends StatefulWidget {
+  final bool isLiked;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final Color likedColor;
+  final Color iconColor;
+
+  const _LikeButton({
+    required this.isLiked,
+    required this.onTap,
+    this.onLongPress,
+    required this.likedColor,
+    required this.iconColor,
+  });
+
+  @override
+  State<_LikeButton> createState() => _LikeButtonState();
+}
+
+class _LikeButtonState extends State<_LikeButton> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+    
+    _scaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 1.35)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.35, end: 0.9)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.9, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 25,
+      ),
+    ]).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        widget.onTap();
+        _controller.forward(from: 0.0);
+      },
+      onLongPress: widget.onLongPress,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: SizedBox(
+          width: 26,
+          height: 26,
+          child: CustomPaint(
+            painter: _IgHeartPainter(
+              color: widget.isLiked ? widget.likedColor : widget.iconColor,
+              filled: widget.isLiked,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1362,7 +1467,7 @@ class _IslandNotificationOverlayState
         final double borderR = ui.lerpDouble(19, 0, _expandCurve(t))!;
 
         final double contentAlpha =
-            ((t - 0.70) / 0.30).clamp(0.0, 1.0);
+            ((t - 0.35) / 0.65).clamp(0.0, 1.0);
 
         final double dragAlpha = _dragging
             ? (1.0 - (_dragY / (dismissThreshold * 2.0)).clamp(0.0, 0.5))
@@ -1405,8 +1510,7 @@ class _IslandNotificationOverlayState
                       }
                     },
                     child: Stack(children: [
-                      AnimatedOpacity(
-                        duration: const Duration(milliseconds: 180),
+                      Opacity(
                         opacity: contentAlpha,
                         child: NotificationsScreen(dark: widget.isDark, onClose: widget.onClose),
                       ),

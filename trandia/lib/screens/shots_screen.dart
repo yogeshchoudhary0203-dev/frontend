@@ -10,6 +10,7 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import 'glass_common.dart';
 
 // ───────────────────────────────────────────────────────────────
@@ -350,7 +351,7 @@ class _PillTab extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         child: Center(
           child: Text(
-            label,
+            label.tr(context),
             style: manrope(
               size: 13,
               weight: active ? FontWeight.w800 : FontWeight.w600,
@@ -738,7 +739,7 @@ class _CaptionBlock extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                 child: Text(
-                  'Follow',
+                  'Follow'.tr(context),
                   style: manrope(
                     size: 12, weight: FontWeight.w800,
                     color: const Color(0xFF0A0A0A), letterSpacing: -0.06,

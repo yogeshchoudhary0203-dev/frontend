@@ -13,6 +13,7 @@ import 'signup_screen.dart';
 import '../home/home_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
+import '../../l10n/app_localizations.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -45,7 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     if (email.isEmpty || password.isEmpty) {
-      _showError('Please fill in all fields');
+      _showError('Please fill in all fields'.tr(context));
       return;
     }
     setState(() => _isLoading = true);
@@ -61,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (_) {
-      _showError('Could not connect to server. Check your network.');
+      _showError('Could not connect to server. Check your network.'.tr(context));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -82,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (_) {
-      _showError('Google sign-in failed. Try again.');
+      _showError('Google sign-in failed. Try again.'.tr(context));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -159,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 18),
                             Center(
                               child: Text(
-                                'Welcome back',
+                                'Welcome back'.tr(context),
                                 style: TextStyle(
                                   fontSize: 28,
                                   fontWeight: FontWeight.w700,
@@ -171,13 +172,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 6),
                             Center(
                               child: Text(
-                                'Sign in to continue',
+                                'Sign in to continue'.tr(context),
                                 style: TextStyle(
                                     fontSize: 14, color: t.muted),
                               ),
                             ),
                             const SizedBox(height: 22),
-                            _FieldLabel(label: 'Email', color: t.muted),
+                            _FieldLabel(label: 'Email'.tr(context), color: t.muted),
                             const SizedBox(height: 8),
                             _GlassField(
                               t: t,
@@ -188,12 +189,12 @@ class _LoginScreenState extends State<LoginScreen> {
                               textInputAction: TextInputAction.next,
                             ),
                             const SizedBox(height: 14),
-                            _FieldLabel(label: 'Password', color: t.muted),
+                            _FieldLabel(label: 'Password'.tr(context), color: t.muted),
                             const SizedBox(height: 8),
                             _GlassField(
                               t: t,
                               controller: _passwordController,
-                              hint: 'Enter your password',
+                              hint: 'Enter your password'.tr(context),
                               prefixIcon: Icons.lock_outline_rounded,
                               obscureText: _obscurePassword,
                               textInputAction: TextInputAction.done,
@@ -213,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   padding: const EdgeInsets.symmetric(
                                       vertical: 4),
                                   child: Text(
-                                    'Forgot password?',
+                                    'Forgot password?'.tr(context),
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
@@ -227,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             _PrimaryPillButton(
                               t: t,
                               label:
-                                  _isLoading ? 'Signing in…' : 'Sign in',
+                                  _isLoading ? 'Signing in...'.tr(context) : 'Sign in'.tr(context),
                               onTap:
                                   _isLoading ? null : _handleSignIn,
                             ),
@@ -261,11 +262,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                       style: TextStyle(
                                           fontSize: 13, color: t.muted),
                                       children: [
-                                        const TextSpan(
-                                            text:
-                                                "Don't have an account?  "),
                                         TextSpan(
-                                          text: 'Sign up',
+                                            text:
+                                                "Don't have an account?  ".tr(context)),
+                                        TextSpan(
+                                          text: 'Sign up'.tr(context),
                                           style: TextStyle(
                                             color: t.fg,
                                             fontWeight: FontWeight.w700,
@@ -809,7 +810,7 @@ class _OrDivider extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Text(
-          'OR',
+          'OR'.tr(context),
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
@@ -863,7 +864,7 @@ class _GooglePillButton extends StatelessWidget {
                     const _GoogleGlyph(size: 20),
                     const SizedBox(width: 12),
                     Text(
-                      'Continue with Google',
+                      'Continue with Google'.tr(context),
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,

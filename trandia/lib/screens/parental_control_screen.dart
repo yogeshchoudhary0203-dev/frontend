@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import 'glass_common.dart';
 
 class ParentalControlScreen extends StatelessWidget {
@@ -19,12 +20,12 @@ class ParentalControlScreen extends StatelessWidget {
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: fg),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Parental Control', style: manrope(size: 18, weight: FontWeight.w800, color: fg)),
+        title: Text('Parental Control'.tr(context), style: manrope(size: 18, weight: FontWeight.w800, color: fg)),
         centerTitle: true,
       ),
       body: Center(
         child: Text(
-          'Parental control settings will be implemented here.',
+          'Parental control settings will be implemented here.'.tr(context),
           style: manrope(size: 16, weight: FontWeight.w500, color: sub),
           textAlign: TextAlign.center,
         ),

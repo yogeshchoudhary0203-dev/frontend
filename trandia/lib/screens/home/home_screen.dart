@@ -14,6 +14,7 @@ import '../profile_screen.dart';
 import '../chat_list_screen.dart';
 import '../create_post_screens.dart';
 import '../../services/cryptography_service.dart';
+import '../../l10n/app_localizations.dart';
 
 extension _ColorOp on Color {
   Color op(double opacity) => withOpacity(opacity);
@@ -536,7 +537,7 @@ class _StoryBubble extends StatelessWidget {
                           fontWeight: FontWeight.w600))),
                 )))),
           const SizedBox(height: 6),
-          Text(story.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+          Text(story.name.tr(context), maxLines: 1, overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: (isDark ? Colors.white : Colors.black)
@@ -712,7 +713,7 @@ class _PostCardState extends State<_PostCard> {
               ])),
 
             Padding(padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
-              child: Text('$_likeCount likes', style: TextStyle(
+              child: Text('$_likeCount ${'likes'.tr(context)}', style: TextStyle(
                   color: textPrimary, fontSize: 13,
                   fontWeight: FontWeight.w600))),
 

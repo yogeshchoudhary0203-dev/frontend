@@ -14,6 +14,7 @@ import 'followers_screen(1).dart';
 import 'setting_screen.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
+import '../l10n/app_localizations.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Models
@@ -981,7 +982,7 @@ class _Stat extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          label.toUpperCase(),
+          label.tr(context).toUpperCase(),
           style: manrope(
             size: 10.5,
             weight: FontWeight.w700,
@@ -1029,7 +1030,7 @@ class _PrimaryCta extends StatelessWidget {
             ),
         onPressed: () {},
         child: Text(
-          label,
+          label.tr(context),
           style: manrope(
             size: 14,
             weight: FontWeight.w800,
@@ -1069,7 +1070,7 @@ class _GhostCta extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
-            label,
+            label.tr(context),
             style: manrope(
               size: 14,
               weight: FontWeight.w700,
@@ -1337,7 +1338,7 @@ class _TabButton extends StatelessWidget {
               Icon(icon, size: 14, color: active ? activeFg : muted),
               const SizedBox(width: 6),
               Text(
-                label,
+                label.tr(context),
                 style: manrope(
                   size: 13,
                   weight: active ? FontWeight.w800 : FontWeight.w600,

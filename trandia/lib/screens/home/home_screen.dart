@@ -260,6 +260,37 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  void _openChatScreen() async {
+    HapticFeedback.selectionClick();
+    if (_navOpen) {
+      setState(() => _navOpen = false);
+      _navCtrl.reverse();
+    }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, animation, __) => ChatListScreen(dark: isDark),
+        transitionDuration: const Duration(milliseconds: 380),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1.0, 0.0), // native feel slide from right side
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
+      ),
+    );
+    _loadUnreadCount();
+  }
+
   void _openIsland() {
     _captureIslandRect();
     HapticFeedback.mediumImpact();
@@ -297,7 +328,14 @@ class _HomeScreenState extends State<HomeScreen>
     return Scaffold(
       extendBodyBehindAppBar: true,
       extendBody: true,
-      body: Stack(children: [
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity != null && details.primaryVelocity! > 150) {
+            _openChatScreen();
+          }
+        },
+        child: Stack(children: [
 
         Positioned.fill(child: Container(
           decoration: BoxDecoration(
@@ -478,7 +516,8 @@ class _HomeScreenState extends State<HomeScreen>
             isDark     : isDark,
             onClose    : _closeIsland,
           ),
-      ]),
+        ]),
+      ),
     );
   }
 }
@@ -1338,7 +1377,7 @@ class _IslandNotificationOverlayState
                       AnimatedOpacity(
                         duration: const Duration(milliseconds: 180),
                         opacity: contentAlpha,
-                        child: NotificationsScreen(dark: widget.isDark),
+                        child: NotificationsScreen(dark: widget.isDark, onClose: widget.onClose),
                       ),
 
                       if (contentAlpha > 0.1)

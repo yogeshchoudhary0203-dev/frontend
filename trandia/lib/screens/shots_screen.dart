@@ -109,7 +109,7 @@ class _ShotsScreenState extends State<ShotsScreen>
           top: topInset == 0 ? 14 : topInset + 10,
           left: 16,
           right: 16,
-          child: _TopBar(feed: _feed, onTap: _setFeed),
+          child: _TopBar(feed: _feed, onTap: _setFeed, onExit: () => Navigator.of(context).pop()),
         ),
         // Right rail
         Positioned(
@@ -255,18 +255,19 @@ class _Video extends StatelessWidget {
 }
 
 // ───────────────────────────────────────────────────────────────
-// Top bar — pill switcher + camera
+// Top bar — exit + pill switcher + camera
 // ───────────────────────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
   final ShotsFeed feed;
   final ValueChanged<ShotsFeed> onTap;
-  const _TopBar({required this.feed, required this.onTap});
+  final VoidCallback onExit;
+  const _TopBar({required this.feed, required this.onTap, required this.onExit});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const SizedBox(width: 24),
+        _BareIcon(icon: Icons.arrow_back_ios_new, size: 22, onTap: onExit),
         Expanded(child: Center(child: _FeedPill(feed: feed, onTap: onTap))),
         _BareIcon(icon: Icons.photo_camera_outlined, size: 24, onTap: () {}),
       ],

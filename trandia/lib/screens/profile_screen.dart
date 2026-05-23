@@ -245,6 +245,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             child: Row(
                               children: [
+                                GlassCircleButton(
+                                  dark: dark,
+                                  icon: Icons.arrow_back_ios_new_rounded,
+                                  iconSize: 16,
+                                  onTap: () {
+                                    Navigator.of(context).pop();
+                                  },
+                                ),
                                 const Spacer(),
                                 GlassCircleButton(
                                   dark: dark,

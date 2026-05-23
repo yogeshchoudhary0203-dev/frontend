@@ -105,7 +105,8 @@ const int    _kMaxStack   = 4;
 
 class NotificationsScreen extends StatefulWidget {
   final bool dark;
-  const NotificationsScreen({super.key, required this.dark});
+  final VoidCallback? onClose;
+  const NotificationsScreen({super.key, required this.dark, this.onClose});
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -284,6 +285,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           child: GlassHeader(
             dark: dark,
             child: Row(children: [
+              if (widget.onClose != null) ...[
+                GestureDetector(
+                  onTap: widget.onClose,
+                  child: GlassCircleButton(dark: dark, icon: Icons.arrow_back_ios_new_rounded, iconSize: 16),
+                ),
+                const SizedBox(width: 10),
+              ],
               Text('Notifications',
                 style: manrope(size: 17, weight: FontWeight.w700,
                   color: GlassTokens.fg(dark), letterSpacing: -0.34)),

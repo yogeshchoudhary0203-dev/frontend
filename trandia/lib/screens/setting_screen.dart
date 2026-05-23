@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import 'glass_common.dart';
 import 'parental_control_screen.dart';
 
@@ -15,13 +16,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool privateAccount = true;
   bool activityStatus = false;
   bool notifications = true;
-  String selectedLanguage = 'English';
 
   @override
   Widget build(BuildContext context) {
     final dark = widget.dark;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
+    final languageController = AppLanguageScope.controllerOf(context);
+    final selectedLanguage = languageController.language.label;
 
     return Scaffold(
       backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
@@ -46,7 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          'Settings',
+                          'Settings'.tr(context),
                           style: manrope(size: 17, weight: FontWeight.w800, color: fg),
                         ),
                         const Spacer(),
@@ -72,7 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       _AccountCard(dark: dark),
                       const SizedBox(height: 16),
-                      _SectionTitle('ACCOUNT', color: sub),
+                      _SectionTitle('ACCOUNT'.tr(context), color: sub),
                       _SectionCard(
                         dark: dark,
                         children: [
@@ -97,7 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      _SectionTitle('PREFERENCES', color: sub),
+                      _SectionTitle('PREFERENCES'.tr(context), color: sub),
                       _SectionCard(
                         dark: dark,
                         children: [
@@ -132,17 +134,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _BaseRow(
                         dark: dark,
                         icon: Icons.language,
-                        title: 'Language',
-                        subtitle: selectedLanguage,
+                        title: 'Language'.tr(context),
+                        subtitle: selectedLanguage.tr(context),
                         trailing: DropdownButton<String>(
                           value: selectedLanguage,
                           underline: const SizedBox(),
                           icon: Icon(Icons.arrow_drop_down, color: GlassTokens.sub(dark)),
                           items: ['English', 'Hindi', 'Hinglish']
-                              .map((lang) => DropdownMenuItem(value: lang, child: Text(lang)))
+                              .map((lang) => DropdownMenuItem(value: lang, child: Text(lang.tr(context))))
                               .toList(),
                           onChanged: (v) {
-                            if (v != null) setState(() => selectedLanguage = v);
+                            if (v != null) {
+                              languageController.setLanguage(AppLanguage.fromLabel(v));
+                            }
                           },
                         ),
                       ),
@@ -158,7 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _SectionTitle('MORE', color: sub),
+                      _SectionTitle('MORE'.tr(context), color: sub),
                       _SectionCard(
                         dark: dark,
                         children: [
@@ -221,7 +225,7 @@ class _SearchPill extends StatelessWidget {
             children: [
               Icon(Icons.search_rounded, size: 19, color: sub),
               const SizedBox(width: 10),
-              Text('Search settings', style: manrope(size: 14, weight: FontWeight.w600, color: sub)),
+              Text('Search settings'.tr(context), style: manrope(size: 14, weight: FontWeight.w600, color: sub)),
             ],
           ),
         ),
@@ -403,9 +407,9 @@ class _BaseRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: manrope(size: 14.5, weight: FontWeight.w800, color: fg)),
+                Text(title.tr(context), style: manrope(size: 14.5, weight: FontWeight.w800, color: fg)),
                 const SizedBox(height: 3),
-                Text(subtitle, style: manrope(size: 12, weight: FontWeight.w500, color: sub)),
+                Text(subtitle.tr(context), style: manrope(size: 12, weight: FontWeight.w500, color: sub)),
               ],
             ),
           ),
@@ -429,7 +433,7 @@ class _LogoutButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 14),
       child: Center(
         child: Text(
-          'Log out',
+          'Log out'.tr(context),
           style: manrope(
             size: 14,
             weight: FontWeight.w800,

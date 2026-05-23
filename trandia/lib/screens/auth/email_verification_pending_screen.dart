@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../home/home_screen.dart';
 import '../../services/auth_service.dart';
+import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
 
 class EmailVerificationPendingScreen extends StatefulWidget {
@@ -173,10 +174,10 @@ class _EmailVerificationPendingScreenState
                   child: Text('✉️', style: const TextStyle(fontSize: 56, height: 1)),
                 ),
                 const SizedBox(height: 24),
-                Text('Check your email', textAlign: TextAlign.center,
+                Text('Check your email'.tr(context), textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: textPrimary, letterSpacing: -0.3)),
                 const SizedBox(height: 10),
-                Text('We sent a verification link to\n$masked',
+                Text('${'We sent a verification link to'.tr(context)}\n$masked',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14, color: textSecond, height: 1.6)),
                 const SizedBox(height: 32),
@@ -203,7 +204,7 @@ class _EmailVerificationPendingScreenState
                   child: OutlinedButton.icon(
                     onPressed: _openEmailApp,
                     icon: const Icon(Icons.mail_outline_rounded, size: 18),
-                    label: const Text('Open Email App'),
+                    label: Text('Open Email App'.tr(context)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: accent,
                       side: BorderSide(color: accent, width: 1.5),
@@ -225,7 +226,7 @@ class _EmailVerificationPendingScreenState
                     child: _isLoading
                         ? SizedBox(height: 20, width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2, color: btnText))
-                        : Text("I've Verified — Continue",
+                        : Text("I've Verified - Continue".tr(context),
                             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: btnText)),
                   ),
                 ),
@@ -239,16 +240,16 @@ class _EmailVerificationPendingScreenState
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: _isResending
-                          ? Text('Sending…', style: TextStyle(fontSize: 13, color: accent))
+                          ? Text('Sending...'.tr(context), style: TextStyle(fontSize: 13, color: accent))
                           : _resendTimer > 0
                               ? RichText(text: TextSpan(
                                   style: TextStyle(fontSize: 13, color: textSecond),
                                   children: [
-                                    const TextSpan(text: 'Resend in '),
+                                    TextSpan(text: 'Resend in '.tr(context)),
                                     TextSpan(text: '${_resendTimer}s',
                                         style: TextStyle(color: textPrimary, fontWeight: FontWeight.w600)),
                                   ]))
-                              : Text('Resend verification email',
+                              : Text('Resend verification email'.tr(context),
                                   style: TextStyle(fontSize: 13, color: accent, fontWeight: FontWeight.w500)),
                     ),
                   ),
@@ -262,7 +263,7 @@ class _EmailVerificationPendingScreenState
                     behavior: HitTestBehavior.opaque,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text('← Go back',
+                      child: Text('<- Go back'.tr(context),
                           style: TextStyle(fontSize: 13, color: textSecond)),
                     ),
                   ),

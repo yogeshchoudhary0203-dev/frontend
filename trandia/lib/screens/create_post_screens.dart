@@ -11,6 +11,7 @@
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import 'glass_common.dart';
 
 // ───────────────────────────────────────────────────────────────
@@ -96,7 +97,7 @@ class _CpTopBar extends StatelessWidget {
           Expanded(
             child: Center(
               child: Text(
-                title,
+                title.tr(context),
                 style: manrope(size: 16, weight: FontWeight.w700, color: c.text, letterSpacing: -0.16),
               ),
             ),
@@ -113,7 +114,7 @@ class _CpTopBar extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                         child: Text(
-                          rightLabel,
+                          rightLabel.tr(context),
                           style: manrope(
                             size: 14,
                             weight: FontWeight.w800,
@@ -474,7 +475,7 @@ class _RecentPill extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text('Recent',
+          Text('Recent'.tr(context),
               style: manrope(size: 13.5, weight: FontWeight.w700, color: c.text, letterSpacing: -0.07)),
           const SizedBox(width: 4),
           Icon(Icons.keyboard_arrow_down, size: 16, color: c.text),
@@ -969,7 +970,7 @@ class _AdjustSlider extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text(label, style: manrope(size: 12, weight: FontWeight.w600, color: c.text, letterSpacing: -0.06)),
+          Text(label.tr(context), style: manrope(size: 12, weight: FontWeight.w600, color: c.text, letterSpacing: -0.06)),
           const Spacer(),
           Text(value > 0 ? '+$value' : '$value',
               style: manrope(size: 12, weight: FontWeight.w600, color: c.sub, letterSpacing: -0.06)),
@@ -1116,7 +1117,7 @@ class _TrimPanel extends StatelessWidget {
       ),
       const SizedBox(height: 10),
       Center(
-        child: Text('Drag the handles to trim · 44s selected',
+        child: Text('Drag the handles to trim - 44s selected'.tr(context),
             style: manrope(size: 11.5, weight: FontWeight.w500, color: c.sub, letterSpacing: -0.06)),
       ),
     ]);
@@ -1145,7 +1146,7 @@ class _ToolBtn extends StatelessWidget {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 20, color: active ? c.text : c.sub),
           const SizedBox(height: 5),
-          Text(label,
+          Text(label.tr(context),
               style: manrope(
                 size: 10.5,
                 weight: active ? FontWeight.w800 : FontWeight.w600,
@@ -1338,7 +1339,7 @@ class _CreatePostDetailsScreenState extends State<CreatePostDetailsScreen> {
                         ),
                         borderRadius: BorderRadius.circular(14),
                         child: Center(
-                          child: Text('Share',
+                          child: Text('Share'.tr(context),
                               style: manrope(
                                 size: 15, weight: FontWeight.w800,
                                 color: c.accentOn, letterSpacing: -0.15,
@@ -1383,13 +1384,13 @@ class _SectionCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title,
+          Text(title.tr(context),
               style: manrope(
                 size: 14, weight: FontWeight.w800,
                 color: active ? c.accentOn : c.text, letterSpacing: -0.14,
               )),
           const SizedBox(height: 2),
-          Text(subtitle,
+          Text(subtitle.tr(context),
               style: manrope(
                 size: 11.5, weight: FontWeight.w500,
                 color: active ? c.accentOn.withOpacity(0.75) : c.sub,
@@ -1435,7 +1436,7 @@ class _OptionRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(label,
+            child: Text(label.tr(context),
                 style: manrope(size: 14, weight: FontWeight.w700, color: c.text, letterSpacing: -0.07)),
           ),
           ConstrainedBox(
@@ -1474,7 +1475,7 @@ class _ToggleRow extends StatelessWidget {
       ),
       child: Row(children: [
         Expanded(
-          child: Text(label,
+          child: Text(label.tr(context),
               style: manrope(size: 14, weight: FontWeight.w600, color: c.text, letterSpacing: -0.07)),
         ),
         GestureDetector(
@@ -1594,7 +1595,7 @@ class _CreatePostUploadingScreenState extends State<CreatePostUploadingScreen>
                     },
                   ),
                   const SizedBox(height: 30),
-                  Text('Posting your video…',
+                  Text('Posting your video...'.tr(context),
                       style: manrope(size: 22, weight: FontWeight.w800, color: c.text, letterSpacing: -0.44)),
                   const SizedBox(height: 6),
                   AnimatedBuilder(
@@ -1627,7 +1628,7 @@ class _CreatePostUploadingScreenState extends State<CreatePostUploadingScreen>
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
                     ),
-                    child: Text('Cancel upload',
+                    child: Text('Cancel upload'.tr(context),
                         style: manrope(size: 13, weight: FontWeight.w700, color: c.text, letterSpacing: -0.06)),
                   ),
                 ],
@@ -1721,7 +1722,7 @@ class _StepRowState extends State<_StepRow> with SingleTickerProviderStateMixin 
                 : null,
       ),
       const SizedBox(width: 10),
-      Text(widget.label,
+      Text(widget.label.tr(context),
           style: manrope(
             size: 13.5, weight: FontWeight.w600,
             color: activeOrDone ? c.text : c.fade, letterSpacing: -0.06,
@@ -1811,7 +1812,7 @@ class _CreatePostSuccessScreenState extends State<CreatePostSuccessScreen>
                   ]),
                 ),
                 const SizedBox(height: 28),
-                Text('Posted successfully',
+                Text('Posted successfully'.tr(context),
                     style: manrope(size: 24, weight: FontWeight.w800, color: c.text, letterSpacing: -0.6)),
                 const SizedBox(height: 8),
                 RichText(
@@ -1822,15 +1823,15 @@ class _CreatePostSuccessScreenState extends State<CreatePostSuccessScreen>
                       letterSpacing: -0.06, height: 1.5,
                     ),
                     children: [
-                      const TextSpan(text: 'Your video is now live in '),
+                      TextSpan(text: 'Your video is now live in '.tr(context)),
                       TextSpan(
-                        text: 'Learn',
+                        text: 'Learn'.tr(context),
                         style: manrope(
                           size: 13.5, weight: FontWeight.w800, color: c.text,
                           letterSpacing: -0.06, height: 1.5,
                         ),
                       ),
-                      const TextSpan(text: '. It may take a moment to appear in friends’ feeds.'),
+                      TextSpan(text: '. It may take a moment to appear in friends feeds.'.tr(context)),
                     ],
                   ),
                 ),
@@ -1878,7 +1879,7 @@ class _CreatePostSuccessScreenState extends State<CreatePostSuccessScreen>
                           side: BorderSide(color: c.border),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: Text('Share to story',
+                        child: Text('Share to story'.tr(context),
                             style: manrope(size: 13.5, weight: FontWeight.w800, color: c.text, letterSpacing: -0.06)),
                       ),
                     ),
@@ -1895,7 +1896,7 @@ class _CreatePostSuccessScreenState extends State<CreatePostSuccessScreen>
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: Text('View post',
+                        child: Text('View post'.tr(context),
                             style: manrope(size: 13.5, weight: FontWeight.w800, color: c.accentOn, letterSpacing: -0.06)),
                       ),
                     ),
@@ -1904,7 +1905,7 @@ class _CreatePostSuccessScreenState extends State<CreatePostSuccessScreen>
                 const SizedBox(height: 14),
                 TextButton(
                   onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
-                  child: Text('Create another',
+                  child: Text('Create another'.tr(context),
                       style: manrope(size: 12.5, weight: FontWeight.w700, color: c.sub, letterSpacing: -0.06)),
                 ),
               ]),

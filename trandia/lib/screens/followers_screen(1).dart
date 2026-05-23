@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
+import '../l10n/app_localizations.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Public API
@@ -720,7 +721,7 @@ class _SegmentBtn extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                label,
+                label.tr(context),
                 style: _Tk.manrope(
                   size: 13,
                   weight: active ? FontWeight.w800 : FontWeight.w600,
@@ -998,7 +999,7 @@ class _FollowCta extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
-            label,
+            label.tr(context),
             style: _Tk.manrope(
               size: 12,
               weight: FontWeight.w700,
@@ -1031,7 +1032,7 @@ class _FollowCta extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              label,
+              label.tr(context),
               style: _Tk.manrope(
                 size: 12,
                 weight: FontWeight.w700,

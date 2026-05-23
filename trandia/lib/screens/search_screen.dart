@@ -15,6 +15,7 @@ import 'glass_common.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
+import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
 import 'chat_screen.dart';
 
@@ -83,7 +84,7 @@ Future<void> _startChat(
         conversation = convs.firstWhere((c) => c.id == convId);
       } catch (_) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open chat. Please try again.')),
+          SnackBar(content: Text('Could not open chat. Please try again.'.tr(context))),
         );
         return;
       }
@@ -400,7 +401,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
                 else if (_searchResults.isEmpty)
                   Padding(padding: const EdgeInsets.all(20),
-                    child: Center(child: Text('No users found', style: manrope(size: 14, color: sub))))
+                    child: Center(child: Text('No users found'.tr(context), style: manrope(size: 14, color: sub))))
                 else
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -757,13 +758,13 @@ class _Section extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
       child: Row(children: [
-        Text(title.toUpperCase(),
+        Text(title.tr(context).toUpperCase(),
           style: manrope(size: 11, weight: FontWeight.w700, color: sub, letterSpacing: 0.88)),
         const Spacer(),
         if (action != null)
           GestureDetector(
             onTap: onActionTap,
-            child: Text(action!, style: manrope(size: 12, weight: FontWeight.w700, color: fg, letterSpacing: -0.12)),
+            child: Text(action!.tr(context), style: manrope(size: 12, weight: FontWeight.w700, color: fg, letterSpacing: -0.12)),
           ),
       ]),
     );
@@ -1048,7 +1049,7 @@ class _SuggestedCard extends StatelessWidget {
                   ),
                 ),
                 onPressed: () {},
-                child: Text(s.followed ? 'Following' : 'Follow',
+                child: Text((s.followed ? 'Following' : 'Follow').tr(context),
                   style: manrope(size: 12, weight: FontWeight.w700,
                     color: s.followed ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
                     letterSpacing: -0.12)),

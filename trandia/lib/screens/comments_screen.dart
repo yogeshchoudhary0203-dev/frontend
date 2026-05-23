@@ -390,10 +390,12 @@ class _CommentsScreenState extends State<CommentsScreen>
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: Icon(Icons.arrow_back_ios_new_rounded, color: fg, size: 20),
-                    onPressed: () => Navigator.of(context).pop(),
-                    splashRadius: 20,
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(Icons.arrow_back_ios_new_rounded, color: fg, size: 20),
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Text(

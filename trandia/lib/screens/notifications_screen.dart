@@ -285,7 +285,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           top: headerTop, left: 12, right: 12,
           child: GlassHeader(
             dark: dark,
+            padding: const EdgeInsets.only(left: 4, right: 8),
             child: Row(children: [
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: GlassCircleButton(dark: dark, icon: Icons.arrow_back_ios_new_rounded, iconSize: 18),
+              ),
+              const SizedBox(width: 4),
               Text('Notifications'.tr(context),
                 style: manrope(size: 17, weight: FontWeight.w700,
                   color: GlassTokens.fg(dark), letterSpacing: -0.34)),

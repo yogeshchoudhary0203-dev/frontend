@@ -115,7 +115,7 @@ class _ShotsScreenState extends State<ShotsScreen>
         ),
         // Right rail
         Positioned(
-          right: 12, bottom: 150,
+          right: 12, bottom: 70,
           child: _RightRail(
             data: _data,
             liked: _liked,

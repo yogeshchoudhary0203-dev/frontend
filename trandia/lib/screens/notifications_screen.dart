@@ -244,7 +244,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } catch (e) {
       debugPrint('[Notifications] delete error: $e');
       if (!mounted) return;
-      final restoreIndex = index > _items.length ? _items.length : index;
+      final restoreIndex = index >= _items.length ? _items.length : index;
       setState(() { _items.insert(restoreIndex, removed); });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not delete notification'.tr(context))),
@@ -457,8 +457,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: Text('Retry'.tr(context),
                 style: manrope(size: 13, weight: FontWeight.w700, color: fg)),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

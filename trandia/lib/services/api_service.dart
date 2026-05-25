@@ -170,6 +170,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> delete(
     String path, {
+    Map<String, dynamic>? body,
     bool requiresAuth = false,
   }) async {
     final headers = <String, String>{'Content-Type': 'application/json'};
@@ -183,6 +184,7 @@ class ApiService {
           .delete(
             Uri.parse('$baseUrl$path'),
             headers: headers,
+            body: body != null ? jsonEncode(body) : null,
           )
           .timeout(_kTimeout);
     } on Exception {

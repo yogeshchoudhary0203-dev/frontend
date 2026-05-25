@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
+import '../services/api_service.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
   final bool dark;
@@ -44,6 +45,23 @@ class _NotificationSettingsScreenState
   Future<void> _save(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(key, value);
+    _syncToBackend();
+  }
+
+  void _syncToBackend() {
+    ApiService.put(
+      '/users/me/notification-settings',
+      {
+        'master':   master,
+        'follows':  notifFollows,
+        'likes':    notifLikes,
+        'comments': notifComments,
+        'messages': notifMessages,
+        'stories':  notifStories,
+        'mentions': notifMentions,
+      },
+      requiresAuth: true,
+    ).catchError((_) {});
   }
 
   @override

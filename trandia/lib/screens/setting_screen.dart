@@ -46,6 +46,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool privateAccount = false;
+  bool creatorAccount = false;
   bool activityStatus = false;
   bool notifications = true;
   UserProfile? _profile;
@@ -81,6 +82,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       privateAccount = prefs.getBool('settings_private_account') ?? false;
+      creatorAccount = prefs.getBool('settings_creator_account') ?? false;
       activityStatus = prefs.getBool('settings_activity_status') ?? false;
       notifications = prefs.getBool('settings_notifications') ?? true;
     });
@@ -129,6 +131,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.lock_outline_rounded,
         title: 'Privacy',
         subtitle: 'Private account, mentions, tags',
+      ),
+      _SearchItem(
+        icon: Icons.workspace_premium_outlined,
+        title: 'Creator account',
+        subtitle: 'Switch to creator account',
+        switchValue: creatorAccount,
+        onSwitch: (v) {
+          setState(() => creatorAccount = v);
+          _saveSetting('settings_creator_account', v);
+        },
       ),
       _SearchItem(
         icon: Icons.shield_outlined,
@@ -295,6 +307,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.lock_outline_rounded,
               title: 'Privacy',
               subtitle: 'Private account, mentions, tags',
+            ),
+            _SwitchRow(
+              dark: dark,
+              icon: Icons.workspace_premium_outlined,
+              title: 'Creator account',
+              subtitle: 'Switch to creator account',
+              value: creatorAccount,
+              onChanged: (v) {
+                setState(() => creatorAccount = v);
+                _saveSetting('settings_creator_account', v);
+              },
             ),
             _SettingRow(
               dark: dark,

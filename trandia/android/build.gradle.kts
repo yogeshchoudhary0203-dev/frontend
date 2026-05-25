@@ -13,6 +13,11 @@ allprojects {
         google()
         mavenCentral()
     }
+    // Suppress "source/target value 8 is obsolete" and deprecated-API notes
+    // from third-party libraries compiled with older Java compatibility settings.
+    tasks.withType<JavaCompile>().configureEach {
+        options.compilerArgs.addAll(listOf("-Xlint:-options", "-Xlint:-deprecation"))
+    }
 }
 
 val newBuildDir: Directory =

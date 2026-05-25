@@ -91,8 +91,9 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Feed state ────────────────────────────────────
   final List<PostModel> _posts       = [];
   String?               _nextCursor;
-  bool                  _loadingFeed = false;
-  bool                  _feedError   = false;
+  bool                  _loadingFeed    = false;
+  bool                  _feedError      = false;
+  bool                  _quickReelOpening = false;
   final ScrollController _scrollCtrl = ScrollController();
 
   @override

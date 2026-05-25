@@ -17,6 +17,7 @@ import '../services/chat_service.dart';
 import '../services/user_service.dart';
 import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
+import '../utils/error_dialog.dart';
 import 'chat_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -84,9 +85,7 @@ Future<void> _startChat(
       try {
         conversation = convs.firstWhere((c) => c.id == convId);
       } catch (_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open chat. Please try again.'.tr(context))),
-        );
+        showErrorDialog(context, message: 'Could not open chat. Please try again.'.tr(context));
         return;
       }
     }
@@ -123,9 +122,7 @@ Future<void> _startChat(
     if (context.mounted) {
       // Safe pop — ignores error if nothing to pop
       try { Navigator.of(context).pop(); } catch (_) {}
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not start chat: $e')),
-      );
+      showErrorDialog(context, message: 'Could not start chat: $e');
     }
   }
 }
@@ -364,11 +361,7 @@ class _SearchScreenState extends State<SearchScreen> {
         developer.log('Search error: $e');
         if (mounted) {
           setState(() { _isSearching = false; });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Search error: $e'),
-              backgroundColor: Colors.red.shade800,
-              duration: const Duration(seconds: 4)),
-          );
+          showErrorDialog(context, message: 'Search error: $e');
         }
       }
     });

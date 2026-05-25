@@ -17,6 +17,7 @@ import '../services/user_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../models/chat_model.dart';
+import '../utils/error_dialog.dart';
 import 'chat_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -77,9 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
     if (!success) {
       setState(() => _isFollowing = wasFollowing);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(wasFollowing ? 'Failed to unfollow' : 'Failed to follow')),
-      );
+      showErrorDialog(context, message: wasFollowing ? 'Failed to unfollow' : 'Failed to follow');
     }
     setState(() => _isFollowLoading = false);
   }
@@ -147,9 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       developer.log('_handleMessage error: $e');
       if (mounted) {
         try { Navigator.of(context).pop(); } catch (_) {}
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not start chat: $e')),
-        );
+        showErrorDialog(context, message: 'Could not start chat: $e');
       }
     }
   }

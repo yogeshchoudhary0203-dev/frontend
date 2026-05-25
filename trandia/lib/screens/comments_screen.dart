@@ -4,6 +4,7 @@ import '../services/comment_service.dart';
 import '../services/user_service.dart';
 import '../services/api_service.dart';
 import '../models/chat_model.dart';
+import '../utils/error_dialog.dart';
 import 'glass_common.dart';
 
 class CommentsScreen extends StatefulWidget {
@@ -148,14 +149,7 @@ class _CommentsScreenState extends State<CommentsScreen>
     final isAuthed = await CommentService.isAuthenticated();
     if (!isAuthed) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Please sign in to comment.'),
-            backgroundColor: widget.dark ? const Color(0xFF2A2A2D) : null,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+        showErrorDialog(context, message: 'Please sign in to comment.');
       }
       return;
     }
@@ -243,23 +237,14 @@ class _CommentsScreenState extends State<CommentsScreen>
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => _sending = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message),
-            backgroundColor: widget.dark ? const Color(0xFF2A2A2D) : null,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+        showErrorDialog(context, message: e.message);
       }
     } catch (_) {
       if (mounted) {
         setState(() {
           _sending = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to post. Please try again.')),
-        );
+        showErrorDialog(context, message: 'Failed to post. Please try again.');
       }
     }
   }

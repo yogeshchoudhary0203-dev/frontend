@@ -7,6 +7,7 @@ import 'glass_common.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../services/api_service.dart';
+import '../utils/error_dialog.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final bool dark;
@@ -133,18 +134,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to update profile',
-              style: manrope(size: 14, weight: FontWeight.w600, color: Colors.white),
-            ),
-            backgroundColor: Colors.redAccent.withOpacity(0.85),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          ),
-        );
+        showErrorDialog(context, message: 'Failed to update profile');
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

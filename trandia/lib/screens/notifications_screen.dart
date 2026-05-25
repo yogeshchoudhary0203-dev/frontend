@@ -14,6 +14,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/api_service.dart';
 import '../services/chat_service.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/error_dialog.dart';
 import 'glass_common.dart';
 
 enum NfKind { like, comment, follow, mention, live, msg, system }
@@ -246,9 +247,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (!mounted) return;
       final restoreIndex = index >= _items.length ? _items.length : index;
       setState(() { _items.insert(restoreIndex, removed); });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not delete notification'.tr(context))),
-      );
+      showErrorDialog(context, message: 'Could not delete notification'.tr(context));
     }
   }
 

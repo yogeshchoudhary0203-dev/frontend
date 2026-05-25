@@ -16,6 +16,7 @@ import '../models/chat_model.dart';
 import '../services/chat_service.dart';
 import '../services/fcm_service.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/error_dialog.dart';
 import 'glass_common.dart';
 
 // ── Quick emoji choices ───────────────────────────────────────
@@ -533,19 +534,13 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _deleteConversation() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete Chat'.tr(context)),
-        content: Text('Delete this conversation? This cannot be undone.'.tr(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel'.tr(context))),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete'.tr(context), style: const TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+    final confirm = await showGlassConfirmDialog(
+      context,
+      title: 'Delete Chat'.tr(context),
+      message: 'Delete this conversation? This cannot be undone.'.tr(context),
+      confirmLabel: 'Delete'.tr(context),
+      cancelLabel: 'Cancel'.tr(context),
+      destructive: true,
     );
     if (confirm != true) return;
     if (!mounted) return;
@@ -560,26 +555,19 @@ class _ChatScreenState extends State<ChatScreen>
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+        showErrorDialog(context, message: 'Could not delete: $e');
       }
     }
   }
 
   Future<void> _deleteMessage(String messageId) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete Message'.tr(context)),
-        content: Text('Delete this message for everyone?'.tr(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel'.tr(context))),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete'.tr(context), style: const TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+    final confirm = await showGlassConfirmDialog(
+      context,
+      title: 'Delete Message'.tr(context),
+      message: 'Delete this message for everyone?'.tr(context),
+      confirmLabel: 'Delete'.tr(context),
+      cancelLabel: 'Cancel'.tr(context),
+      destructive: true,
     );
     if (confirm != true) return;
     try {
@@ -587,8 +575,7 @@ class _ChatScreenState extends State<ChatScreen>
       if (mounted) setState(() => _messages.removeWhere((m) => m.id == messageId));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+        showErrorDialog(context, message: 'Could not delete: $e');
       }
     }
   }

@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
@@ -8,6 +9,32 @@ import 'glass_common.dart';
 import 'edit_profile_screen.dart';
 import 'parental_control_screen.dart';
 import 'intro_slides.dart';
+import 'notification_settings_screen.dart';
+
+// Search item model ────────────────────────────────────────────────────────────
+class _SearchItem {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+  final bool? switchValue;
+  final ValueChanged<bool>? onSwitch;
+
+  const _SearchItem({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
+    this.switchValue,
+    this.onSwitch,
+  });
+
+  bool matches(String q) =>
+      title.toLowerCase().contains(q) ||
+      subtitle.toLowerCase().contains(q);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class SettingsScreen extends StatefulWidget {
   final bool dark;
@@ -18,20 +45,156 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool privateAccount = true;
+  bool privateAccount = false;
   bool activityStatus = false;
   bool notifications = true;
   UserProfile? _profile;
+
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadSettings();
+    _searchCtrl.addListener(() {
+      if (mounted) {
+        setState(() => _searchQuery = _searchCtrl.text.trim().toLowerCase());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
     final p = await UserService.getMyProfile();
     if (mounted && p != null) setState(() => _profile = p);
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      privateAccount = prefs.getBool('settings_private_account') ?? false;
+      activityStatus = prefs.getBool('settings_activity_status') ?? false;
+      notifications = prefs.getBool('settings_notifications') ?? true;
+    });
+  }
+
+  Future<void> _saveSetting(String key, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+  }
+
+  void _openEditProfile(BuildContext ctx) {
+    Navigator.of(ctx)
+        .push(PageRouteBuilder(
+          pageBuilder: (_, animation, __) =>
+              EditProfileScreen(dark: widget.dark),
+          transitionDuration: const Duration(milliseconds: 320),
+          reverseTransitionDuration: const Duration(milliseconds: 260),
+          transitionsBuilder: (_, animation, __, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.05),
+                end: Offset.zero,
+              ).animate(curved),
+              child: FadeTransition(opacity: curved, child: child),
+            );
+          },
+        ))
+        .then((_) => _loadProfile());
+  }
+
+  List<_SearchItem> _buildSearchItems(BuildContext ctx) {
+    final dark = widget.dark;
+    return [
+      _SearchItem(
+        icon: Icons.person_outline_rounded,
+        title: 'Edit profile',
+        subtitle: 'Name, bio, links and photo',
+        onTap: () => _openEditProfile(ctx),
+      ),
+      _SearchItem(
+        icon: Icons.lock_outline_rounded,
+        title: 'Privacy',
+        subtitle: 'Private account, mentions, tags',
+      ),
+      _SearchItem(
+        icon: Icons.shield_outlined,
+        title: 'Security',
+        subtitle: 'Password and login activity',
+      ),
+      _SearchItem(
+        icon: Icons.notifications_none_rounded,
+        title: 'Notifications',
+        subtitle: 'Likes, follows and messages',
+        onTap: () => Navigator.push(
+          ctx,
+          MaterialPageRoute(
+              builder: (_) => NotificationSettingsScreen(dark: dark)),
+        ).then((_) => _loadSettings()),
+      ),
+      _SearchItem(
+        icon: Icons.visibility_outlined,
+        title: 'Activity status',
+        subtitle: 'Show when you are active',
+        switchValue: activityStatus,
+        onSwitch: (v) {
+          setState(() => activityStatus = v);
+          _saveSetting('settings_activity_status', v);
+        },
+      ),
+      _SearchItem(
+        icon: Icons.privacy_tip_outlined,
+        title: 'Private account',
+        subtitle: 'Only followers see your posts',
+        switchValue: privateAccount,
+        onSwitch: (v) {
+          setState(() => privateAccount = v);
+          _saveSetting('settings_private_account', v);
+        },
+      ),
+      _SearchItem(
+        icon: Icons.language,
+        title: 'Language',
+        subtitle: 'English, Hindi, Hinglish',
+      ),
+      _SearchItem(
+        icon: Icons.supervised_user_circle,
+        title: 'Parental Control',
+        subtitle: 'Screen time and content filters',
+        onTap: () => Navigator.push(
+          ctx,
+          MaterialPageRoute(builder: (_) => ParentalControlScreen(dark: dark)),
+        ),
+      ),
+      _SearchItem(
+        icon: Icons.bookmark_border_rounded,
+        title: 'Saved',
+        subtitle: 'Posts and collections',
+      ),
+      _SearchItem(
+        icon: Icons.archive_outlined,
+        title: 'Archive',
+        subtitle: 'Stories and hidden posts',
+      ),
+      _SearchItem(
+        icon: Icons.help_outline_rounded,
+        title: 'Help',
+        subtitle: 'Support and app info',
+      ),
+    ];
   }
 
   @override
@@ -66,7 +229,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(width: 10),
                         Text(
                           'Settings'.tr(context),
-                          style: manrope(size: 17, weight: FontWeight.w800, color: fg),
+                          style: manrope(
+                              size: 17,
+                              weight: FontWeight.w800,
+                              color: fg),
                         ),
                         const Spacer(),
                         GlassCircleButton(
@@ -81,158 +247,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: _SearchPill(dark: dark),
+                  child: _SearchPill(dark: dark, controller: _searchCtrl),
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: ListView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 28),
-                    children: [
-                      _AccountCard(dark: dark, profile: _profile),
-                      const SizedBox(height: 16),
-                      _SectionTitle('ACCOUNT'.tr(context), color: sub),
-                      _SectionCard(
-                        dark: dark,
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.of(context).push(
-                                PageRouteBuilder(
-                                  pageBuilder: (_, animation, __) =>
-                                      EditProfileScreen(dark: dark),
-                                  transitionDuration: const Duration(milliseconds: 320),
-                                  reverseTransitionDuration: const Duration(milliseconds: 260),
-                                  transitionsBuilder: (_, animation, __, child) {
-                                    final curved = CurvedAnimation(
-                                      parent: animation,
-                                      curve: Curves.easeOutCubic,
-                                      reverseCurve: Curves.easeInCubic,
-                                    );
-                                    return SlideTransition(
-                                      position: Tween<Offset>(
-                                        begin: const Offset(0, 0.05),
-                                        end: Offset.zero,
-                                      ).animate(curved),
-                                      child: FadeTransition(opacity: curved, child: child),
-                                    );
-                                  },
-                                ),
-                              ).then((_) => _loadProfile());
-                            },
-                            child: _SettingRow(
-                              dark: dark,
-                              icon: Icons.person_outline_rounded,
-                              title: 'Edit profile',
-                              subtitle: 'Name, bio, links and photo',
-                            ),
-                          ),
-                          _SettingRow(
-                            dark: dark,
-                            icon: Icons.lock_outline_rounded,
-                            title: 'Privacy',
-                            subtitle: 'Private account, mentions, tags',
-                          ),
-                          _SettingRow(
-                            dark: dark,
-                            icon: Icons.shield_outlined,
-                            title: 'Security',
-                            subtitle: 'Password and login activity',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _SectionTitle('PREFERENCES'.tr(context), color: sub),
-                      _SectionCard(
-                        dark: dark,
-                        children: [
-                          _SwitchRow(
-                            dark: dark,
-                            icon: Icons.notifications_none_rounded,
-                            title: 'Notifications',
-                            subtitle: 'Likes, follows and messages',
-                            value: notifications,
-                            onChanged: (v) => setState(() => notifications = v),
-                          ),
-                          _SwitchRow(
-                            dark: dark,
-                            icon: Icons.visibility_outlined,
-                            title: 'Activity status',
-                            subtitle: 'Show when you are active',
-                            value: activityStatus,
-                            onChanged: (v) => setState(() => activityStatus = v),
-                          ),
-                          _SwitchRow(
-                            dark: dark,
-                            icon: Icons.privacy_tip_outlined,
-                            title: 'Private account',
-                            subtitle: 'Only followers see your posts',
-                            value: privateAccount,
-                            onChanged: (v) => setState(() => privateAccount = v),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Language selection row
-                      _BaseRow(
-                        dark: dark,
-                        icon: Icons.language,
-                        title: 'Language'.tr(context),
-                        subtitle: selectedLanguage.tr(context),
-                        trailing: DropdownButton<String>(
-                          value: selectedLanguage,
-                          underline: const SizedBox(),
-                          icon: Icon(Icons.arrow_drop_down, color: GlassTokens.sub(dark)),
-                          items: ['English', 'Hindi', 'Hinglish']
-                              .map((lang) => DropdownMenuItem(value: lang, child: Text(lang.tr(context))))
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) {
-                              languageController.setLanguage(AppLanguage.fromLabel(v));
-                            }
-                          },
-                        ),
-                      ),
-                      // Parental Control option
-                      GestureDetector(
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParentalControlScreen(dark: dark))),
-                        child: _BaseRow(
-                          dark: dark,
-                          icon: Icons.supervised_user_circle,
-                          title: 'Parental Control',
-                          subtitle: '',
-                          trailing: Icon(Icons.chevron_right_rounded, color: GlassTokens.sub(dark), size: 24),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _SectionTitle('MORE'.tr(context), color: sub),
-                      _SectionCard(
-                        dark: dark,
-                        children: [
-                          _SettingRow(
-                            dark: dark,
-                            icon: Icons.bookmark_border_rounded,
-                            title: 'Saved',
-                            subtitle: 'Posts and collections',
-                          ),
-                          _SettingRow(
-                            dark: dark,
-                            icon: Icons.archive_outlined,
-                            title: 'Archive',
-                            subtitle: 'Stories and hidden posts',
-                          ),
-                          _SettingRow(
-                            dark: dark,
-                            icon: Icons.help_outline_rounded,
-                            title: 'Help',
-                            subtitle: 'Support and app info',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _LogoutButton(dark: dark),
-                    ],
-                  ),
+                  child: _searchQuery.isNotEmpty
+                      ? _buildSearchResults(context)
+                      : _buildNormalList(
+                          context, dark, sub, selectedLanguage, languageController),
                 ),
               ],
             ),
@@ -241,15 +263,258 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+
+  Widget _buildNormalList(
+    BuildContext context,
+    bool dark,
+    Color sub,
+    String selectedLanguage,
+    dynamic languageController,
+  ) {
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 28),
+      children: [
+        _AccountCard(dark: dark, profile: _profile),
+        const SizedBox(height: 16),
+        _SectionTitle('ACCOUNT'.tr(context), color: sub),
+        _SectionCard(
+          dark: dark,
+          children: [
+            GestureDetector(
+              onTap: () => _openEditProfile(context),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.person_outline_rounded,
+                title: 'Edit profile',
+                subtitle: 'Name, bio, links and photo',
+              ),
+            ),
+            _SettingRow(
+              dark: dark,
+              icon: Icons.lock_outline_rounded,
+              title: 'Privacy',
+              subtitle: 'Private account, mentions, tags',
+            ),
+            _SettingRow(
+              dark: dark,
+              icon: Icons.shield_outlined,
+              title: 'Security',
+              subtitle: 'Password and login activity',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _SectionTitle('PREFERENCES'.tr(context), color: sub),
+        _SectionCard(
+          dark: dark,
+          children: [
+            // Notifications: master switch + chevron to sub-settings
+            _BaseRow(
+              dark: dark,
+              icon: Icons.notifications_none_rounded,
+              title: 'Notifications',
+              subtitle: 'Likes, follows and messages',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Switch(
+                    value: notifications,
+                    onChanged: (v) {
+                      setState(() => notifications = v);
+                      _saveSetting('settings_notifications', v);
+                    },
+                    activeColor:
+                        dark ? const Color(0xFF0A0A0A) : Colors.white,
+                    activeTrackColor:
+                        dark ? Colors.white : const Color(0xFF0A0A0A),
+                    inactiveThumbColor:
+                        dark ? Colors.white70 : Colors.black54,
+                    inactiveTrackColor:
+                        dark ? Colors.white12 : Colors.black12,
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              NotificationSettingsScreen(dark: dark)),
+                    ).then((_) => _loadSettings()),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 2),
+                      child: Icon(Icons.chevron_right_rounded,
+                          color: sub, size: 24),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _SwitchRow(
+              dark: dark,
+              icon: Icons.visibility_outlined,
+              title: 'Activity status',
+              subtitle: 'Show when you are active',
+              value: activityStatus,
+              onChanged: (v) {
+                setState(() => activityStatus = v);
+                _saveSetting('settings_activity_status', v);
+              },
+            ),
+            _SwitchRow(
+              dark: dark,
+              icon: Icons.privacy_tip_outlined,
+              title: 'Private account',
+              subtitle: 'Only followers see your posts',
+              value: privateAccount,
+              onChanged: (v) {
+                setState(() => privateAccount = v);
+                _saveSetting('settings_private_account', v);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _BaseRow(
+          dark: dark,
+          icon: Icons.language,
+          title: 'Language'.tr(context),
+          subtitle: selectedLanguage.tr(context),
+          trailing: DropdownButton<String>(
+            value: selectedLanguage,
+            underline: const SizedBox(),
+            icon: Icon(Icons.arrow_drop_down, color: GlassTokens.sub(dark)),
+            items: ['English', 'Hindi', 'Hinglish']
+                .map((lang) => DropdownMenuItem(
+                    value: lang, child: Text(lang.tr(context))))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) {
+                languageController.setLanguage(AppLanguage.fromLabel(v));
+              }
+            },
+          ),
+        ),
+        GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => ParentalControlScreen(dark: dark)),
+          ),
+          child: _BaseRow(
+            dark: dark,
+            icon: Icons.supervised_user_circle,
+            title: 'Parental Control',
+            subtitle: '',
+            trailing: Icon(Icons.chevron_right_rounded,
+                color: GlassTokens.sub(dark), size: 24),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _SectionTitle('MORE'.tr(context), color: sub),
+        _SectionCard(
+          dark: dark,
+          children: [
+            _SettingRow(
+              dark: dark,
+              icon: Icons.bookmark_border_rounded,
+              title: 'Saved',
+              subtitle: 'Posts and collections',
+            ),
+            _SettingRow(
+              dark: dark,
+              icon: Icons.archive_outlined,
+              title: 'Archive',
+              subtitle: 'Stories and hidden posts',
+            ),
+            _SettingRow(
+              dark: dark,
+              icon: Icons.help_outline_rounded,
+              title: 'Help',
+              subtitle: 'Support and app info',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _LogoutButton(dark: dark),
+      ],
+    );
+  }
+
+  Widget _buildSearchResults(BuildContext context) {
+    final dark = widget.dark;
+    final sub = GlassTokens.sub(dark);
+    final items = _buildSearchItems(context)
+        .where((i) => i.matches(_searchQuery))
+        .toList();
+
+    if (items.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'No results found',
+            style:
+                manrope(size: 14, weight: FontWeight.w600, color: sub),
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 28),
+      itemCount: items.length,
+      itemBuilder: (ctx, index) {
+        final item = items[index];
+        final row = _BaseRow(
+          dark: dark,
+          icon: item.icon,
+          title: item.title,
+          subtitle: item.subtitle,
+          trailing: item.switchValue != null
+              ? Switch(
+                  value: item.switchValue!,
+                  onChanged: item.onSwitch,
+                  activeColor:
+                      dark ? const Color(0xFF0A0A0A) : Colors.white,
+                  activeTrackColor:
+                      dark ? Colors.white : const Color(0xFF0A0A0A),
+                  inactiveThumbColor:
+                      dark ? Colors.white70 : Colors.black54,
+                  inactiveTrackColor:
+                      dark ? Colors.white12 : Colors.black12,
+                )
+              : Icon(Icons.chevron_right_rounded, color: sub, size: 24),
+        );
+
+        final card = Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: GlassSurface(
+              dark: dark,
+              radius: 20,
+              padding: EdgeInsets.zero,
+              child: row),
+        );
+
+        return item.onTap != null
+            ? GestureDetector(onTap: item.onTap, child: card)
+            : card;
+      },
+    );
+  }
 }
+
+// ── Search pill ───────────────────────────────────────────────────────────────
 
 class _SearchPill extends StatelessWidget {
   final bool dark;
-  const _SearchPill({required this.dark});
+  final TextEditingController controller;
+  const _SearchPill({required this.dark, required this.controller});
 
   @override
   Widget build(BuildContext context) {
     final sub = GlassTokens.sub(dark);
+    final fg = GlassTokens.fg(dark);
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
       child: BackdropFilter(
@@ -258,9 +523,13 @@ class _SearchPill extends StatelessWidget {
           height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
+            color: dark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.white.withOpacity(0.6),
             border: Border.all(
-              color: dark ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95),
+              color: dark
+                  ? Colors.white.withOpacity(0.10)
+                  : Colors.white.withOpacity(0.95),
             ),
             borderRadius: BorderRadius.circular(999),
           ),
@@ -268,7 +537,30 @@ class _SearchPill extends StatelessWidget {
             children: [
               Icon(Icons.search_rounded, size: 19, color: sub),
               const SizedBox(width: 10),
-              Text('Search settings'.tr(context), style: manrope(size: 14, weight: FontWeight.w600, color: sub)),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  style: manrope(
+                      size: 14, weight: FontWeight.w600, color: fg),
+                  decoration: InputDecoration(
+                    hintText: 'Search settings'.tr(context),
+                    hintStyle: manrope(
+                        size: 14, weight: FontWeight.w600, color: sub),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  cursorColor: fg,
+                  cursorHeight: 18,
+                  textInputAction: TextInputAction.search,
+                ),
+              ),
+              if (controller.text.isNotEmpty)
+                GestureDetector(
+                  onTap: controller.clear,
+                  child:
+                      Icon(Icons.close_rounded, size: 18, color: sub),
+                ),
             ],
           ),
         ),
@@ -276,6 +568,8 @@ class _SearchPill extends StatelessWidget {
     );
   }
 }
+
+// ── Shared UI widgets ─────────────────────────────────────────────────────────
 
 class _AccountCard extends StatelessWidget {
   final bool dark;
@@ -299,7 +593,8 @@ class _AccountCard extends StatelessWidget {
           Container(
             width: 58,
             height: 58,
-            decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, 2)),
+            decoration: BoxDecoration(
+                shape: BoxShape.circle, gradient: monoAvatar(dark, 2)),
             alignment: Alignment.center,
             child: profile == null
                 ? SizedBox(
@@ -307,10 +602,15 @@ class _AccountCard extends StatelessWidget {
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.6)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.white.withOpacity(0.6)),
                     ),
                   )
-                : Text(initial, style: manrope(size: 22, weight: FontWeight.w800, color: Colors.white)),
+                : Text(initial,
+                    style: manrope(
+                        size: 22,
+                        weight: FontWeight.w800,
+                        color: Colors.white)),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -319,12 +619,14 @@ class _AccountCard extends StatelessWidget {
               children: [
                 Text(
                   name.isNotEmpty ? name : '...',
-                  style: manrope(size: 16, weight: FontWeight.w800, color: fg),
+                  style: manrope(
+                      size: 16, weight: FontWeight.w800, color: fg),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   username.isNotEmpty ? '@$username' : '',
-                  style: manrope(size: 12.5, weight: FontWeight.w600, color: sub),
+                  style: manrope(
+                      size: 12.5, weight: FontWeight.w600, color: sub),
                 ),
               ],
             ),
@@ -347,7 +649,11 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(6, 0, 6, 9),
       child: Text(
         text,
-        style: manrope(size: 11, weight: FontWeight.w800, color: color, letterSpacing: 0.9),
+        style: manrope(
+            size: 11,
+            weight: FontWeight.w800,
+            color: color,
+            letterSpacing: 0.9),
       ),
     );
   }
@@ -389,7 +695,8 @@ class _SettingRow extends StatelessWidget {
       icon: icon,
       title: title,
       subtitle: subtitle,
-      trailing: Icon(Icons.chevron_right_rounded, color: GlassTokens.sub(dark), size: 24),
+      trailing: Icon(Icons.chevron_right_rounded,
+          color: GlassTokens.sub(dark), size: 24),
     );
   }
 }
@@ -460,7 +767,9 @@ class _BaseRow extends StatelessWidget {
             height: 38,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: dark ? Colors.white.withOpacity(0.09) : Colors.black.withOpacity(0.06),
+              color: dark
+                  ? Colors.white.withOpacity(0.09)
+                  : Colors.black.withOpacity(0.06),
             ),
             child: Icon(icon, size: 20, color: fg),
           ),
@@ -469,9 +778,17 @@ class _BaseRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title.tr(context), style: manrope(size: 14.5, weight: FontWeight.w800, color: fg)),
+                Text(title.tr(context),
+                    style: manrope(
+                        size: 14.5,
+                        weight: FontWeight.w800,
+                        color: fg)),
                 const SizedBox(height: 3),
-                Text(subtitle.tr(context), style: manrope(size: 12, weight: FontWeight.w500, color: sub)),
+                Text(subtitle.tr(context),
+                    style: manrope(
+                        size: 12,
+                        weight: FontWeight.w500,
+                        color: sub)),
               ],
             ),
           ),
@@ -482,6 +799,8 @@ class _BaseRow extends StatelessWidget {
     );
   }
 }
+
+// ── Logout button ─────────────────────────────────────────────────────────────
 
 class _LogoutButton extends StatefulWidget {
   final bool dark;
@@ -498,23 +817,23 @@ class _LogoutButtonState extends State<_LogoutButton> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: widget.dark ? const Color(0xFF1C1C1F) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor:
+            widget.dark ? const Color(0xFF1C1C1F) : Colors.white,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'Log out?',
           style: manrope(
-            size: 17,
-            weight: FontWeight.w800,
-            color: GlassTokens.fg(widget.dark),
-          ),
+              size: 17,
+              weight: FontWeight.w800,
+              color: GlassTokens.fg(widget.dark)),
         ),
         content: Text(
           'Are you sure you want to log out?',
           style: manrope(
-            size: 14,
-            weight: FontWeight.w500,
-            color: GlassTokens.sub(widget.dark),
-          ),
+              size: 14,
+              weight: FontWeight.w500,
+              color: GlassTokens.sub(widget.dark)),
         ),
         actions: [
           TextButton(
@@ -522,10 +841,9 @@ class _LogoutButtonState extends State<_LogoutButton> {
             child: Text(
               'Cancel',
               style: manrope(
-                size: 14,
-                weight: FontWeight.w700,
-                color: GlassTokens.sub(widget.dark),
-              ),
+                  size: 14,
+                  weight: FontWeight.w700,
+                  color: GlassTokens.sub(widget.dark)),
             ),
           ),
           TextButton(
@@ -533,10 +851,9 @@ class _LogoutButtonState extends State<_LogoutButton> {
             child: Text(
               'Log out',
               style: manrope(
-                size: 14,
-                weight: FontWeight.w700,
-                color: Colors.redAccent,
-              ),
+                  size: 14,
+                  weight: FontWeight.w700,
+                  color: Colors.redAccent),
             ),
           ),
         ],
@@ -573,16 +890,16 @@ class _LogoutButtonState extends State<_LogoutButton> {
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(Colors.redAccent),
                   ),
                 )
               : Text(
                   'Log out'.tr(context),
                   style: manrope(
-                    size: 14,
-                    weight: FontWeight.w800,
-                    color: Colors.redAccent,
-                  ),
+                      size: 14,
+                      weight: FontWeight.w800,
+                      color: Colors.redAccent),
                 ),
         ),
       ),

@@ -120,6 +120,7 @@ class _HomeScreenState extends State<HomeScreen>
   int  _activeNav = 0;
   int  _totalUnread = 0;      // 🔴 unread chat message badge count
   int  _unreadNotifs = 0;     // 🔔 unread follow notification badge count
+  bool _quickReelOpening = false;
   late AnimationController      _navCtrl;
   final List<Animation<double>> _itemScales    = [];
   final List<Animation<double>> _itemOpacities = [];
@@ -261,6 +262,41 @@ class _HomeScreenState extends State<HomeScreen>
         },
       ),
     );
+  }
+
+  Future<void> _openQuickReel(bool isDark) async {
+    if (_quickReelOpening) return;
+    _quickReelOpening = true;
+    HapticFeedback.mediumImpact();
+    if (_navOpen) {
+      setState(() => _navOpen = false);
+      _navCtrl.reverse();
+    }
+    try {
+      await Navigator.of(context).push(
+        PageRouteBuilder(
+          pageBuilder: (_, animation, __) => ShotsScreen(dark: isDark),
+          transitionDuration: const Duration(milliseconds: 320),
+          reverseTransitionDuration: const Duration(milliseconds: 260),
+          transitionsBuilder: (_, animation, __, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.04),
+                end: Offset.zero,
+              ).animate(curved),
+              child: FadeTransition(opacity: curved, child: child),
+            );
+          },
+        ),
+      );
+    } finally {
+      _quickReelOpening = false;
+    }
   }
 
   void _openChatScreen() async {
@@ -508,7 +544,11 @@ class _HomeScreenState extends State<HomeScreen>
           // Infinity button
           Positioned(bottom: 30, right: 20,
             child: _InfinityBtn(
-                isDark: isDark, isOpen: _navOpen, onTap: _toggleNav)),
+              isDark: isDark,
+              isOpen: _navOpen,
+              onTap: _toggleNav,
+              onDoubleTap: () => _openQuickReel(isDark),
+            )),
         ])),
 
         // ── Dynamic Island expand overlay ──────────────────
@@ -1301,8 +1341,13 @@ class _NavIconPainter extends CustomPainter {
 class _InfinityBtn extends StatefulWidget {
   final bool isDark, isOpen;
   final VoidCallback onTap;
+  final VoidCallback onDoubleTap;
   const _InfinityBtn({
-      required this.isDark, required this.isOpen, required this.onTap});
+    required this.isDark,
+    required this.isOpen,
+    required this.onTap,
+    required this.onDoubleTap,
+  });
   @override
   State<_InfinityBtn> createState() => _InfinityBtnState();
 }
@@ -1327,8 +1372,10 @@ class _InfinityBtnState extends State<_InfinityBtn>
       builder: (_, __) => Transform.scale(scale: _scale.value,
         child: GestureDetector(
           onTapDown:   (_) => _ctrl.forward(),
-          onTapUp:     (_) { _ctrl.reverse(); widget.onTap(); },
+          onTapUp:     (_) => _ctrl.reverse(),
           onTapCancel: () => _ctrl.reverse(),
+          onTap: widget.onTap,
+          onDoubleTap: widget.onDoubleTap,
           child: ClipOval(child: BackdropFilter(
             filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(width: _kBtnSize, height: _kBtnSize,

@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/fcm_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/post_service.dart';
 import '../notifications_screen.dart';
 import '../search_screen.dart';
 import '../shots_screen.dart';
@@ -51,59 +53,6 @@ const _kStories = <_StoryData>[
   _StoryData(name: 'Nikhil',     initials: 'NK', avatarColor: Color(0xFF0D3349), seen: true),
 ];
 
-// ─── Post data ────────────────────────────────────────
-class _PostData {
-  final String user, userInitials, timeAgo, description;
-  final Color  userColor;
-  final List<Color> mediaGradient;
-  final double aspectRatio;
-  final bool   isVideo;
-  final int    likes, comments;
-  const _PostData({
-    required this.user, required this.userInitials, required this.timeAgo,
-    required this.description, required this.userColor,
-    required this.mediaGradient, required this.aspectRatio,
-    this.isVideo = false, required this.likes, required this.comments,
-  });
-}
-
-const _kPosts = <_PostData>[
-  _PostData(
-    user: 'Arjun Kapoor', userInitials: 'AK', timeAgo: '2m ago',
-    userColor: Color(0xFF2D3561),
-    description: 'Golden hour at Manali. Sometimes you just need to step away from the noise and let the mountains do the talking. Pure bliss.',
-    mediaGradient: [Color(0xFF1a1a2e), Color(0xFF16213e), Color(0xFF0f3460)],
-    aspectRatio: 1.333, likes: 284, comments: 31,
-  ),
-  _PostData(
-    user: 'Priya Sharma', userInitials: 'PS', timeAgo: '18m ago',
-    userColor: Color(0xFF1B4332),
-    description: 'Reel of the day! Caught the most insane sunset timelapse. Drop a fire if you want the full BTS.',
-    mediaGradient: [Color(0xFF0d1b2a), Color(0xFF1b4332), Color(0xFF2d6a4f)],
-    aspectRatio: 0.5625, isVideo: true, likes: 1420, comments: 87,
-  ),
-  _PostData(
-    user: 'Rohan Verma', userInitials: 'RV', timeAgo: '45m ago',
-    userColor: Color(0xFF3D0C11),
-    description: 'Street food chronicles! Found this hidden gem near Chandni Chowk. The aloo chaat was absolutely unreal.',
-    mediaGradient: [Color(0xFF3d0c11), Color(0xFF6b2737), Color(0xFFc9184a)],
-    aspectRatio: 1.0, likes: 532, comments: 44,
-  ),
-  _PostData(
-    user: 'Sneha Nair', userInitials: 'SN', timeAgo: '2h ago',
-    userColor: Color(0xFF2C2C54),
-    description: 'Late night coding sessions hit different with lo-fi. Building something exciting. Stay tuned. #buildinpublic #flutter',
-    mediaGradient: [Color(0xFF0a0a0f), Color(0xFF1a1a3e), Color(0xFF2c2c54)],
-    aspectRatio: 1.777, likes: 198, comments: 22,
-  ),
-  _PostData(
-    user: 'Dev Malhotra', userInitials: 'DM', timeAgo: '3h ago',
-    userColor: Color(0xFF1A1A2E),
-    description: 'Sunrise from Triund peak. Trekked 9km in the dark just for this moment. Worth every step and every sip of cold chai at 4am.',
-    mediaGradient: [Color(0xFF1a0533), Color(0xFF6a0572), Color(0xFFab47bc)],
-    aspectRatio: 0.8, likes: 876, comments: 63,
-  ),
-];
 
 // ═════════════════════════════════════════════════════
 //  HOME SCREEN
@@ -118,8 +67,8 @@ class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin {
   bool _navOpen   = false;
   int  _activeNav = 0;
-  int  _totalUnread = 0;      // 🔴 unread chat message badge count
-  int  _unreadNotifs = 0;     // 🔔 unread follow notification badge count
+  int  _totalUnread = 0;
+  int  _unreadNotifs = 0;
   late AnimationController      _navCtrl;
   final List<Animation<double>> _itemScales    = [];
   final List<Animation<double>> _itemOpacities = [];
@@ -135,6 +84,13 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Real-time notification listeners ─────────────
   StreamSubscription? _fcmNotifSub;
   StreamSubscription? _wsNotifSub;
+
+  // ── Feed state ────────────────────────────────────
+  final List<PostModel> _posts       = [];
+  String?               _nextCursor;
+  bool                  _loadingFeed = false;
+  bool                  _feedError   = false;
+  final ScrollController _scrollCtrl = ScrollController();
 
   @override
   void initState() {
@@ -158,6 +114,7 @@ class _HomeScreenState extends State<HomeScreen>
       duration: const Duration(milliseconds: 520),
     );
 
+    _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FcmService.setupForHomeScreen();
       CryptographyService().ensurePublicKeyRegistered();
@@ -165,6 +122,7 @@ class _HomeScreenState extends State<HomeScreen>
       _loadUnreadNotifCount();
       ChatService().connectWebSocket();
       _listenForNewNotifications();
+      _loadFeed();
     });
   }
 
@@ -172,9 +130,65 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     _navCtrl.dispose();
     _islandCtrl.dispose();
+    _scrollCtrl.dispose();
     _fcmNotifSub?.cancel();
     _wsNotifSub?.cancel();
     super.dispose();
+  }
+
+  // ── Feed loading ──────────────────────────────────
+  Future<void> _loadFeed({bool refresh = false}) async {
+    if (_loadingFeed) return;
+    if (!refresh && _nextCursor == null && _posts.isNotEmpty) return;
+    setState(() { _loadingFeed = true; _feedError = false; });
+    try {
+      final result = await PostService.instance.getFeed(
+        cursor: refresh ? null : _nextCursor,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (refresh) _posts.clear();
+        _posts.addAll(result.posts);
+        _nextCursor = result.nextCursor;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _feedError = true);
+    } finally {
+      if (mounted) setState(() => _loadingFeed = false);
+    }
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 300) {
+      _loadFeed();
+    }
+  }
+
+  void _toggleLike(int index) async {
+    final post = _posts[index];
+    final wasLiked = post.isLiked;
+    setState(() {
+      _posts[index] = post.copyWith(
+        isLiked: !wasLiked,
+        likesCount: post.likesCount + (wasLiked ? -1 : 1),
+      );
+    });
+    try {
+      if (wasLiked) {
+        await PostService.instance.unlikePost(post.id);
+      } else {
+        await PostService.instance.likePost(post.id);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _posts[index] = post.copyWith(
+          isLiked: wasLiked,
+          likesCount: post.likesCount,
+        );
+      });
+    }
   }
 
   // 🔔 Load unread follow notification count from backend
@@ -232,6 +246,36 @@ class _HomeScreenState extends State<HomeScreen>
     HapticFeedback.mediumImpact();
     setState(() => _navOpen = !_navOpen);
     _navOpen ? _navCtrl.forward(from: 0) : _navCtrl.reverse();
+  }
+
+  void _openCreatePost(BuildContext context, bool isDark) async {
+    HapticFeedback.selectionClick();
+    if (_navOpen) {
+      setState(() => _navOpen = false);
+      _navCtrl.reverse();
+    }
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, animation, __) => CreatePostHubScreen(dark: isDark),
+        transitionDuration: const Duration(milliseconds: 380),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.06),
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
+      ),
+    );
+    _loadFeed(refresh: true);
   }
 
   void _openScreen(BuildContext context, Widget screen) {
@@ -361,17 +405,78 @@ class _HomeScreenState extends State<HomeScreen>
         )),
 
         Positioned.fill(
-          child: ListView(
-            physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics()),
-            padding: EdgeInsets.only(top: topPad + 56),
-            children: [
-              _StorySection(isDark: isDark),
-              const SizedBox(height: 6),
-              ..._kPosts.map((post) => _PostCard(
-                    key: ValueKey(post.user), post: post, isDark: isDark)),
-              const SizedBox(height: 130),
-            ],
+          child: RefreshIndicator(
+            onRefresh: () => _loadFeed(refresh: true),
+            color: isDark ? Colors.white : Colors.black,
+            backgroundColor: isDark ? const Color(0xFF1C1C1F) : Colors.white,
+            child: ListView.builder(
+              controller: _scrollCtrl,
+              physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics()),
+              padding: EdgeInsets.only(top: topPad + 56),
+              itemCount: _posts.isEmpty
+                  ? 2
+                  : _posts.length + 2,
+              itemBuilder: (ctx, i) {
+                if (i == 0) return _StorySection(isDark: isDark);
+                if (i == 1 && _posts.isEmpty) {
+                  if (_loadingFeed) {
+                    return SizedBox(
+                      height: 200,
+                      child: Center(child: CircularProgressIndicator(
+                        color: isDark ? Colors.white : Colors.black,
+                        strokeWidth: 1.5,
+                      )),
+                    );
+                  }
+                  if (_feedError) {
+                    return SizedBox(
+                      height: 200,
+                      child: Center(child: GestureDetector(
+                        onTap: () => _loadFeed(refresh: true),
+                        child: Text('Tap to retry',
+                          style: TextStyle(
+                            color: (isDark ? Colors.white : Colors.black)
+                                .withOpacity(0.45),
+                            fontSize: 14,
+                          )),
+                      )),
+                    );
+                  }
+                  return SizedBox(
+                    height: 200,
+                    child: Center(child: Text('No posts yet',
+                      style: TextStyle(
+                        color: (isDark ? Colors.white : Colors.black)
+                            .withOpacity(0.38),
+                        fontSize: 14,
+                      ))),
+                  );
+                }
+                final postIdx = i - 1;
+                if (postIdx == _posts.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 130, top: 16),
+                    child: _loadingFeed
+                        ? Center(child: SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(
+                              color: (isDark ? Colors.white : Colors.black)
+                                  .withOpacity(0.35),
+                              strokeWidth: 1.5,
+                            )))
+                        : const SizedBox.shrink(),
+                  );
+                }
+                final post = _posts[postIdx];
+                return _PostCard(
+                  key: ValueKey(post.id),
+                  post: post,
+                  isDark: isDark,
+                  onLike: () => _toggleLike(postIdx),
+                );
+              },
+            ),
           ),
         ),
 
@@ -500,7 +605,7 @@ class _HomeScreenState extends State<HomeScreen>
                   onTap: (i) {
                     setState(() => _activeNav = i);
                     if (i == 1) _openScreen(context, ShotsScreen(dark: isDark));
-                    if (i == 2) _openScreen(context, CreatePostHubScreen(dark: isDark));
+                    if (i == 2) _openCreatePost(context, isDark);
                     if (i == 3) _openScreen(context, SearchScreen(dark: isDark));
                     if (i == 4) _openScreen(context, ProfileScreen(dark: isDark));
                   })))),
@@ -637,40 +742,47 @@ class _StoryRingPainter extends CustomPainter {
 //  POST CARD
 // ═════════════════════════════════════════════════════
 class _PostCard extends StatefulWidget {
-  final _PostData post;
-  final bool      isDark;
-  const _PostCard({super.key, required this.post, required this.isDark});
+  final PostModel   post;
+  final bool        isDark;
+  final VoidCallback onLike;
+  const _PostCard({
+    super.key,
+    required this.post,
+    required this.isDark,
+    required this.onLike,
+  });
   @override
   State<_PostCard> createState() => _PostCardState();
 }
 
 class _PostCardState extends State<_PostCard> {
-  bool _expanded  = false;
-  bool _liked     = false;
-  late int _likeCount;
-  @override
-  void initState() { super.initState(); _likeCount = widget.post.likes; }
+  bool _expanded = false;
 
-  String _handleFor(String name) =>
-      name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '.');
+  Color _avatarColor(String userId) {
+    final colors = [
+      const Color(0xFF2D3561), const Color(0xFF1B4332),
+      const Color(0xFF3D0C11), const Color(0xFF2C2C54),
+      const Color(0xFF1A1A2E), const Color(0xFF0D3349),
+    ];
+    return colors[userId.hashCode.abs() % colors.length];
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return name.isNotEmpty ? name[0].toUpperCase() : '?';
+  }
 
   void _openUserProfile() {
     final p = widget.post;
     HapticFeedback.selectionClick();
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => user_profile.ProfileScreen(
-          displayName: p.user,
-          handle: _handleFor(p.user),
-          initialFollowing: false,
-        ),
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => user_profile.ProfileScreen(
+        displayName: p.userName,
+        handle: p.userUsername,
+        initialFollowing: false,
       ),
-    );
-  }
-
-  void _toggleLike() {
-    HapticFeedback.lightImpact();
-    setState(() { _liked = !_liked; _likeCount += _liked ? 1 : -1; });
+    ));
   }
 
   @override
@@ -682,192 +794,206 @@ class _PostCardState extends State<_PostCard> {
     final Color textSub     = (dark ? Colors.white : Colors.black).op(0.45);
     final Color iconCol     = (dark ? Colors.white : Colors.black).op(0.80);
     final Color likedCol    = dark ? const Color(0xFFFF3040) : const Color(0xFFED4956);
+    final avatarBg          = _avatarColor(p.userId);
 
     return Container(
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(
-          color: border, width: 0.5))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        border: Border(bottom: BorderSide(color: border, width: 0.5))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-            Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+        // ── Header ──────────────────────────────────
+        Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+          child: Row(children: [
+            GestureDetector(
+              onTap: _openUserProfile,
+              behavior: HitTestBehavior.opaque,
               child: Row(children: [
-                GestureDetector(
-                  onTap: _openUserProfile,
-                  behavior: HitTestBehavior.opaque,
-                  child: Row(children: [
-                    Container(width: 30, height: 30,
-                      decoration: BoxDecoration(shape: BoxShape.circle,
-                        color: p.userColor,
-                        border: Border.all(color: border, width: 0.8)),
-                      child: Center(child: Text(p.userInitials,
+                Container(
+                  width: 30, height: 30,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: avatarBg,
+                    border: Border.all(color: border, width: 0.8)),
+                  child: ClipOval(child: p.userPicture != null
+                    ? CachedNetworkImage(
+                        imageUrl: p.userPicture!,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Center(
+                          child: Text(_initials(p.userName),
+                            style: const TextStyle(color: Colors.white,
+                              fontSize: 10, fontWeight: FontWeight.w600))),
+                        errorWidget: (_, __, ___) => Center(
+                          child: Text(_initials(p.userName),
+                            style: const TextStyle(color: Colors.white,
+                              fontSize: 10, fontWeight: FontWeight.w600))),
+                      )
+                    : Center(child: Text(_initials(p.userName),
                         style: const TextStyle(color: Colors.white,
-                            fontSize: 10, fontWeight: FontWeight.w600)))),
-                    const SizedBox(width: 8),
-                    Text(p.user, style: TextStyle(
-                        color: textPrimary, fontSize: 13,
-                        fontWeight: FontWeight.w600)),
-                  ]),
+                          fontSize: 10, fontWeight: FontWeight.w600)))),
                 ),
-                const Spacer(),
-                Text(p.timeAgo, style: TextStyle(
-                    color: textSub, fontSize: 11)),
-              ])),
-
-            AspectRatio(aspectRatio: p.aspectRatio,
-              child: Stack(fit: StackFit.expand, children: [
-                Container(decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: p.mediaGradient))),
-                if (p.isVideo)
-                  Center(child: Container(width: 48, height: 48,
-                    decoration: BoxDecoration(shape: BoxShape.circle,
-                      color: Colors.black.op(0.40),
-                      border: Border.all(
-                          color: Colors.white.op(0.60), width: 1.5)),
-                    child: const Icon(Icons.play_arrow_rounded,
-                        color: Colors.white, size: 26))),
-                Container(decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent,
-                        Colors.black.op(0.18)]))),
-              ])),
-
-            Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-              child: Row(children: [
-
-                _LikeButton(
-                  isLiked: _liked,
-                  onTap: _toggleLike,
-                  onLongPress: () {
-                    HapticFeedback.heavyImpact();
-                    Navigator.of(context).push(
-                      PageRouteBuilder(
-                        pageBuilder: (_, animation, __) => LikedByScreen(
-                          dark: dark,
-                          postUser: p.user,
-                          likeCount: _likeCount,
-                        ),
-                        transitionDuration: const Duration(milliseconds: 380),
-                        reverseTransitionDuration: const Duration(milliseconds: 300),
-                        transitionsBuilder: (_, animation, __, child) {
-                          final curved = CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeOutCubic,
-                            reverseCurve: Curves.easeInCubic,
-                          );
-                          return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0, 0.06),
-                              end: Offset.zero,
-                            ).animate(curved),
-                            child: FadeTransition(opacity: curved, child: child),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                  likedColor: likedCol,
-                  iconColor: iconCol,
-                ),
-
-                const SizedBox(width: 16),
-
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    Navigator.of(context).push(
-                      PageRouteBuilder(
-                        pageBuilder: (_, animation, __) => CommentsScreen(
-                          dark: dark,
-                          postUser: p.user,
-                          postDescription: p.description,
-                          postInitials: p.userInitials,
-                          postUserColor: p.userColor,
-                        ),
-                        transitionDuration: const Duration(milliseconds: 380),
-                        reverseTransitionDuration: const Duration(milliseconds: 300),
-                        transitionsBuilder: (_, animation, __, child) {
-                          final curved = CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeOutCubic,
-                            reverseCurve: Curves.easeInCubic,
-                          );
-                          return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0, 0.06),
-                              end: Offset.zero,
-                            ).animate(curved),
-                            child: FadeTransition(opacity: curved, child: child),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                  child: SizedBox(width: 26, height: 26,
-                    child: CustomPaint(
-                        painter: _CommentBubblePainter(color: iconCol)))),
-
-                const SizedBox(width: 16),
-
-                GestureDetector(
-                  onTap: () => HapticFeedback.lightImpact(),
-                  child: SizedBox(width: 26, height: 26,
-                    child: Icon(Icons.near_me_rounded, size: 26, color: iconCol))),
-
-                const Spacer(),
-
-                GestureDetector(
-                  onTap: () => HapticFeedback.lightImpact(),
-                  child: SizedBox(width: 26, height: 26,
-                    child: CustomPaint(
-                        painter: _SaveCirclePainter(color: iconCol)))),
-              ])),
-
-            Padding(padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
-              child: Text('$_likeCount ${'likes'.tr(context)}', style: TextStyle(
+                const SizedBox(width: 8),
+                Text(p.userName, style: TextStyle(
                   color: textPrimary, fontSize: 13,
-                  fontWeight: FontWeight.w600))),
+                  fontWeight: FontWeight.w600)),
+              ]),
+            ),
+            const Spacer(),
+            Text(p.timeAgo, style: TextStyle(color: textSub, fontSize: 11)),
+          ])),
 
-            Padding(padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
-              child: GestureDetector(
-                onTap: () {
-                  setState(() => _expanded = !_expanded);
-                  HapticFeedback.selectionClick();
-                },
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 280),
-                  curve: Curves.easeOutCubic,
-                  alignment: Alignment.topCenter,
-                  child: _expanded
-                      ? Text.rich(TextSpan(children: [
-                          TextSpan(text: '${p.user} ', style: TextStyle(
-                              color: textPrimary, fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                          TextSpan(text: p.description, style: TextStyle(
-                              color: textPrimary.op(0.85),
-                              fontSize: 13, height: 1.45)),
-                        ]))
-                      : Text.rich(
-                          TextSpan(children: [
-                            TextSpan(text: '${p.user} ', style: TextStyle(
-                                color: textPrimary, fontSize: 13,
-                                fontWeight: FontWeight.w600)),
-                            TextSpan(text: p.description, style: TextStyle(
-                                color: textPrimary.op(0.85),
-                                fontSize: 13, height: 1.45)),
-                          ]),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        )
-                ))),
+        // ── Media ────────────────────────────────────
+        AspectRatio(aspectRatio: p.aspectRatio,
+          child: Stack(fit: StackFit.expand, children: [
+            CachedNetworkImage(
+              imageUrl: p.isVideo && p.thumbnailUrl != null
+                  ? p.thumbnailUrl!
+                  : p.mediaUrl,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(
+                color: (dark ? Colors.white : Colors.black).withOpacity(0.05)),
+              errorWidget: (_, __, ___) => Container(
+                color: (dark ? Colors.white : Colors.black).withOpacity(0.05),
+                child: Icon(Icons.broken_image_outlined,
+                  color: (dark ? Colors.white : Colors.black).withOpacity(0.25))),
+            ),
+            if (p.isVideo)
+              Center(child: Container(
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black.op(0.40),
+                  border: Border.all(color: Colors.white.op(0.60), width: 1.5)),
+                child: const Icon(Icons.play_arrow_rounded,
+                    color: Colors.white, size: 26))),
+            Container(decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Colors.black.op(0.18)]))),
+          ])),
 
-          ])
-      );
+        // ── Actions ──────────────────────────────────
+        Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+          child: Row(children: [
+
+            _LikeButton(
+              isLiked: p.isLiked,
+              onTap: () {
+                HapticFeedback.lightImpact();
+                widget.onLike();
+              },
+              onLongPress: () {
+                HapticFeedback.heavyImpact();
+                Navigator.of(context).push(PageRouteBuilder(
+                  pageBuilder: (_, animation, __) => LikedByScreen(
+                    dark: dark,
+                    postUser: p.userName,
+                    likeCount: p.likesCount,
+                  ),
+                  transitionDuration: const Duration(milliseconds: 380),
+                  reverseTransitionDuration: const Duration(milliseconds: 300),
+                  transitionsBuilder: (_, animation, __, child) {
+                    final curved = CurvedAnimation(parent: animation,
+                        curve: Curves.easeOutCubic,
+                        reverseCurve: Curves.easeInCubic);
+                    return SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.06), end: Offset.zero,
+                      ).animate(curved),
+                      child: FadeTransition(opacity: curved, child: child));
+                  },
+                ));
+              },
+              likedColor: likedCol,
+              iconColor: iconCol,
+            ),
+
+            const SizedBox(width: 16),
+
+            GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                Navigator.of(context).push(PageRouteBuilder(
+                  pageBuilder: (_, animation, __) => CommentsScreen(
+                    dark: dark,
+                    postUser: p.userName,
+                    postDescription: p.caption,
+                    postInitials: _initials(p.userName),
+                    postUserColor: avatarBg,
+                  ),
+                  transitionDuration: const Duration(milliseconds: 380),
+                  reverseTransitionDuration: const Duration(milliseconds: 300),
+                  transitionsBuilder: (_, animation, __, child) {
+                    final curved = CurvedAnimation(parent: animation,
+                        curve: Curves.easeOutCubic,
+                        reverseCurve: Curves.easeInCubic);
+                    return SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.06), end: Offset.zero,
+                      ).animate(curved),
+                      child: FadeTransition(opacity: curved, child: child));
+                  },
+                ));
+              },
+              child: SizedBox(width: 26, height: 26,
+                child: CustomPaint(painter: _CommentBubblePainter(color: iconCol)))),
+
+            const SizedBox(width: 16),
+
+            GestureDetector(
+              onTap: () => HapticFeedback.lightImpact(),
+              child: SizedBox(width: 26, height: 26,
+                child: Icon(Icons.near_me_rounded, size: 26, color: iconCol))),
+
+            const Spacer(),
+
+            GestureDetector(
+              onTap: () => HapticFeedback.lightImpact(),
+              child: SizedBox(width: 26, height: 26,
+                child: CustomPaint(painter: _SaveCirclePainter(color: iconCol)))),
+          ])),
+
+        // ── Likes count ──────────────────────────────
+        Padding(padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+          child: Text('${p.likesCount} ${'likes'.tr(context)}',
+            style: TextStyle(color: textPrimary, fontSize: 13,
+              fontWeight: FontWeight.w600))),
+
+        // ── Caption ──────────────────────────────────
+        if (p.caption.isNotEmpty)
+          Padding(padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _expanded = !_expanded);
+                HapticFeedback.selectionClick();
+              },
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: _expanded
+                    ? Text.rich(TextSpan(children: [
+                        TextSpan(text: '${p.userName} ', style: TextStyle(
+                          color: textPrimary, fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                        TextSpan(text: p.caption, style: TextStyle(
+                          color: textPrimary.op(0.85), fontSize: 13, height: 1.45)),
+                      ]))
+                    : Text.rich(TextSpan(children: [
+                        TextSpan(text: '${p.userName} ', style: TextStyle(
+                          color: textPrimary, fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                        TextSpan(text: p.caption, style: TextStyle(
+                          color: textPrimary.op(0.85), fontSize: 13, height: 1.45)),
+                      ]),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+              ))),
+
+        if (p.caption.isEmpty) const SizedBox(height: 10),
+      ]),
+    );
   }
 }
 

@@ -302,7 +302,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           );
                                         },
                                       ),
-                                    );
+                                    ).then((_) => _loadProfile());
                                   },
                                 ),
                               ],

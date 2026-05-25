@@ -1,9 +1,13 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
+import '../models/chat_model.dart';
+import '../services/user_service.dart';
+import '../services/auth_service.dart';
 import 'glass_common.dart';
 import 'edit_profile_screen.dart';
 import 'parental_control_screen.dart';
+import 'intro_slides.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool dark;
@@ -17,6 +21,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool privateAccount = true;
   bool activityStatus = false;
   bool notifications = true;
+  UserProfile? _profile;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final p = await UserService.getMyProfile();
+    if (mounted && p != null) setState(() => _profile = p);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 28),
                     children: [
-                      _AccountCard(dark: dark),
+                      _AccountCard(dark: dark, profile: _profile),
                       const SizedBox(height: 16),
                       _SectionTitle('ACCOUNT'.tr(context), color: sub),
                       _SectionCard(
@@ -102,7 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     );
                                   },
                                 ),
-                              );
+                              ).then((_) => _loadProfile());
                             },
                             child: _SettingRow(
                               dark: dark,
@@ -263,12 +279,16 @@ class _SearchPill extends StatelessWidget {
 
 class _AccountCard extends StatelessWidget {
   final bool dark;
-  const _AccountCard({required this.dark});
+  final UserProfile? profile;
+  const _AccountCard({required this.dark, this.profile});
 
   @override
   Widget build(BuildContext context) {
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
+    final name = profile?.name ?? '';
+    final username = profile?.username ?? '';
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
     return GlassSurface(
       dark: dark,
@@ -281,16 +301,31 @@ class _AccountCard extends StatelessWidget {
             height: 58,
             decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, 2)),
             alignment: Alignment.center,
-            child: Text('S', style: manrope(size: 22, weight: FontWeight.w800, color: Colors.white)),
+            child: profile == null
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.6)),
+                    ),
+                  )
+                : Text(initial, style: manrope(size: 22, weight: FontWeight.w800, color: Colors.white)),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Sarah Dietrich', style: manrope(size: 16, weight: FontWeight.w800, color: fg)),
+                Text(
+                  name.isNotEmpty ? name : '...',
+                  style: manrope(size: 16, weight: FontWeight.w800, color: fg),
+                ),
                 const SizedBox(height: 3),
-                Text('@sarah.d', style: manrope(size: 12.5, weight: FontWeight.w600, color: sub)),
+                Text(
+                  username.isNotEmpty ? '@$username' : '',
+                  style: manrope(size: 12.5, weight: FontWeight.w600, color: sub),
+                ),
               ],
             ),
           ),
@@ -448,24 +483,107 @@ class _BaseRow extends StatelessWidget {
   }
 }
 
-class _LogoutButton extends StatelessWidget {
+class _LogoutButton extends StatefulWidget {
   final bool dark;
   const _LogoutButton({required this.dark});
 
   @override
-  Widget build(BuildContext context) {
-    return GlassSurface(
-      dark: dark,
-      radius: 999,
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Center(
-        child: Text(
-          'Log out'.tr(context),
+  State<_LogoutButton> createState() => _LogoutButtonState();
+}
+
+class _LogoutButtonState extends State<_LogoutButton> {
+  bool _loading = false;
+
+  Future<void> _handleLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: widget.dark ? const Color(0xFF1C1C1F) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Log out?',
+          style: manrope(
+            size: 17,
+            weight: FontWeight.w800,
+            color: GlassTokens.fg(widget.dark),
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to log out?',
           style: manrope(
             size: 14,
-            weight: FontWeight.w800,
-            color: dark ? Colors.white.withOpacity(0.88) : const Color(0xFF0A0A0A),
+            weight: FontWeight.w500,
+            color: GlassTokens.sub(widget.dark),
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: manrope(
+                size: 14,
+                weight: FontWeight.w700,
+                color: GlassTokens.sub(widget.dark),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Log out',
+              style: manrope(
+                size: 14,
+                weight: FontWeight.w700,
+                color: Colors.redAccent,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _loading = true);
+    try {
+      await AuthService.logout();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const IntroSlidesScreen()),
+        (route) => false,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _loading ? null : _handleLogout,
+      child: GlassSurface(
+        dark: widget.dark,
+        radius: 999,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Center(
+          child: _loading
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                  ),
+                )
+              : Text(
+                  'Log out'.tr(context),
+                  style: manrope(
+                    size: 14,
+                    weight: FontWeight.w800,
+                    color: Colors.redAccent,
+                  ),
+                ),
         ),
       ),
     );

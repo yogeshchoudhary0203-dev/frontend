@@ -133,10 +133,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final msg = e.toString().replaceFirst('ApiException: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to update profile',
+              msg.isNotEmpty ? msg : 'Failed to update profile',
               style: manrope(size: 14, weight: FontWeight.w600, color: Colors.white),
             ),
             backgroundColor: Colors.redAccent.withOpacity(0.85),

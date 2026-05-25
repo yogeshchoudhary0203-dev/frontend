@@ -15,6 +15,7 @@ import 'followers_screen(1).dart';
 import 'setting_screen.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
+import '../services/location_service.dart';
 import '../l10n/app_localizations.dart';
 
 // ───────────────────────────────────────────────────────────────
@@ -108,6 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _tiles = _buildProfileTiles();
   UserProfile? _profile;
   bool _isLoading = true;
+  bool _isUpdatingLocation = false;
   List<String> _platformOrder = ['snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'];
 
   @override
@@ -148,6 +150,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     }
+  }
+
+  Future<void> _handleLocationTap() async {
+    if (!mounted) return;
+    final hasLocation = _profile?.locationCity?.isNotEmpty == true;
+
+    if (hasLocation) {
+      await _showLocationOptions();
+    } else {
+      setState(() => _isUpdatingLocation = true);
+      final success = await LocationService.requestAndSaveLocation(context);
+      if (success && mounted) await _loadProfile();
+      if (mounted) setState(() => _isUpdatingLocation = false);
+    }
+  }
+
+  Future<void> _showLocationOptions() async {
+    final dark = widget.dark;
+    final fg = GlassTokens.fg(dark);
+    final isPublic = _profile?.locationPublic ?? true;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: dark ? const Color(0xFF1C1C1F) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: dark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: Icon(
+                  isPublic ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  color: fg,
+                ),
+                title: Text(
+                  isPublic ? 'Hide location from others' : 'Show location to others',
+                  style: TextStyle(color: fg, fontWeight: FontWeight.w600),
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  setState(() => _isUpdatingLocation = true);
+                  await UserService.updateLocationPrivacy(!isPublic);
+                  await _loadProfile();
+                  if (mounted) setState(() => _isUpdatingLocation = false);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.my_location_rounded, color: fg),
+                title: Text(
+                  'Update location',
+                  style: TextStyle(color: fg, fontWeight: FontWeight.w600),
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  setState(() => _isUpdatingLocation = true);
+                  final success = await LocationService.requestAndSaveLocation(context);
+                  if (success && mounted) await _loadProfile();
+                  if (mounted) setState(() => _isUpdatingLocation = false);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.location_off_outlined, color: Color(0xFFFF3B30)),
+                title: const Text(
+                  'Remove location',
+                  style: TextStyle(color: Color(0xFFFF3B30), fontWeight: FontWeight.w600),
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  setState(() => _isUpdatingLocation = true);
+                  await UserService.removeLocation();
+                  await _loadProfile();
+                  if (mounted) setState(() => _isUpdatingLocation = false);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _openFollowers(FollowersTab initialTab) {
@@ -397,7 +491,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             username: _profile?.username ?? '',
                           ),
 
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 10),
+
+                          // LOCATION CHIP
+                          Center(
+                            child: _LocationChip(
+                              dark: dark,
+                              city: _profile?.locationCity,
+                              isPublic: _profile?.locationPublic ?? true,
+                              isLoading: _isUpdatingLocation,
+                              onTap: _handleLocationTap,
+                            ),
+                          ),
+
+                          const SizedBox(height: 8),
 
                           // TITLE CHIP
                           Center(
@@ -995,6 +1102,93 @@ class _TitleChip extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+// Location chip (own profile)
+// ───────────────────────────────────────────────────────────────
+
+class _LocationChip extends StatelessWidget {
+  final bool dark;
+  final String? city;
+  final bool isPublic;
+  final bool isLoading;
+  final VoidCallback onTap;
+  const _LocationChip({
+    required this.dark,
+    required this.isPublic,
+    required this.isLoading,
+    required this.onTap,
+    this.city,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasCity = city?.isNotEmpty == true;
+    final sub = GlassTokens.sub(dark);
+
+    return GestureDetector(
+      onTap: isLoading ? null : onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: dark
+                  ? Colors.white.withOpacity(0.06)
+                  : Colors.white.withOpacity(0.6),
+              border: Border.all(
+                color: dark
+                    ? Colors.white.withOpacity(0.10)
+                    : Colors.black.withOpacity(0.06),
+              ),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: isLoading
+                ? SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(sub),
+                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        hasCity
+                            ? (isPublic
+                                ? Icons.location_on_rounded
+                                : Icons.location_off_rounded)
+                            : Icons.add_location_alt_outlined,
+                        size: 13,
+                        color: hasCity
+                            ? const Color(0xFFFF3B30)
+                            : sub,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        hasCity
+                            ? (isPublic ? city! : '${city!} (hidden)')
+                            : 'Add location',
+                        style: manrope(
+                          size: 12,
+                          weight: FontWeight.w600,
+                          color: hasCity ? GlassTokens.fg(dark).withOpacity(0.8) : sub,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ),
       ),

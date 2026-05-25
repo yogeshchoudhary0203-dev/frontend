@@ -224,6 +224,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 10),
                     Center(child: _TitleChip(t: t, label: '@${_profile?.username ?? widget.username}')),
+                    if ((_profile?.locationCity?.isNotEmpty == true)) ...[
+                      const SizedBox(height: 8),
+                      Center(
+                        child: _LocationBadge(
+                          t: t,
+                          city: _profile!.locationCity!,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 14),
                     if ((_profile?.bio ?? widget.bio).isNotEmpty)
                       Padding(
@@ -1345,6 +1354,59 @@ class _PostTile extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // BACKDROP
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Location badge (read-only, shown on others' profile)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _LocationBadge extends StatelessWidget {
+  final _GlassTheme t;
+  final String city;
+  const _LocationBadge({required this.t, required this.city});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          height: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: t.cardFill,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: t.cardBorder),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.location_on_rounded,
+                size: 12,
+                color: Color(0xFFFF3B30),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                city,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: t.muted,
+                  letterSpacing: -0.1,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Backdrop extends StatelessWidget {
   const _Backdrop({required this.t});
   final _GlassTheme t;
@@ -1478,6 +1540,8 @@ class _GlassTheme {
   });
 
   static _GlassTheme of(bool dark) => dark ? _dark : _light;
+
+  Color get locationIconColor => const Color(0xFFFF3B30);
 
   static final _light = _GlassTheme(
     dark: false,

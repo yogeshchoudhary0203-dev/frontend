@@ -159,6 +159,58 @@ class UserService {
     }
   }
 
+  // ── Location ─────────────────────────────────────────────────────────────
+
+  static Future<bool> updateLocation(double lat, double lng, String city) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.put(
+        Uri.parse('$baseUrl/users/me/location'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'latitude': lat, 'longitude': lng, 'city': city}),
+      ).timeout(const Duration(seconds: 10));
+      developer.log('updateLocation → ${res.statusCode}');
+      return res.statusCode == 200;
+    } catch (e) {
+      developer.log('updateLocation error: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> updateLocationPrivacy(bool isPublic) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.put(
+        Uri.parse('$baseUrl/users/me/location-privacy'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'is_public': isPublic}),
+      ).timeout(const Duration(seconds: 10));
+      developer.log('updateLocationPrivacy → ${res.statusCode}');
+      return res.statusCode == 200;
+    } catch (e) {
+      developer.log('updateLocationPrivacy error: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> removeLocation() async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.delete(
+        Uri.parse('$baseUrl/users/me/location'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      developer.log('removeLocation → ${res.statusCode}');
+      return res.statusCode == 200;
+    } catch (e) {
+      developer.log('removeLocation error: $e');
+      return false;
+    }
+  }
+
   static Future<List<UserProfile>> getFollowing(String userId) async {
     try {
       final token = await ApiService.getToken();

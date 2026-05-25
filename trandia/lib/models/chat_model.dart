@@ -15,6 +15,10 @@ class UserProfile {
   final String? facebookLink;
   final String? twitterLink;
   final String? youtubeLink;
+  final String? locationCity;
+  final bool locationPublic;
+  final double? locationLat;
+  final double? locationLng;
 
   UserProfile({
     required this.id,
@@ -33,6 +37,10 @@ class UserProfile {
     this.facebookLink,
     this.twitterLink,
     this.youtubeLink,
+    this.locationCity,
+    this.locationPublic = true,
+    this.locationLat,
+    this.locationLng,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -53,6 +61,10 @@ class UserProfile {
       facebookLink: json['facebook_link'] as String?,
       twitterLink: json['twitter_link'] as String?,
       youtubeLink: json['youtube_link'] as String?,
+      locationCity: json['location_city'] as String?,
+      locationPublic: json['location_public'] as bool? ?? true,
+      locationLat: (json['location_lat'] as num?)?.toDouble(),
+      locationLng: (json['location_lng'] as num?)?.toDouble(),
     );
   }
 
@@ -74,6 +86,10 @@ class UserProfile {
       'facebook_link': facebookLink,
       'twitter_link': twitterLink,
       'youtube_link': youtubeLink,
+      'location_city': locationCity,
+      'location_public': locationPublic,
+      'location_lat': locationLat,
+      'location_lng': locationLng,
     };
   }
 }

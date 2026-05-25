@@ -13,6 +13,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/user_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
@@ -57,11 +58,25 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late bool _isFollowing;
   bool _isFollowLoading = false;
+  UserProfile? _profile;
 
   @override
   void initState() {
     super.initState();
     _isFollowing = widget.initialFollowing;
+    if (widget.userId.isNotEmpty) {
+      _loadProfile();
+    }
+  }
+
+  Future<void> _loadProfile() async {
+    final p = await UserService.getUserProfile(widget.userId);
+    if (mounted && p != null) {
+      setState(() {
+        _profile = p;
+        _isFollowing = p.isFollowing;
+      });
+    }
   }
 
   Future<void> _handleFollow() async {
@@ -190,38 +205,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     _StatsHeader(
                       t: t,
-                      followers: widget.followers,
-                      following: widget.following,
+                      followers: _profile != null
+                          ? _formatCount(_profile!.followersCount)
+                          : widget.followers,
+                      following: _profile != null
+                          ? _formatCount(_profile!.followingCount)
+                          : widget.following,
                       posts: widget.posts,
-                      initial: widget.displayName.isNotEmpty
-                          ? widget.displayName[0].toUpperCase()
+                      initial: (_profile?.name ?? widget.displayName).isNotEmpty
+                          ? (_profile?.name ?? widget.displayName)[0].toUpperCase()
                           : 'U',
                     ),
                     const SizedBox(height: 68),
                     _NameRow(
                       t: t,
-                      name: widget.displayName,
+                      name: _profile?.name ?? widget.displayName,
                       verified: widget.verified,
                     ),
                     const SizedBox(height: 10),
-                    Center(child: _TitleChip(t: t, label: widget.title)),
+                    Center(child: _TitleChip(t: t, label: '@${_profile?.username ?? widget.username}')),
                     const SizedBox(height: 14),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 28),
-                      child: Text(
-                        widget.bio,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          height: 1.55,
-                          fontWeight: FontWeight.w500,
-                          color: t.muted,
-                          letterSpacing: -0.05,
+                    if ((_profile?.bio ?? widget.bio).isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 28),
+                        child: Text(
+                          _profile?.bio ?? widget.bio,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            height: 1.55,
+                            fontWeight: FontWeight.w500,
+                            color: t.muted,
+                            letterSpacing: -0.05,
+                          ),
                         ),
                       ),
-                    ),
+                    if ((_profile?.link ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _WebsiteChip(t: t, url: _profile!.link!),
+                    ],
                     const SizedBox(height: 16),
-                    _SocialRow(t: t),
+                    _SocialRow(t: t, profile: _profile),
                     const SizedBox(height: 18),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -288,6 +312,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
+
+String _formatCount(int n) {
+  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+  if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+  return '$n';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -647,28 +677,109 @@ class _TitleChip extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SOCIAL ROW
+// WEBSITE CHIP
 // ─────────────────────────────────────────────────────────────────────────────
-class _SocialRow extends StatelessWidget {
-  const _SocialRow({required this.t});
+class _WebsiteChip extends StatelessWidget {
+  const _WebsiteChip({required this.t, required this.url});
   final _GlassTheme t;
+  final String url;
+
+  Future<void> _open() async {
+    String full = url.trim();
+    if (!full.startsWith('http://') && !full.startsWith('https://')) {
+      full = 'https://$full';
+    }
+    try {
+      await launchUrl(Uri.parse(full), mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
+    final display = url.replaceFirst(RegExp(r'^https?://'), '');
+    return Center(
+      child: GestureDetector(
+        onTap: _open,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: t.fieldBorder, width: 1),
+            gradient: LinearGradient(colors: t.fieldFill),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.link_rounded, size: 14, color: t.muted),
+              const SizedBox(width: 4),
+              Text(
+                display,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: t.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOCIAL ROW
+// ─────────────────────────────────────────────────────────────────────────────
+class _SocialRow extends StatelessWidget {
+  const _SocialRow({required this.t, this.profile});
+  final _GlassTheme t;
+  final UserProfile? profile;
+
+  Future<void> _launch(String url) async {
+    String full = url.trim();
+    if (full.isEmpty) return;
+    if (!full.startsWith('http://') && !full.startsWith('https://')) {
+      full = 'https://$full';
+    }
+    try {
+      await launchUrl(Uri.parse(full), mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (profile == null) return const SizedBox.shrink();
+
+    final links = <({Widget icon, String url})>[
+      if ((profile!.snapchatLink ?? '').isNotEmpty)
+        (icon: const _BrandSnap(), url: profile!.snapchatLink!),
+      if ((profile!.instagramLink ?? '').isNotEmpty)
+        (icon: const _BrandIG(), url: profile!.instagramLink!),
+      if ((profile!.whatsappLink ?? '').isNotEmpty)
+        (icon: const _BrandWA(), url: profile!.whatsappLink!),
+      if ((profile!.facebookLink ?? '').isNotEmpty)
+        (icon: const _BrandFB(), url: profile!.facebookLink!),
+      if ((profile!.twitterLink ?? '').isNotEmpty)
+        (icon: const _BrandX(), url: profile!.twitterLink!),
+      if ((profile!.youtubeLink ?? '').isNotEmpty)
+        (icon: const _BrandYT(), url: profile!.youtubeLink!),
+    ];
+
+    if (links.isEmpty) return const SizedBox.shrink();
+
     return Center(
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          _SocialPill(t: t, child: const _BrandSnap()),
-          const SizedBox(width: 12),
-          _SocialPill(t: t, child: const _BrandIG()),
-          const SizedBox(width: 12),
-          _SocialPill(t: t, child: const _BrandWA()),
-          const SizedBox(width: 12),
-          _SocialPill(t: t, child: const _BrandFB()),
-          const SizedBox(width: 12),
-          _SocialPill(t: t, child: const _BrandX()),
-        ],
+        children: links
+            .map((e) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: GestureDetector(
+                    onTap: () => _launch(e.url),
+                    child: _SocialPill(t: t, child: e.icon),
+                  ),
+                ))
+            .toList(),
       ),
     );
   }
@@ -808,6 +919,26 @@ class _BrandX extends StatelessWidget {
             FontAwesomeIcons.xTwitter,
             color: Colors.white,
             size: 11,
+          ),
+        ),
+      );
+}
+
+class _BrandYT extends StatelessWidget {
+  const _BrandYT();
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 22,
+        height: 22,
+        decoration: const BoxDecoration(
+          color: Color(0xFFFF0000),
+          shape: BoxShape.circle,
+        ),
+        child: const Center(
+          child: FaIcon(
+            FontAwesomeIcons.youtube,
+            color: Colors.white,
+            size: 12,
           ),
         ),
       );

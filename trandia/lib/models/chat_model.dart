@@ -45,6 +45,14 @@ class UserProfile {
       isFollowing: json['is_following'] == true,
       followersCount: json['followers_count'] as int? ?? 0,
       followingCount: json['following_count'] as int? ?? 0,
+      bio: json['bio'] as String?,
+      link: json['link'] as String?,
+      snapchatLink: json['snapchat_link'] as String?,
+      instagramLink: json['instagram_link'] as String?,
+      whatsappLink: json['whatsapp_link'] as String?,
+      facebookLink: json['facebook_link'] as String?,
+      twitterLink: json['twitter_link'] as String?,
+      youtubeLink: json['youtube_link'] as String?,
     );
   }
 

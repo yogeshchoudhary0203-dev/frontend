@@ -113,6 +113,29 @@ class UserService {
     }
   }
 
+  static Future<UserProfile?> getUserProfile(String userId) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return null;
+      final res = await http.get(
+        Uri.parse('$baseUrl/users/$userId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      developer.log('getUserProfile $userId → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+        return UserProfile.fromJson(decoded);
+      }
+      return null;
+    } catch (e) {
+      developer.log('getUserProfile error: $e');
+      return null;
+    }
+  }
+
   static Future<List<UserProfile>> getFollowers(String userId) async {
     try {
       final token = await ApiService.getToken();

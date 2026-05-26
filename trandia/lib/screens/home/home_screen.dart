@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -360,20 +359,20 @@ class _HomeScreenState extends State<HomeScreen>
     await Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, animation, __) => ChatListScreen(dark: isDark),
-        transitionDuration: const Duration(milliseconds: 260),
-        reverseTransitionDuration: const Duration(milliseconds: 220),
+        transitionDuration: const Duration(milliseconds: 280),
+        reverseTransitionDuration: const Duration(milliseconds: 240),
         transitionsBuilder: (_, animation, __, child) {
           final curved = CurvedAnimation(
             parent: animation,
-            curve: Curves.easeOutQuart,
-            reverseCurve: Curves.easeInQuart,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
           );
           return SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(-1.0, 0.0), // slide in from left on left-swipe
+              begin: const Offset(1.0, 0.0),
               end: Offset.zero,
             ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
+            child: child,
           );
         },
       ),
@@ -408,14 +407,15 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDark   = Theme.of(context).brightness == Brightness.dark;
-    final topPad   = MediaQuery.of(context).padding.top;
+    final isDark       = Theme.of(context).brightness == Brightness.dark;
+    final topPad       = MediaQuery.of(context).padding.top;
+    final secondaryAnim = ModalRoute.of(context)?.secondaryAnimation;
 
     SystemChrome.setSystemUIOverlayStyle(isDark
         ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
         : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent));
 
-    return Scaffold(
+    final scaffold = Scaffold(
       extendBodyBehindAppBar: true,
       extendBody: true,
       body: Listener(
@@ -582,32 +582,7 @@ class _HomeScreenState extends State<HomeScreen>
           Align(alignment: Alignment.topRight,
             child: Padding(padding: const EdgeInsets.only(top: 10, right: 14),
               child: GestureDetector(
-                onTap: () async {
-                  HapticFeedback.selectionClick();
-                  if (_navOpen) { setState(() => _navOpen = false); _navCtrl.reverse(); }
-                  await Navigator.of(context).push(
-                    PageRouteBuilder(
-                      pageBuilder: (_, animation, __) => ChatListScreen(dark: isDark),
-                      transitionDuration: const Duration(milliseconds: 260),
-                      reverseTransitionDuration: const Duration(milliseconds: 220),
-                      transitionsBuilder: (_, animation, __, child) {
-                        final curved = CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutQuart,
-                          reverseCurve: Curves.easeInQuart,
-                        );
-                        return SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(1.0, 0.0),
-                            end: Offset.zero,
-                          ).animate(curved),
-                          child: FadeTransition(opacity: curved, child: child),
-                        );
-                      },
-                    ),
-                  );
-                  _loadUnreadCount();
-                },
+                onTap: _openChatScreen,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -684,6 +659,18 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ]),
       ),
+    );
+    if (secondaryAnim == null) return scaffold;
+    return AnimatedBuilder(
+      animation: secondaryAnim,
+      builder: (_, child) {
+        final t = Curves.easeInOutCubic.transform(secondaryAnim.value);
+        return FractionalTranslation(
+          translation: Offset(-0.25 * t, 0),
+          child: child,
+        );
+      },
+      child: scaffold,
     );
   }
 }
@@ -1073,14 +1060,7 @@ class _VideoCardState extends State<_VideoCard> {
   }
 
   Future<void> _checkConnectivity() async {
-    try {
-      final result = await Connectivity().checkConnectivity();
-      if (mounted) {
-        // Any mobile data type → data-saver on; WiFi / ethernet → off
-        final onMobile = result.contains(ConnectivityResult.mobile);
-        setState(() => _dataSaver = onMobile);
-      }
-    } catch (_) {}
+    // Videos autoplay on all connections — no automatic data-saver
   }
 
   Future<void> _initAndPlay() async {
@@ -1104,7 +1084,7 @@ class _VideoCardState extends State<_VideoCard> {
   }
 
   void _onVisibilityChanged(VisibilityInfo info) {
-    final visible = info.visibleFraction >= 0.65;
+    final visible = info.visibleFraction >= 0.5;
     if (visible) {
       if (!_initialized && !_dataSaver) {
         _initAndPlay();

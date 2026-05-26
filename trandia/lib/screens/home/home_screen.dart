@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -360,20 +359,20 @@ class _HomeScreenState extends State<HomeScreen>
     await Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, animation, __) => ChatListScreen(dark: isDark),
-        transitionDuration: const Duration(milliseconds: 260),
-        reverseTransitionDuration: const Duration(milliseconds: 220),
+        transitionDuration: const Duration(milliseconds: 280),
+        reverseTransitionDuration: const Duration(milliseconds: 240),
         transitionsBuilder: (_, animation, __, child) {
           final curved = CurvedAnimation(
             parent: animation,
-            curve: Curves.easeOutQuart,
-            reverseCurve: Curves.easeInQuart,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
           );
           return SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(1.0, 0.0), // native feel slide from right side
+              begin: const Offset(1.0, 0.0),
               end: Offset.zero,
             ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
+            child: child,
           );
         },
       ),
@@ -408,14 +407,15 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDark   = Theme.of(context).brightness == Brightness.dark;
-    final topPad   = MediaQuery.of(context).padding.top;
+    final isDark       = Theme.of(context).brightness == Brightness.dark;
+    final topPad       = MediaQuery.of(context).padding.top;
+    final secondaryAnim = ModalRoute.of(context)?.secondaryAnimation;
 
     SystemChrome.setSystemUIOverlayStyle(isDark
         ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
         : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent));
 
-    return Scaffold(
+    final scaffold = Scaffold(
       extendBodyBehindAppBar: true,
       extendBody: true,
       body: Listener(
@@ -428,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen>
           if (_swipeStartX == null) return;
           final dx = e.position.dx - _swipeStartX!;
           final dy = (e.position.dy - (_swipeStartY ?? 0)).abs();
-          if (dx > 60 && dy < dx * 0.65) _openChatScreen();
+          if (dx < -60 && dy < (-dx) * 0.65) _openChatScreen();
           _swipeStartX = null;
           _swipeStartY = null;
         },
@@ -582,32 +582,7 @@ class _HomeScreenState extends State<HomeScreen>
           Align(alignment: Alignment.topRight,
             child: Padding(padding: const EdgeInsets.only(top: 10, right: 14),
               child: GestureDetector(
-                onTap: () async {
-                  HapticFeedback.selectionClick();
-                  if (_navOpen) { setState(() => _navOpen = false); _navCtrl.reverse(); }
-                  await Navigator.of(context).push(
-                    PageRouteBuilder(
-                      pageBuilder: (_, animation, __) => ChatListScreen(dark: isDark),
-                      transitionDuration: const Duration(milliseconds: 260),
-                      reverseTransitionDuration: const Duration(milliseconds: 220),
-                      transitionsBuilder: (_, animation, __, child) {
-                        final curved = CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutQuart,
-                          reverseCurve: Curves.easeInQuart,
-                        );
-                        return SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(1.0, 0.0),
-                            end: Offset.zero,
-                          ).animate(curved),
-                          child: FadeTransition(opacity: curved, child: child),
-                        );
-                      },
-                    ),
-                  );
-                  _loadUnreadCount();
-                },
+                onTap: _openChatScreen,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -684,6 +659,18 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ]),
       ),
+    );
+    if (secondaryAnim == null) return scaffold;
+    return AnimatedBuilder(
+      animation: secondaryAnim,
+      builder: (_, child) {
+        final t = Curves.easeInOutCubic.transform(secondaryAnim.value);
+        return FractionalTranslation(
+          translation: Offset(-0.25 * t, 0),
+          child: child,
+        );
+      },
+      child: scaffold,
     );
   }
 }
@@ -1060,10 +1047,11 @@ class _VideoCard extends StatefulWidget {
 class _VideoCardState extends State<_VideoCard> {
   VideoPlayerController? _ctrl;
   bool _initialized    = false;
-  bool _muted          = false;   // volume HIGH by default (unmuted)
-  bool _manualPause    = false;   // user double-tapped to pause
-  bool _dataSaver      = false;   // on mobile data → no autoplay
-  bool _showOverlay    = false;   // brief play/pause icon flash
+  bool _muted          = false;
+  bool _manualPause    = false;   // long-press to pause; clears only on explicit tap-play
+  bool _dataSaver      = false;
+  bool _showOverlay    = false;
+  IconData _overlayIcon = Icons.pause_rounded;
 
   @override
   void initState() {
@@ -1072,14 +1060,7 @@ class _VideoCardState extends State<_VideoCard> {
   }
 
   Future<void> _checkConnectivity() async {
-    try {
-      final result = await Connectivity().checkConnectivity();
-      if (mounted) {
-        // Any mobile data type → data-saver on; WiFi / ethernet → off
-        final onMobile = result.contains(ConnectivityResult.mobile);
-        setState(() => _dataSaver = onMobile);
-      }
-    } catch (_) {}
+    // Videos autoplay on all connections — no automatic data-saver
   }
 
   Future<void> _initAndPlay() async {
@@ -1103,7 +1084,7 @@ class _VideoCardState extends State<_VideoCard> {
   }
 
   void _onVisibilityChanged(VisibilityInfo info) {
-    final visible = info.visibleFraction >= 0.65;
+    final visible = info.visibleFraction >= 0.5;
     if (visible) {
       if (!_initialized && !_dataSaver) {
         _initAndPlay();
@@ -1113,31 +1094,40 @@ class _VideoCardState extends State<_VideoCard> {
     } else {
       if (_initialized) {
         _ctrl?.pause();
-        // Clear manual-pause state so next scroll-in auto-plays
-        if (_manualPause) _manualPause = false;
+        // _manualPause intentionally NOT reset here — long-press pause persists across tab/scroll
       }
     }
   }
 
-  void _onDoubleTap() {
-    HapticFeedback.lightImpact();
+  // Tap = play (if paused or data-saver)
+  void _onTap() {
     if (!_initialized) {
       _dataSaver = false;
       _initAndPlay();
       return;
     }
-    final playing = _ctrl?.value.isPlaying ?? false;
-    if (playing) {
+    if (_manualPause || !(_ctrl?.value.isPlaying ?? false)) {
+      _manualPause = false;
+      _ctrl?.play();
+      setState(() { _showOverlay = true; _overlayIcon = Icons.play_arrow_rounded; });
+      Future.delayed(const Duration(milliseconds: 700), () {
+        if (mounted) setState(() => _showOverlay = false);
+      });
+    }
+  }
+
+  // Long press = pause only
+  void _onLongPress() {
+    HapticFeedback.mediumImpact();
+    if (!_initialized) return;
+    if (_ctrl?.value.isPlaying ?? false) {
       _ctrl?.pause();
       _manualPause = true;
-    } else {
-      _ctrl?.play();
-      _manualPause = false;
+      setState(() { _showOverlay = true; _overlayIcon = Icons.pause_rounded; });
+      Future.delayed(const Duration(milliseconds: 700), () {
+        if (mounted) setState(() => _showOverlay = false);
+      });
     }
-    setState(() => _showOverlay = true);
-    Future.delayed(const Duration(milliseconds: 700), () {
-      if (mounted) setState(() => _showOverlay = false);
-    });
   }
 
   void _onTapManualPlay() {
@@ -1164,8 +1154,7 @@ class _VideoCardState extends State<_VideoCard> {
 
   @override
   Widget build(BuildContext context) {
-    final thumbnailUrl = widget.post.thumbnailUrl ?? widget.post.mediaUrl;
-    final isPlaying    = _ctrl?.value.isPlaying ?? false;
+    final String? thumbnailUrl = widget.post.thumbnailUrl;
 
     return VisibilityDetector(
       key: Key('vid_${widget.post.id}'),
@@ -1173,19 +1162,24 @@ class _VideoCardState extends State<_VideoCard> {
       child: AspectRatio(
         aspectRatio: widget.post.aspectRatio,
         child: GestureDetector(
-          onDoubleTap: _onDoubleTap,
+          onTap: _onTap,
+          onLongPress: _onLongPress,
           child: Stack(fit: StackFit.expand, children: [
 
-            // ── Thumbnail (always shown until video ready) ──
-            CachedNetworkImage(
-              imageUrl: thumbnailUrl,
-              fit: BoxFit.cover,
-              placeholder: (_, __) => Container(color: Colors.black12),
-              errorWidget: (_, __, ___) => Container(
-                color: Colors.black12,
-                child: const Icon(Icons.broken_image_outlined,
-                    color: Colors.white30)),
-            ),
+            // ── Thumbnail (static preview while scrolling) ──
+            if (thumbnailUrl != null && thumbnailUrl.isNotEmpty)
+              CachedNetworkImage(
+                imageUrl: thumbnailUrl,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => const ColoredBox(color: Color(0xFF111111)),
+                errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFF111111)),
+              )
+            else
+              Container(
+                color: const Color(0xFF111111),
+                child: const Center(child: Icon(Icons.play_circle_outline_rounded,
+                    color: Colors.white24, size: 44)),
+              ),
 
             // ── Video frame (on top once initialized) ──────
             if (_initialized && _ctrl != null)
@@ -1222,7 +1216,7 @@ class _VideoCardState extends State<_VideoCard> {
                 child: CircularProgressIndicator(
                     color: Colors.white54, strokeWidth: 2))),
 
-            // ── Double-tap play/pause flash overlay ────────
+            // ── Long-press / tap flash overlay ─────────────
             if (_showOverlay)
               Center(child: AnimatedOpacity(
                 opacity: _showOverlay ? 1.0 : 0.0,
@@ -1232,9 +1226,7 @@ class _VideoCardState extends State<_VideoCard> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.black.withOpacity(0.55)),
-                  child: Icon(
-                    isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    color: Colors.white, size: 34),
+                  child: Icon(_overlayIcon, color: Colors.white, size: 34),
                 ),
               )),
 

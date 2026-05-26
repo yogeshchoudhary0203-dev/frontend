@@ -18,7 +18,6 @@ import '../models/chat_model.dart';
 import 'glass_common.dart';
 import 'chat_screen.dart';
 import 'search_screen.dart';
-import 'home/home_screen.dart';
 
 class ActiveUser {
   final String name;
@@ -165,7 +164,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
           if (_swipeStartX == null) return;
           final dx = e.position.dx - _swipeStartX!;
           final dy = (e.position.dy - (_swipeStartY ?? 0)).abs();
-          if (dx < -60 && dy < (-dx) * 0.65) {
+          if (dx > 60 && dy < dx * 0.65) {
             HapticFeedback.selectionClick();
             if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           }
@@ -197,10 +196,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                     iconSize: 15,
                     onTap: () {
                       HapticFeedback.selectionClick();
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const HomeScreen()),
-                        (route) => false,
-                      );
+                      Navigator.of(context).pop();
                     },
                   ),
                   const SizedBox(width: 8),

@@ -49,6 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool creatorAccount = false;
   bool activityStatus = false;
   bool notifications = true;
+  String accountType = 'Personal';
   UserProfile? _profile;
 
   final TextEditingController _searchCtrl = TextEditingController();
@@ -85,12 +86,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
       creatorAccount = prefs.getBool('settings_creator_account') ?? false;
       activityStatus = prefs.getBool('settings_activity_status') ?? false;
       notifications = prefs.getBool('settings_notifications') ?? true;
+      final savedType = prefs.getString('settings_account_type');
+      if (savedType != null) {
+        accountType = savedType;
+      } else {
+        if (privateAccount) {
+          accountType = 'Private';
+        } else if (creatorAccount) {
+          accountType = 'Creator';
+        } else {
+          accountType = 'Personal';
+        }
+      }
     });
   }
 
   Future<void> _saveSetting(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(key, value);
+  }
+
+  Future<void> _saveSettingString(String key, String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(key, value);
+  }
+
+  Future<void> _saveAccountType(String type) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('settings_account_type', type);
+    bool isPrivate = type == 'Private';
+    bool isCreator = type == 'Creator';
+    await prefs.setBool('settings_private_account', isPrivate);
+    await prefs.setBool('settings_creator_account', isCreator);
+    if (mounted) {
+      setState(() {
+        accountType = type;
+        privateAccount = isPrivate;
+        creatorAccount = isCreator;
+      });
+    }
   }
 
   void _openEditProfile(BuildContext ctx) {
@@ -118,6 +152,162 @@ class _SettingsScreenState extends State<SettingsScreen> {
         .then((_) => _loadProfile());
   }
 
+  void _openAccountTypeSelector(BuildContext context) {
+    final dark = widget.dark;
+    final fg = GlassTokens.fg(dark);
+    final sub = GlassTokens.sub(dark);
+
+    final types = [
+      {
+        'name': 'Personal',
+        'desc': 'Standard private or public personal profile',
+        'icon': Icons.person_rounded
+      },
+      {
+        'name': 'Private',
+        'desc': 'Only approved followers see your posts',
+        'icon': Icons.lock_rounded
+      },
+      {
+        'name': 'Creator',
+        'desc': 'Best for public figures, content producers, artists',
+        'icon': Icons.workspace_premium_rounded
+      },
+      {
+        'name': 'Business',
+        'desc': 'Best for retailers, local businesses, organizations',
+        'icon': Icons.business_center_rounded
+      },
+      {
+        'name': 'Professional',
+        'desc': 'Best for professionals, portfolios, work search',
+        'icon': Icons.work_rounded
+      },
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: dark ? const Color(0xE00C0C0E) : const Color(0xF2FDFDFD),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: GlassTokens.glassBorder(dark), width: 1),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: dark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Text(
+                  'Select Account Type'.tr(context),
+                  style: manrope(size: 18, weight: FontWeight.w800, color: fg),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Choose the account type that suits you best'.tr(context),
+                  style: manrope(size: 12, weight: FontWeight.w500, color: sub),
+                ),
+                const SizedBox(height: 18),
+                ...types.map((t) {
+                  final name = t['name'] as String;
+                  final desc = t['desc'] as String;
+                  final icon = t['icon'] as IconData;
+                  final isSelected = accountType == name;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _saveAccountType(name);
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? (dark
+                                  ? Colors.white.withOpacity(0.08)
+                                  : Colors.black.withOpacity(0.04))
+                              : Colors.transparent,
+                          border: Border.all(
+                            color: isSelected
+                                ? (dark ? Colors.white24 : Colors.black12)
+                                : Colors.transparent,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: dark
+                                    ? Colors.white.withOpacity(
+                                        isSelected ? 0.12 : 0.08)
+                                    : Colors.black.withOpacity(
+                                        isSelected ? 0.08 : 0.04),
+                              ),
+                              child: Icon(icon, size: 20, color: fg),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${name.tr(context)} ${'Account'.tr(context)}',
+                                    style: manrope(
+                                        size: 14.5,
+                                        weight: isSelected
+                                            ? FontWeight.w800
+                                            : FontWeight.w700,
+                                        color: fg),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    desc.tr(context),
+                                    style: manrope(
+                                        size: 11.5,
+                                        weight: FontWeight.w500,
+                                        color: sub),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isSelected)
+                              Icon(Icons.check_circle_rounded,
+                                  color: fg, size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   List<_SearchItem> _buildSearchItems(BuildContext ctx) {
     final dark = widget.dark;
     return [
@@ -126,6 +316,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: 'Edit profile',
         subtitle: 'Name, bio, links and photo',
         onTap: () => _openEditProfile(ctx),
+      ),
+      _SearchItem(
+        icon: Icons.manage_accounts_outlined,
+        title: 'Account type',
+        subtitle: 'Switch to personal, private, creator, business, or professional account',
+        onTap: () => _openAccountTypeSelector(ctx),
       ),
       _SearchItem(
         icon: Icons.lock_outline_rounded,
@@ -138,8 +334,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: 'Switch to creator account',
         switchValue: creatorAccount,
         onSwitch: (v) {
-          setState(() => creatorAccount = v);
+          setState(() {
+            creatorAccount = v;
+            if (v) {
+              privateAccount = false;
+              accountType = 'Creator';
+            } else {
+              if (accountType == 'Creator') {
+                accountType = 'Personal';
+              }
+            }
+          });
           _saveSetting('settings_creator_account', v);
+          _saveSetting('settings_private_account', privateAccount);
+          _saveSettingString('settings_account_type', accountType);
         },
       ),
       _SearchItem(
@@ -173,8 +381,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: 'Only followers see your posts',
         switchValue: privateAccount,
         onSwitch: (v) {
-          setState(() => privateAccount = v);
+          setState(() {
+            privateAccount = v;
+            if (v) {
+              creatorAccount = false;
+              accountType = 'Private';
+            } else {
+              if (accountType == 'Private') {
+                accountType = 'Personal';
+              }
+            }
+          });
           _saveSetting('settings_private_account', v);
+          _saveSetting('settings_creator_account', creatorAccount);
+          _saveSettingString('settings_account_type', accountType);
         },
       ),
       _SearchItem(
@@ -302,6 +522,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'Name, bio, links and photo',
               ),
             ),
+            GestureDetector(
+              onTap: () => _openAccountTypeSelector(context),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.manage_accounts_outlined,
+                title: 'Account type',
+                subtitle: '${accountType.tr(context)} ${'Account'.tr(context)}',
+              ),
+            ),
             _SettingRow(
               dark: dark,
               icon: Icons.lock_outline_rounded,
@@ -315,8 +544,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: 'Switch to creator account',
               value: creatorAccount,
               onChanged: (v) {
-                setState(() => creatorAccount = v);
+                setState(() {
+                  creatorAccount = v;
+                  if (v) {
+                    privateAccount = false;
+                    accountType = 'Creator';
+                  } else {
+                    if (accountType == 'Creator') {
+                      accountType = 'Personal';
+                    }
+                  }
+                });
                 _saveSetting('settings_creator_account', v);
+                _saveSetting('settings_private_account', privateAccount);
+                _saveSettingString('settings_account_type', accountType);
               },
             ),
             _SettingRow(
@@ -390,8 +631,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: 'Only followers see your posts',
               value: privateAccount,
               onChanged: (v) {
-                setState(() => privateAccount = v);
+                setState(() {
+                  privateAccount = v;
+                  if (v) {
+                    creatorAccount = false;
+                    accountType = 'Private';
+                  } else {
+                    if (accountType == 'Private') {
+                      accountType = 'Personal';
+                    }
+                  }
+                });
                 _saveSetting('settings_private_account', v);
+                _saveSetting('settings_creator_account', creatorAccount);
+                _saveSettingString('settings_account_type', accountType);
               },
             ),
           ],

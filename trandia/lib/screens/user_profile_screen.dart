@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/user_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../services/post_service.dart';
 import '../models/chat_model.dart';
 import '../utils/error_dialog.dart';
 import 'chat_screen.dart';
@@ -60,6 +61,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late bool _isFollowing;
   bool _isFollowLoading = false;
   UserProfile? _profile;
+  List<PostModel> _userPosts = [];
+  bool _postsLoading = false;
 
   @override
   void initState() {
@@ -67,6 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _isFollowing = widget.initialFollowing;
     if (widget.userId.isNotEmpty) {
       _loadProfile();
+      _loadPosts(widget.userId);
     }
   }
 
@@ -77,6 +81,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _profile = p;
         _isFollowing = p.isFollowing;
       });
+    }
+  }
+
+  Future<void> _loadPosts(String userId) async {
+    if (!mounted) return;
+    setState(() => _postsLoading = true);
+    try {
+      final result = await PostService.instance.getUserPosts(userId);
+      if (mounted) {
+        setState(() {
+          _userPosts = result.posts;
+          _postsLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _postsLoading = false);
     }
   }
 
@@ -208,7 +228,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       following: _profile != null
                           ? _formatCount(_profile!.followingCount)
                           : widget.following,
-                      posts: widget.posts,
+                      posts: _formatCount(_userPosts.length),
                       initial: (_profile?.name ?? widget.displayName).isNotEmpty
                           ? (_profile?.name ?? widget.displayName)[0].toUpperCase()
                           : 'U',
@@ -272,7 +292,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 20),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: _PostsSection(t: t, count: widget.postCount),
+                      child: _PostsSection(
+                        t: t,
+                        posts: _userPosts,
+                        isLoading: _postsLoading,
+                      ),
                     ),
                   ],
                 ),
@@ -1162,9 +1186,14 @@ class _CircleIconButton extends StatelessWidget {
 // POSTS SECTION
 // ─────────────────────────────────────────────────────────────────────────────
 class _PostsSection extends StatelessWidget {
-  const _PostsSection({required this.t, required this.count});
+  const _PostsSection({
+    required this.t,
+    required this.posts,
+    required this.isLoading,
+  });
   final _GlassTheme t;
-  final int count;
+  final List<PostModel> posts;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -1207,7 +1236,7 @@ class _PostsSection extends StatelessWidget {
                     ),
                     const Spacer(),
                     Text(
-                      '$count',
+                      '${posts.length}',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -1217,7 +1246,7 @@ class _PostsSection extends StatelessWidget {
                   ],
                 ),
               ),
-              _PostsGrid(t: t),
+              _PostsGrid(t: t, posts: posts, isLoading: isLoading),
             ],
           ),
         ),
@@ -1227,50 +1256,71 @@ class _PostsSection extends StatelessWidget {
 }
 
 class _PostsGrid extends StatelessWidget {
-  const _PostsGrid({required this.t});
+  const _PostsGrid({
+    required this.t,
+    required this.posts,
+    required this.isLoading,
+  });
   final _GlassTheme t;
+  final List<PostModel> posts;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
-    const tiles = 9;
+    if (isLoading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(t.fg),
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+    if (posts.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: Text(
+            'No posts yet',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: t.muted,
+            ),
+          ),
+        ),
+      );
+    }
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: tiles,
+      itemCount: posts.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
         mainAxisSpacing: 6,
         crossAxisSpacing: 6,
         childAspectRatio: 1,
       ),
-      itemBuilder: (_, i) {
-        final kind = (i == 1)
-            ? _TileKind.carousel
-            : (i == 4)
-                ? _TileKind.reel
-                : _TileKind.photo;
-        return _PostTile(t: t, i: i, kind: kind, count: i == 1 ? 4 : null);
-      },
+      itemBuilder: (_, i) => _PostTile(t: t, post: posts[i], i: i),
     );
   }
 }
 
-enum _TileKind { photo, carousel, reel }
-
 class _PostTile extends StatelessWidget {
-  const _PostTile({
-    required this.t,
-    required this.i,
-    required this.kind,
-    this.count,
-  });
+  const _PostTile({required this.t, required this.post, required this.i});
   final _GlassTheme t;
+  final PostModel post;
   final int i;
-  final _TileKind kind;
-  final int? count;
 
   @override
   Widget build(BuildContext context) {
+    final isVideo = post.mediaType == 'video';
+    final imageUrl = isVideo && post.thumbnailUrl != null
+        ? post.thumbnailUrl!
+        : post.mediaUrl;
+
     final aPct = t.dark ? (22 - (i % 5) * 3) : (92 - (i % 5) * 4);
     final bPct = (aPct - (t.dark ? 12 : 18))
         .clamp(t.dark ? 4 : 56, 100)
@@ -1281,69 +1331,43 @@ class _PostTile extends StatelessWidget {
     final dx = math.cos(angle);
     final dy = math.sin(angle);
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        gradient: LinearGradient(
-          begin: Alignment(-dx, -dy),
-          end: Alignment(dx, dy),
-          colors: [g1, g2],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment(-dx, -dy),
+            end: Alignment(dx, dy),
+            colors: [g1, g2],
+          ),
         ),
+        child: Stack(children: [
+          Positioned.fill(
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox(),
+            ),
+          ),
+          if (isVideo)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0x73000000),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 12,
+                ),
+              ),
+            ),
+        ]),
       ),
-      child: Stack(children: [
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: RadialGradient(
-                center: const Alignment(-0.5, -1),
-                radius: 1.2,
-                colors: [
-                  Colors.white.withValues(alpha: t.dark ? 0.06 : 0.55),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.55],
-              ),
-            ),
-          ),
-        ),
-        if (kind != _TileKind.photo)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0x73000000),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    kind == _TileKind.reel
-                        ? Icons.play_arrow_rounded
-                        : Icons.collections_outlined,
-                    color: Colors.white,
-                    size: 12,
-                  ),
-                  if (kind == _TileKind.carousel && count != null) ...[
-                    const SizedBox(width: 3),
-                    Text(
-                      '$count',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-      ]),
     );
   }
 }

@@ -16,6 +16,7 @@ import 'setting_screen.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../services/location_service.dart';
+import '../services/post_service.dart';
 import '../l10n/app_localizations.dart';
 
 // ───────────────────────────────────────────────────────────────
@@ -28,14 +29,6 @@ class HighlightItem {
   const HighlightItem(this.label, this.seed);
 }
 
-enum ProfileTileKind { photo, reel, carousel }
-
-class ProfileTile {
-  final ProfileTileKind kind;
-  final int? count;
-  const ProfileTile({required this.kind, this.count});
-}
-
 const _highlights = <HighlightItem>[
   HighlightItem('Work', 1),
   HighlightItem('Studio', 2),
@@ -43,20 +36,6 @@ const _highlights = <HighlightItem>[
   HighlightItem('Reads', 4),
   HighlightItem('Type', 5),
 ];
-
-List<ProfileTile> _buildProfileTiles() => List.generate(12, (i) {
-  final kind = (i == 1 || i == 7)
-      ? ProfileTileKind.carousel
-      : (i == 4 || i == 10)
-      ? ProfileTileKind.reel
-      : ProfileTileKind.photo;
-  final count = i == 1
-      ? 4
-      : i == 7
-      ? 3
-      : null;
-  return ProfileTile(kind: kind, count: count);
-});
 
 /// Wider tonal range tile gradient.
 LinearGradient _tileGradient(bool dark, int i) {
@@ -106,7 +85,8 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String _tab = 'Posts';
-  final _tiles = _buildProfileTiles();
+  List<PostModel> _userPosts = [];
+  bool _postsLoading = true;
   UserProfile? _profile;
   bool _isLoading = true;
   bool _isUpdatingLocation = false;
@@ -142,6 +122,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _profile = profile;
           _isLoading = false;
         });
+        if (profile != null) _loadPosts(profile.id);
       }
     } catch (e) {
       if (mounted) {
@@ -149,6 +130,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadPosts(String userId) async {
+    if (!mounted) return;
+    try {
+      final result = await PostService.instance.getUserPosts(userId);
+      if (mounted) {
+        setState(() {
+          _userPosts = result.posts;
+          _postsLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _postsLoading = false);
     }
   }
 
@@ -418,6 +414,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     hairline: hairline,
                                     followersCount: _profile?.followersCount ?? 0,
                                     followingCount: _profile?.followingCount ?? 0,
+                                    postCount: _userPosts.length,
                                     onFollowersTap: () =>
                                         _openFollowers(FollowersTab.followers),
                                     onFollowingTap: () =>
@@ -546,7 +543,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: _PostsBox(dark: dark, fg: fg, sub: sub, tiles: _tiles),
+                            child: _PostsBox(
+                              dark: dark,
+                              fg: fg,
+                              sub: sub,
+                              posts: _userPosts,
+                              isLoading: _postsLoading,
+                            ),
                           ),
 
                           const SizedBox(height: 16),
@@ -748,12 +751,14 @@ class _PostsBox extends StatelessWidget {
   final bool dark;
   final Color fg;
   final Color sub;
-  final List<ProfileTile> tiles;
+  final List<PostModel> posts;
+  final bool isLoading;
   const _PostsBox({
     required this.dark,
     required this.fg,
     required this.sub,
-    required this.tiles,
+    required this.posts,
+    required this.isLoading,
   });
 
   @override
@@ -783,7 +788,7 @@ class _PostsBox extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '${tiles.length}',
+                  '${posts.length}',
                   style: manrope(
                     size: 12,
                     weight: FontWeight.w700,
@@ -794,7 +799,28 @@ class _PostsBox extends StatelessWidget {
               ],
             ),
           ),
-          _ProfileGrid(dark: dark, tiles: tiles),
+          if (isLoading)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(fg),
+                  strokeWidth: 2,
+                ),
+              ),
+            )
+          else if (posts.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Text(
+                  'No posts yet',
+                  style: manrope(size: 14, weight: FontWeight.w500, color: sub),
+                ),
+              ),
+            )
+          else
+            _ProfileGrid(dark: dark, posts: posts),
         ],
       ),
     );
@@ -812,6 +838,7 @@ class _CoverBand extends StatelessWidget {
   final Color hairline;
   final int followersCount;
   final int followingCount;
+  final int postCount;
   final VoidCallback onFollowersTap;
   final VoidCallback onFollowingTap;
   const _CoverBand({
@@ -821,6 +848,7 @@ class _CoverBand extends StatelessWidget {
     required this.hairline,
     required this.followersCount,
     required this.followingCount,
+    required this.postCount,
     required this.onFollowersTap,
     required this.onFollowingTap,
   });
@@ -898,6 +926,7 @@ class _CoverBand extends StatelessWidget {
                 hairline: hairline,
                 followersCount: followersCount,
                 followingCount: followingCount,
+                postCount: postCount,
                 onFollowersTap: onFollowersTap,
                 onFollowingTap: onFollowingTap,
               ),
@@ -915,6 +944,7 @@ class _CoverStatsRow extends StatelessWidget {
   final Color hairline;
   final int followersCount;
   final int followingCount;
+  final int postCount;
   final VoidCallback onFollowersTap;
   final VoidCallback onFollowingTap;
   const _CoverStatsRow({
@@ -923,6 +953,7 @@ class _CoverStatsRow extends StatelessWidget {
     required this.hairline,
     required this.followersCount,
     required this.followingCount,
+    required this.postCount,
     required this.onFollowersTap,
     required this.onFollowingTap,
   });
@@ -958,7 +989,7 @@ class _CoverStatsRow extends StatelessWidget {
         ),
         Container(width: 1, height: 30, color: hairline),
         Expanded(
-          child: _Stat(value: '168', label: 'Posts', fg: fg, sub: sub),
+          child: _Stat(value: _fmt(postCount), label: 'Posts', fg: fg, sub: sub),
         ),
       ],
     );
@@ -1656,8 +1687,8 @@ class _TabButton extends StatelessWidget {
 
 class _ProfileGrid extends StatelessWidget {
   final bool dark;
-  final List<ProfileTile> tiles;
-  const _ProfileGrid({required this.dark, required this.tiles});
+  final List<PostModel> posts;
+  const _ProfileGrid({required this.dark, required this.posts});
 
   @override
   Widget build(BuildContext context) {
@@ -1671,47 +1702,44 @@ class _ProfileGrid extends StatelessWidget {
         crossAxisSpacing: 4,
         childAspectRatio: 1.0,
       ),
-      itemCount: tiles.length,
-      itemBuilder: (_, i) => _ProfileTileView(t: tiles[i], i: i, dark: dark),
+      itemCount: posts.length,
+      itemBuilder: (_, i) => _ProfileTileView(post: posts[i], i: i, dark: dark),
     );
   }
 }
 
 class _ProfileTileView extends StatelessWidget {
-  final ProfileTile t;
+  final PostModel post;
   final int i;
   final bool dark;
   const _ProfileTileView({
-    required this.t,
+    required this.post,
     required this.i,
     required this.dark,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isVideo = post.mediaType == 'video';
+    final imageUrl = isVideo && post.thumbnailUrl != null
+        ? post.thumbnailUrl!
+        : post.mediaUrl;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
           gradient: _tileGradient(dark, i),
         ),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Container(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(-0.4, -1),
-                  radius: 1.2,
-                  colors: dark
-                      ? [Colors.white.withOpacity(0.06), Colors.transparent]
-                      : [Colors.white.withOpacity(0.55), Colors.transparent],
-                  stops: const [0.0, 0.55],
-                ),
-              ),
+            Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox(),
             ),
-            if (t.kind != ProfileTileKind.photo)
+            if (isVideo)
               Positioned(
                 top: 6,
                 right: 6,
@@ -1725,30 +1753,10 @@ class _ProfileTileView extends StatelessWidget {
                         vertical: 3,
                       ),
                       color: Colors.black.withOpacity(0.42),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            t.kind == ProfileTileKind.reel
-                                ? Icons.play_arrow_rounded
-                                : Icons.collections_outlined,
-                            size: 11,
-                            color: Colors.white,
-                          ),
-                          if (t.kind == ProfileTileKind.carousel &&
-                              t.count != null) ...[
-                            const SizedBox(width: 3),
-                            Text(
-                              '${t.count}',
-                              style: manrope(
-                                size: 10,
-                                weight: FontWeight.w700,
-                                color: Colors.white,
-                                letterSpacing: -0.1,
-                              ),
-                            ),
-                          ],
-                        ],
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        size: 11,
+                        color: Colors.white,
                       ),
                     ),
                   ),

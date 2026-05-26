@@ -96,9 +96,10 @@ class _ShotsScreenState extends State<ShotsScreen>
   // ── PageView ──────────────────────────────────────────────────
   final PageController _pageCtrl = PageController();
 
-  // ── Per-post UI state (index → bool) ─────────────────────────
-  final Map<int, bool> _liked   = {};
-  final Map<int, bool> _saved   = {};
+  // ── Per-post UI state (index → bool / int) ───────────────────
+  final Map<int, bool> _liked       = {};
+  final Map<int, bool> _saved       = {};
+  final Map<int, int>  _likesDelta  = {}; // +1 / -1 per optimistic like
   bool _expanded = false;
 
   // ── Learn-feed nudge counter ──────────────────────────────────
@@ -143,6 +144,7 @@ class _ShotsScreenState extends State<ShotsScreen>
         _posts.clear();
         _liked.clear();
         _saved.clear();
+        _likesDelta.clear();
         _curIdx   = 0;
         _expanded = false;
         // Jump page controller back to top without animation
@@ -151,8 +153,15 @@ class _ShotsScreenState extends State<ShotsScreen>
         }
       }
 
+      final startIdx = _posts.length;
       _posts.addAll(result.posts);
       _nextCursor = result.nextCursor;
+
+      // Initialise liked state from real API data
+      for (int i = startIdx; i < _posts.length; i++) {
+        _liked[i] = _posts[i].isLiked;
+      }
+
       setState(() {});
 
       // Initialise first video immediately after a refresh
@@ -163,6 +172,37 @@ class _ShotsScreenState extends State<ShotsScreen>
       if (mounted) setState(() => _error = true);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // ── Like / Unlike (real API + optimistic UI) ─────────────────
+
+  Future<void> _onLikeTap(int idx) async {
+    if (idx < 0 || idx >= _posts.length) return;
+    final post       = _posts[idx];
+    final wasLiked   = _liked[idx] ?? post.isLiked;
+    final nowLiked   = !wasLiked;
+
+    // Optimistic update — show result immediately
+    setState(() {
+      _liked[idx]      = nowLiked;
+      _likesDelta[idx] = (_likesDelta[idx] ?? 0) + (nowLiked ? 1 : -1);
+    });
+
+    try {
+      if (nowLiked) {
+        await PostService.instance.likePost(post.id);
+      } else {
+        await PostService.instance.unlikePost(post.id);
+      }
+    } catch (_) {
+      // API failed — revert optimistic update
+      if (mounted) {
+        setState(() {
+          _liked[idx]      = wasLiked;
+          _likesDelta[idx] = (_likesDelta[idx] ?? 0) + (wasLiked ? 1 : -1);
+        });
+      }
     }
   }
 
@@ -308,7 +348,19 @@ class _ShotsScreenState extends State<ShotsScreen>
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).viewPadding.top;
     final hasPost  = _posts.isNotEmpty;
-    final curData  = hasPost ? _toShot(_posts[_curIdx]) : null;
+    // Build curData with adjusted likes count (reflects optimistic like/unlike)
+    final curData  = hasPost ? () {
+      final p = _posts[_curIdx];
+      final adjustedCount = (p.likesCount + (_likesDelta[_curIdx] ?? 0)).clamp(0, 999999999);
+      return ShotData(
+        user:       p.userUsername.isNotEmpty ? p.userUsername : p.userName,
+        avatarSeed: p.userId.hashCode.abs() % 6,
+        caption:    p.caption,
+        likes:      _fmt(adjustedCount),
+        comments:   _fmt(p.commentsCount),
+        shares:     '0',
+      );
+    }() : null;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -359,11 +411,10 @@ class _ShotsScreenState extends State<ShotsScreen>
             right: 12, bottom: 70,
             child: _RightRail(
               data:   curData,
-              liked:  _liked[_curIdx] ?? false,
+              liked:  _liked[_curIdx] ?? (_posts.isNotEmpty ? _posts[_curIdx].isLiked : false),
               saved:  _saved[_curIdx] ?? false,
               spin:   _spin,
-              onLike: () => setState(
-                  () => _liked[_curIdx] = !(_liked[_curIdx] ?? false)),
+              onLike: () => _onLikeTap(_curIdx),
               onSave: () => setState(
                   () => _saved[_curIdx] = !(_saved[_curIdx] ?? false)),
               post:   _posts[_curIdx],

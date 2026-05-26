@@ -236,10 +236,18 @@ class FcmService {
 
       if (msgType == 'welcome') return; // shown locally — suppress duplicate
 
-      // Follow notification — show system notification always
+      // Follow notification
       if (msgType == 'follow') {
         final title = msg.data['title'] as String? ?? msg.notification?.title ?? 'New follower';
         final body  = msg.data['body']  as String? ?? msg.notification?.body  ?? 'started following you';
+        await show(title: title, body: body);
+        return;
+      }
+
+      // Like notification
+      if (msgType == 'like') {
+        final title = msg.data['title'] as String? ?? msg.notification?.title ?? 'Trandia';
+        final body  = msg.data['body']  as String? ?? msg.notification?.body  ?? 'liked your post ❤️';
         await show(title: title, body: body);
         return;
       }

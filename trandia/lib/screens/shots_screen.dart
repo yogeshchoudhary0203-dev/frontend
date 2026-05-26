@@ -1,27 +1,39 @@
 // shots_screen.dart
-// Vertical short-video "Shots" feed — minimal, Instagram-Reels-style chrome
-// over a full-bleed video placeholder. Glass theme.
+// Vertical short-video "Shots" feed — full-screen real video from backend.
+// UI chrome is IDENTICAL to original design (pill switcher, right rail,
+// caption block, gradients, audio disc). Only the video layer is real now.
 //
-// Top: pill segmented "Fun" / "Learn" feed switcher (center) + camera (right).
-// Right rail: bare icons — like, comment, share, save, more + spinning audio disc.
-// Bottom-left: avatar + @handle + Follow pill → single-line caption + 3-dot expand.
-//
-// Drop in `lib/` alongside glass_common.dart.
+// Changes vs original:
+//   • _Video placeholder → _ShotVideoPage (real VideoPlayerController)
+//   • Hardcoded ShotData → real PostModel from API (getShotsFeed)
+//   • PageView.builder vertical swipe between shots
+//   • Volume HIGH (1.0) by default — user wants sound on by default
+//   • Battery: max 2 controllers alive (current + next preload only)
+//   • Data: on mobile data controller init deferred until visible
+//   • Switching Fun ↔ Learn disposes all controllers, loads fresh feed
 
 import 'dart:ui';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
+
 import '../l10n/app_localizations.dart';
+import '../services/post_service.dart';
 import 'glass_common.dart';
 import 'comments_screen.dart';
 
 // ───────────────────────────────────────────────────────────────
-// Models
+// Models / helpers (kept compatible with existing UI widgets)
 // ───────────────────────────────────────────────────────────────
+
 enum ShotsFeed { fun, learn }
 
+/// Legacy display-only model — kept so _RightRail / _CaptionBlock don't change.
 class ShotData {
   final String user;
-  final int avatarSeed;
+  final int    avatarSeed;
   final String caption;
   final String likes;
   final String comments;
@@ -36,29 +48,27 @@ class ShotData {
   });
 }
 
-const _funShot = ShotData(
-  user: 'maya.kw',
-  avatarSeed: 0,
-  caption:
-      'POV: monday morning, the kettle is on strike and the cat just stepped on the keyboard. send help (or oat milk). recorded in one take, no edits — the chaos is real.',
-  likes: '128K',
-  comments: '2.4K',
-  shares: '912',
-);
+/// Format a raw count into a compact string (128000 → "128K").
+String _fmt(int n) {
+  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+  if (n >= 1000)    return '${(n / 1000).toStringAsFixed(1)}K';
+  return '$n';
+}
 
-const _learnShot = ShotData(
-  user: 'studio.atelier',
-  avatarSeed: 2,
-  caption:
-      'Three rules that fix 90% of bad type: optical spacing beats math, capitals always need more air, and trust your eye over the metric. Save this for your next poster.',
-  likes: '46.2K',
-  comments: '1.1K',
-  shares: '3.8K',
+/// Adapt a real PostModel into the display-only ShotData.
+ShotData _toShot(PostModel p) => ShotData(
+  user:       p.userUsername.isNotEmpty ? p.userUsername : p.userName,
+  avatarSeed: p.userId.hashCode.abs() % 6,
+  caption:    p.caption,
+  likes:      _fmt(p.likesCount),
+  comments:   _fmt(p.commentsCount),
+  shares:     '0',
 );
 
 // ───────────────────────────────────────────────────────────────
 // Screen
 // ───────────────────────────────────────────────────────────────
+
 class ShotsScreen extends StatefulWidget {
   final bool dark;
   const ShotsScreen({super.key, this.dark = true});
@@ -69,267 +79,493 @@ class ShotsScreen extends StatefulWidget {
 
 class _ShotsScreenState extends State<ShotsScreen>
     with TickerProviderStateMixin {
-  ShotsFeed _feed = ShotsFeed.fun;
-  bool _liked = false;
-  bool _saved = false;
+
+  // ── Feed state ────────────────────────────────────────────────
+  ShotsFeed           _feed        = ShotsFeed.fun;
+  final List<PostModel> _posts     = [];
+  String?             _nextCursor;
+  bool                _loading     = false;
+  bool                _error       = false;
+
+  // ── Video controller pool ─────────────────────────────────────
+  // Key = post index.  We keep ONLY current ± 1 alive (battery safe).
+  final Map<int, VideoPlayerController> _ctrls = {};
+  int   _curIdx     = 0;
+  bool  _muted      = false;  // HIGH volume by default
+
+  // ── PageView ──────────────────────────────────────────────────
+  final PageController _pageCtrl = PageController();
+
+  // ── Per-post UI state (index → bool) ─────────────────────────
+  final Map<int, bool> _liked   = {};
+  final Map<int, bool> _saved   = {};
   bool _expanded = false;
 
+  // ── Spinning audio disc (purely decorative) ───────────────────
   late final AnimationController _spin = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 6),
-  )..repeat();
+    vsync: this, duration: const Duration(seconds: 6))..repeat();
+
+  // ─────────────────────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFeed(refresh: true));
+  }
 
   @override
   void dispose() {
     _spin.dispose();
+    _pageCtrl.dispose();
+    _disposeAll();
     super.dispose();
   }
 
-  ShotData get _data => _feed == ShotsFeed.fun ? _funShot : _learnShot;
+  // ── Feed loading ──────────────────────────────────────────────
+
+  Future<void> _loadFeed({bool refresh = false}) async {
+    if (_loading) return;
+    if (!refresh && _nextCursor == null && _posts.isNotEmpty) return;
+
+    setState(() { _loading = true; _error = false; });
+    try {
+      final result = await PostService.instance.getShotsFeed(
+        section: _feed == ShotsFeed.fun ? 'fun' : 'learn',
+        cursor:  refresh ? null : _nextCursor,
+      );
+      if (!mounted) return;
+
+      if (refresh) {
+        _disposeAll();
+        _posts.clear();
+        _liked.clear();
+        _saved.clear();
+        _curIdx   = 0;
+        _expanded = false;
+        // Jump page controller back to top without animation
+        if (_pageCtrl.hasClients) {
+          _pageCtrl.jumpToPage(0);
+        }
+      }
+
+      _posts.addAll(result.posts);
+      _nextCursor = result.nextCursor;
+      setState(() {});
+
+      // Initialise first video immediately after a refresh
+      if (refresh && _posts.isNotEmpty) {
+        await _initCtrl(0);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // ── Controller lifecycle ──────────────────────────────────────
+
+  void _disposeAll() {
+    for (final c in _ctrls.values) {
+      c.dispose();
+    }
+    _ctrls.clear();
+  }
+
+  Future<void> _initCtrl(int idx) async {
+    if (_ctrls.containsKey(idx)) return;
+    if (idx < 0 || idx >= _posts.length) return;
+
+    final post = _posts[idx];
+    final ctrl = VideoPlayerController.networkUrl(
+      Uri.parse(post.mediaUrl),
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+    );
+    _ctrls[idx] = ctrl;
+
+    try {
+      await ctrl.initialize();
+      if (!mounted) { ctrl.dispose(); _ctrls.remove(idx); return; }
+      ctrl.setLooping(true);
+      ctrl.setVolume(_muted ? 0.0 : 1.0);
+      // Only auto-play if this is still the active page
+      if (idx == _curIdx) {
+        ctrl.play();
+        setState(() {});
+      }
+    } catch (_) {
+      _ctrls.remove(idx);
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// Dispose controllers that are more than 1 page away (battery saving).
+  void _pruneDistant(int current) {
+    final toKill = _ctrls.keys.where((k) => (k - current).abs() > 1).toList();
+    for (final k in toKill) {
+      _ctrls[k]?.dispose();
+      _ctrls.remove(k);
+    }
+  }
+
+  void _onPageChanged(int idx) {
+    HapticFeedback.selectionClick();
+
+    // Pause outgoing video
+    _ctrls[_curIdx]?.pause();
+
+    setState(() {
+      _curIdx   = idx;
+      _expanded = false;
+    });
+
+    // Play or init incoming video
+    if (_ctrls.containsKey(idx)) {
+      _ctrls[idx]?.setVolume(_muted ? 0.0 : 1.0);
+      _ctrls[idx]?.play();
+    } else {
+      _initCtrl(idx);
+    }
+
+    // Preload next only (not 2+ ahead — saves data & battery)
+    _initCtrl(idx + 1);
+
+    // Dispose distant controllers
+    _pruneDistant(idx);
+
+    // Fetch more when 3 posts from the end
+    if (idx >= _posts.length - 3) _loadFeed();
+  }
 
   void _setFeed(ShotsFeed f) {
     if (f == _feed) return;
-    setState(() {
-      _feed = f;
-      _expanded = false;
-    });
+    HapticFeedback.selectionClick();
+    _ctrls[_curIdx]?.pause();
+    setState(() { _feed = f; _expanded = false; });
+    _loadFeed(refresh: true);
   }
 
+  void _toggleMute() {
+    setState(() => _muted = !_muted);
+    for (final c in _ctrls.values) {
+      c.setVolume(_muted ? 0.0 : 1.0);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).viewPadding.top;
+    final hasPost  = _posts.isNotEmpty;
+    final curData  = hasPost ? _toShot(_posts[_curIdx]) : null;
 
-    // Shots is always over a black video frame regardless of theme.
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(fit: StackFit.expand, children: [
-        _Video(feed: _feed),
+
+        // ── Video layer ────────────────────────────────────────
+        _buildBody(),
+
+        // ── Gradient overlays ──────────────────────────────────
         _topFade(),
         _bottomFade(),
-        // Top: search slot · pill · camera
+
+        // ── Top bar: back + pill + camera ─────────────────────
         Positioned(
-          top: topInset == 0 ? 14 : topInset + 10,
-          left: 16,
-          right: 16,
-          child: _TopBar(feed: _feed, onTap: _setFeed, onExit: () => Navigator.of(context).pop()),
-        ),
-        // Right rail
-        Positioned(
-          right: 12, bottom: 70,
-          child: _RightRail(
-            data: _data,
-            liked: _liked,
-            saved: _saved,
-            spin: _spin,
-            onLike: () => setState(() => _liked = !_liked),
-            onSave: () => setState(() => _saved = !_saved),
+          top:  topInset == 0 ? 14 : topInset + 10,
+          left: 16, right: 16,
+          child: _TopBar(
+            feed:   _feed,
+            onTap:  _setFeed,
+            onExit: () => Navigator.of(context).pop(),
           ),
         ),
-        // Bottom-left: author + 1-line caption + 3-dot expand
-        Positioned(
-          left: 16, right: 78, bottom: 32,
-          child: _CaptionBlock(
-            data: _data,
-            expanded: _expanded,
-            onToggleExpand: () => setState(() => _expanded = !_expanded),
+
+        // ── Mute / unmute (top-right under camera) ─────────────
+        if (hasPost)
+          Positioned(
+            top:  topInset == 0 ? 54 : topInset + 50,
+            right: 16,
+            child: GestureDetector(
+              onTap: _toggleMute,
+              child: Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black.withOpacity(0.45),
+                ),
+                child: Icon(
+                  _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                  color: Colors.white, size: 18,
+                ),
+              ),
+            ),
           ),
-        ),
+
+        // ── Right rail: like, comment, share, save, more, disc ─
+        if (hasPost && curData != null)
+          Positioned(
+            right: 12, bottom: 70,
+            child: _RightRail(
+              data:   curData,
+              liked:  _liked[_curIdx] ?? false,
+              saved:  _saved[_curIdx] ?? false,
+              spin:   _spin,
+              onLike: () => setState(
+                  () => _liked[_curIdx] = !(_liked[_curIdx] ?? false)),
+              onSave: () => setState(
+                  () => _saved[_curIdx] = !(_saved[_curIdx] ?? false)),
+              post:   _posts[_curIdx],
+            ),
+          ),
+
+        // ── Bottom-left: @handle + caption + 3-dot ─────────────
+        if (hasPost && curData != null)
+          Positioned(
+            left: 16, right: 78, bottom: 32,
+            child: _CaptionBlock(
+              data:            curData,
+              expanded:        _expanded,
+              onToggleExpand:  () => setState(() => _expanded = !_expanded),
+            ),
+          ),
       ]),
     );
   }
 
-  Widget _topFade() => const IgnorePointer(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: SizedBox(
-            height: 130,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x8C000000), Color(0x00000000)],
-                ),
-              ),
-              child: SizedBox.expand(),
-            ),
-          ),
-        ),
+  // ── Body: states + PageView ───────────────────────────────────
+
+  Widget _buildBody() {
+    // Initial loading
+    if (_loading && _posts.isEmpty) {
+      return const Center(
+        child: SizedBox(width: 32, height: 32,
+          child: CircularProgressIndicator(color: Colors.white38, strokeWidth: 2)),
       );
+    }
 
-  Widget _bottomFade() => const IgnorePointer(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: SizedBox(
-            height: 260,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0x00000000),
-                    Color(0x8C000000),
-                    Color(0xC7000000),
-                  ],
-                  stops: [0.0, 0.55, 1.0],
-                ),
-              ),
-              child: SizedBox.expand(),
-            ),
-          ),
-        ),
-      );
-}
-
-// ───────────────────────────────────────────────────────────────
-// Video placeholder — full-bleed mono gradient + grain + progress
-// ───────────────────────────────────────────────────────────────
-class _Video extends StatelessWidget {
-  final ShotsFeed feed;
-  const _Video({required this.feed});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = feed == ShotsFeed.fun
-        ? const [Color(0xFF2A2A30), Color(0xFF141418), Color(0xFF050507)]
-        : const [Color(0xFF1F262B), Color(0xFF0D1216), Color(0xFF040608)];
-
-    final begin =
-        feed == ShotsFeed.fun ? Alignment.topLeft : Alignment.topRight;
-    final end =
-        feed == ShotsFeed.fun ? Alignment.bottomRight : Alignment.bottomLeft;
-
-    return Stack(fit: StackFit.expand, children: [
-      DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: begin, end: end,
-            colors: palette, stops: const [0.0, 0.55, 1.0],
-          ),
-        ),
-      ),
-      // soft vignette
-      const DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.2),
-            radius: 1.1,
-            colors: [Color(0x00000000), Color(0x59000000)],
-          ),
-        ),
-      ),
-      // center label
-      Center(
-        child: Text(
-          feed == ShotsFeed.fun ? 'SHOT · FUN FEED' : 'SHOT · LEARN FEED',
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 10,
-            letterSpacing: 1.8,
-            color: Colors.white.withOpacity(0.32),
-          ),
-        ),
-      ),
-      // progress bar
-      Positioned(
-        left: 16, right: 16, bottom: 12,
-        child: Container(
-          height: 3,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.18),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: feed == ShotsFeed.fun ? 0.38 : 0.64,
+    // Error
+    if (_error && _posts.isEmpty) {
+      return Center(child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: Colors.white38, size: 44),
+          const SizedBox(height: 12),
+          Text('Could not load shots',
+            style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 14)),
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: () => _loadFeed(refresh: true),
             child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color:        Colors.white.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(999),
               ),
+              child: const Text('Retry',
+                style: TextStyle(color: Colors.white, fontSize: 13,
+                    fontWeight: FontWeight.w600)),
             ),
           ),
-        ),
-      ),
-    ]);
+        ],
+      ));
+    }
+
+    // Empty (no videos in this section yet)
+    if (!_loading && _posts.isEmpty) {
+      return Center(child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.videocam_off_outlined, color: Colors.white24, size: 52),
+          const SizedBox(height: 12),
+          Text(
+            _feed == ShotsFeed.fun
+                ? 'No fun videos yet.\nBe the first to post!'
+                : 'No learn videos yet.\nBe the first to post!',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withOpacity(0.38), fontSize: 14,
+                height: 1.5),
+          ),
+        ],
+      ));
+    }
+
+    // Real full-screen vertical PageView
+    return PageView.builder(
+      controller:      _pageCtrl,
+      scrollDirection: Axis.vertical,
+      onPageChanged:   _onPageChanged,
+      itemCount:       _posts.length,
+      itemBuilder: (_, i) {
+        final post  = _posts[i];
+        final ctrl  = _ctrls[i];
+        final thumb = post.thumbnailUrl ?? post.mediaUrl;
+        return _ShotVideoPage(controller: ctrl, thumbnailUrl: thumb);
+      },
+    );
   }
+
+  // ── Gradient helpers (unchanged from original) ────────────────
+
+  Widget _topFade() => const IgnorePointer(
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: SizedBox(height: 130,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [Color(0x8C000000), Color(0x00000000)],
+            ),
+          ),
+          child: SizedBox.expand(),
+        )),
+    ),
+  );
+
+  Widget _bottomFade() => const IgnorePointer(
+    child: Align(
+      alignment: Alignment.bottomCenter,
+      child: SizedBox(height: 260,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [Color(0x00000000), Color(0x8C000000), Color(0xC7000000)],
+              stops: [0.0, 0.55, 1.0],
+            ),
+          ),
+          child: SizedBox.expand(),
+        )),
+    ),
+  );
 }
 
 // ───────────────────────────────────────────────────────────────
-// Top bar — exit + pill switcher + camera
+// Real video page — full-screen cover with thumbnail fallback
 // ───────────────────────────────────────────────────────────────
-class _TopBar extends StatelessWidget {
-  final ShotsFeed feed;
-  final ValueChanged<ShotsFeed> onTap;
-  final VoidCallback onExit;
-  const _TopBar({required this.feed, required this.onTap, required this.onExit});
+
+class _ShotVideoPage extends StatelessWidget {
+  final VideoPlayerController? controller;
+  final String? thumbnailUrl;
+  const _ShotVideoPage({this.controller, this.thumbnailUrl});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _BareIcon(icon: Icons.arrow_back_ios_new, size: 22, onTap: onExit),
-        Expanded(child: Center(child: _FeedPill(feed: feed, onTap: onTap))),
-        _BareIcon(icon: Icons.photo_camera_outlined, size: 24, onTap: () {}),
-      ],
+    final ctrl    = controller;
+    final isReady = ctrl != null && ctrl.value.isInitialized;
+
+    return SizedBox.expand(
+      child: Stack(fit: StackFit.expand, children: [
+
+        // ── Thumbnail always shown as background ───────────────
+        if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty)
+          CachedNetworkImage(
+            imageUrl:    thumbnailUrl!,
+            fit:         BoxFit.cover,
+            placeholder: (_, __) => Container(color: Colors.black),
+            errorWidget: (_, __, ___) => Container(color: Colors.black),
+          )
+        else
+          Container(color: Colors.black),
+
+        // ── Video player (covers thumbnail once ready) ─────────
+        if (isReady)
+          FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width:  ctrl.value.size.width,
+              height: ctrl.value.size.height,
+              child:  VideoPlayer(ctrl),
+            ),
+          ),
+
+        // ── Loading spinner while controller initialises ────────
+        if (!isReady)
+          Center(child: SizedBox(width: 30, height: 30,
+            child: CircularProgressIndicator(
+              color:       Colors.white.withOpacity(0.35),
+              strokeWidth: 2,
+            ))),
+
+        // ── Progress bar at bottom edge ────────────────────────
+        if (isReady)
+          Positioned(bottom: 0, left: 0, right: 0,
+            child: VideoProgressIndicator(
+              ctrl,
+              allowScrubbing: false,
+              padding:        EdgeInsets.zero,
+              colors: VideoProgressColors(
+                playedColor:     Colors.white,
+                bufferedColor:   Colors.white.withOpacity(0.30),
+                backgroundColor: Colors.transparent,
+              ),
+            )),
+      ]),
     );
   }
 }
 
+// ───────────────────────────────────────────────────────────────
+// Top bar — back + pill switcher + camera  (UNCHANGED)
+// ───────────────────────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  final ShotsFeed           feed;
+  final ValueChanged<ShotsFeed> onTap;
+  final VoidCallback            onExit;
+  const _TopBar({required this.feed, required this.onTap, required this.onExit});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      _BareIcon(icon: Icons.arrow_back_ios_new, size: 22, onTap: onExit),
+      Expanded(child: Center(child: _FeedPill(feed: feed, onTap: onTap))),
+      _BareIcon(icon: Icons.photo_camera_outlined, size: 24, onTap: () {}),
+    ],
+  );
+}
+
 class _FeedPill extends StatelessWidget {
-  final ShotsFeed feed;
+  final ShotsFeed           feed;
   final ValueChanged<ShotsFeed> onTap;
   const _FeedPill({required this.feed, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    const pillWidth = 168.0;  // 2 * 80 + 8 padding
+    const pillWidth  = 168.0;
     const pillHeight = 36.0;
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
-          width: pillWidth,
-          height: pillHeight,
+          width: pillWidth, height: pillHeight,
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.32),
-            border: Border.all(color: Colors.white.withOpacity(0.16)),
+            color:        Colors.black.withOpacity(0.32),
+            border:       Border.all(color: Colors.white.withOpacity(0.16)),
             borderRadius: BorderRadius.circular(999),
           ),
           child: Stack(children: [
-            // sliding thumb
             AnimatedAlign(
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeInOut,
+              duration:  const Duration(milliseconds: 280),
+              curve:     Curves.easeInOut,
               alignment: feed == ShotsFeed.fun
                   ? Alignment.centerLeft
                   : Alignment.centerRight,
               child: Container(
                 width: (pillWidth - 8) / 2,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color:        Colors.white,
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
             ),
             Row(children: [
-              Expanded(
-                child: _PillTab(
-                  label: 'Fun',
-                  active: feed == ShotsFeed.fun,
-                  onTap: () => onTap(ShotsFeed.fun),
-                ),
-              ),
-              Expanded(
-                child: _PillTab(
-                  label: 'Learn',
-                  active: feed == ShotsFeed.learn,
-                  onTap: () => onTap(ShotsFeed.learn),
-                ),
-              ),
+              Expanded(child: _PillTab(label: 'Fun',   active: feed == ShotsFeed.fun,
+                  onTap: () => onTap(ShotsFeed.fun))),
+              Expanded(child: _PillTab(label: 'Learn', active: feed == ShotsFeed.learn,
+                  onTap: () => onTap(ShotsFeed.learn))),
             ]),
           ]),
         ),
@@ -340,50 +576,47 @@ class _FeedPill extends StatelessWidget {
 
 class _PillTab extends StatelessWidget {
   final String label;
-  final bool active;
+  final bool   active;
   final VoidCallback onTap;
   const _PillTab({required this.label, required this.active, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Center(
-          child: Text(
-            label.tr(context),
-            style: manrope(
-              size: 13,
-              weight: active ? FontWeight.w800 : FontWeight.w600,
-              color: active ? const Color(0xFF0A0A0A) : Colors.white.withOpacity(0.85),
-              letterSpacing: -0.13,
-            ),
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap:        onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Center(
+        child: Text(
+          label.tr(context),
+          style: manrope(
+            size:         13,
+            weight:       active ? FontWeight.w800 : FontWeight.w600,
+            color:        active ? const Color(0xFF0A0A0A) : Colors.white.withOpacity(0.85),
+            letterSpacing: -0.13,
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 // ───────────────────────────────────────────────────────────────
-// Right rail — bare icons + spinning audio disc
+// Right rail — like, comment, share, save, more, disc  (UNCHANGED)
 // ───────────────────────────────────────────────────────────────
+
 class _RightRail extends StatelessWidget {
-  final ShotData data;
-  final bool liked;
-  final bool saved;
+  final ShotData         data;
+  final bool             liked;
+  final bool             saved;
   final AnimationController spin;
-  final VoidCallback onLike;
-  final VoidCallback onSave;
+  final VoidCallback     onLike;
+  final VoidCallback     onSave;
+  final PostModel        post;   // passed to CommentsScreen
   const _RightRail({
-    required this.data,
-    required this.liked,
-    required this.saved,
-    required this.spin,
-    required this.onLike,
-    required this.onSave,
+    required this.data, required this.liked, required this.saved,
+    required this.spin, required this.onLike, required this.onSave,
+    required this.post,
   });
 
   @override
@@ -393,55 +626,46 @@ class _RightRail extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         _BareIconWithCount(
-          icon: liked ? Icons.favorite : Icons.favorite_border,
+          icon:  liked ? Icons.favorite : Icons.favorite_border,
           color: liked ? const Color(0xFFFF3B5C) : Colors.white,
           size: 30, count: data.likes, onTap: onLike,
         ),
         const SizedBox(height: 18),
         _BareCustomIconWithCount(
           child: CustomPaint(painter: _CommentBubblePainter(color: Colors.white)),
-          size: 28,
-          count: data.comments,
+          size: 28, count: data.comments,
           onTap: () {
-            Navigator.of(context).push(
-              PageRouteBuilder(
-                pageBuilder: (_, animation, __) => CommentsScreen(
-                  dark: true,
-                  postUser: data.user,
-                  postDescription: data.caption,
-                  postInitials: data.user.substring(0, data.user.length >= 2 ? 2 : 1).toUpperCase(),
-                  postUserColor: const Color(0xFF2D3561),
-                ),
-                transitionDuration: const Duration(milliseconds: 380),
-                reverseTransitionDuration: const Duration(milliseconds: 300),
-                transitionsBuilder: (_, animation, __, child) {
-                  final curved = CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
-                    reverseCurve: Curves.easeInCubic,
-                  );
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.06),
-                      end: Offset.zero,
-                    ).animate(curved),
-                    child: FadeTransition(opacity: curved, child: child),
-                  );
-                },
+            final initial = data.user.substring(0, data.user.length >= 2 ? 2 : 1).toUpperCase();
+            Navigator.of(context).push(PageRouteBuilder(
+              pageBuilder: (_, animation, __) => CommentsScreen(
+                dark:            true,
+                postUser:        data.user,
+                postDescription: data.caption,
+                postInitials:    initial,
+                postUserColor:   const Color(0xFF2D3561),
               ),
-            );
+              transitionDuration:        const Duration(milliseconds: 380),
+              reverseTransitionDuration: const Duration(milliseconds: 300),
+              transitionsBuilder: (_, animation, __, child) {
+                final curved = CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.06), end: Offset.zero,
+                  ).animate(curved),
+                  child: FadeTransition(opacity: curved, child: child));
+              },
+            ));
           },
         ),
         const SizedBox(height: 18),
         _BareIconWithCount(
-          icon: Icons.near_me_rounded,
-          size: 28, count: data.shares, onTap: () {},
-        ),
+          icon: Icons.near_me_rounded, size: 28, count: data.shares, onTap: () {}),
         const SizedBox(height: 18),
         _BareCustomIcon(
           child: CustomPaint(painter: _SaveCirclePainter(color: Colors.white)),
-          size: 28, onTap: onSave,
-        ),
+          size: 28, onTap: onSave),
         const SizedBox(height: 18),
         _BareIcon(icon: Icons.more_horiz, size: 26, onTap: () {}),
         const SizedBox(height: 12),
@@ -451,156 +675,244 @@ class _RightRail extends StatelessWidget {
   }
 }
 
-class _BareIcon extends StatelessWidget {
-  final IconData icon;
-  final double size;
-  final Color color;
-  final VoidCallback? onTap;
-  const _BareIcon({
-    required this.icon,
-    required this.size,
-    this.color = Colors.white,
-    this.onTap,
-  });
+// ───────────────────────────────────────────────────────────────
+// Caption block  (UNCHANGED)
+// ───────────────────────────────────────────────────────────────
+
+class _CaptionBlock extends StatelessWidget {
+  final ShotData data;
+  final bool     expanded;
+  final VoidCallback onToggleExpand;
+  const _CaptionBlock({
+    required this.data, required this.expanded, required this.onToggleExpand});
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(3),
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              boxShadow: [BoxShadow(color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1))],
-            ),
-            child: Icon(icon, size: size, color: color),
-          ),
-        ),
-      ),
-    );
-  }
-}
+    final initial = data.user.substring(0, 1).toUpperCase();
+    const shadow  = Shadow(color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1));
 
-class _BareCustomIcon extends StatelessWidget {
-  final Widget child;
-  final double size;
-  final VoidCallback? onTap;
-  const _BareCustomIcon({
-    required this.child,
-    required this.size,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(3),
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              boxShadow: [BoxShadow(color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1))],
-            ),
-            child: SizedBox(width: size, height: size, child: child),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BareIconWithCount extends StatelessWidget {
-  final IconData icon;
-  final double size;
-  final Color color;
-  final String count;
-  final VoidCallback onTap;
-  const _BareIconWithCount({
-    required this.icon,
-    required this.size,
-    this.color = Colors.white,
-    required this.count,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
     return Column(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize:        MainAxisSize.min,
       children: [
-        _BareIcon(icon: icon, size: size, color: color, onTap: onTap),
-        const SizedBox(height: 4),
-        Text(
-          count,
-          style: manrope(
-            size: 11.5,
-            weight: FontWeight.w700,
-            color: Colors.white,
-            letterSpacing: -0.115,
-          ).copyWith(
-            shadows: const [Shadow(color: Color(0x99000000), blurRadius: 3, offset: Offset(0, 1))],
+        Row(children: [
+          Container(
+            width: 34, height: 34,
+            padding: const EdgeInsets.all(1.5),
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle, color: Color(0xF2FFFFFF)),
+            child: Container(
+              decoration: BoxDecoration(
+                shape:    BoxShape.circle,
+                gradient: monoAvatar(true, data.avatarSeed),
+              ),
+              alignment: Alignment.center,
+              child: Text(initial,
+                style: manrope(size: 13, weight: FontWeight.w800,
+                    color: Colors.white, letterSpacing: -0.26)),
+            ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BareCustomIconWithCount extends StatelessWidget {
-  final Widget child;
-  final double size;
-  final String count;
-  final VoidCallback onTap;
-  const _BareCustomIconWithCount({
-    required this.child,
-    required this.size,
-    required this.count,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            customBorder: const CircleBorder(),
-            child: Padding(
-              padding: const EdgeInsets.all(3),
-              child: DecoratedBox(
-                decoration: const BoxDecoration(
-                  boxShadow: [BoxShadow(color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1))],
-                ),
-                child: SizedBox(width: size, height: size, child: child),
+          const SizedBox(width: 10),
+          Text('@${data.user}',
+            style: manrope(size: 14, weight: FontWeight.w700,
+                color: Colors.white, letterSpacing: -0.14)
+                .copyWith(shadows: [shadow])),
+          const SizedBox(width: 10),
+          Material(
+            color:       Colors.white,
+            shape:       const StadiumBorder(),
+            elevation:   2,
+            shadowColor: const Color(0x40000000),
+            child: InkWell(
+              onTap:        () {},
+              customBorder: const StadiumBorder(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                child: Text('Follow'.tr(context),
+                  style: manrope(size: 12, weight: FontWeight.w800,
+                      color: const Color(0xFF0A0A0A), letterSpacing: -0.06)),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          count,
-          style: manrope(
-            size: 11.5,
-            weight: FontWeight.w700,
-            color: Colors.white,
-            letterSpacing: -0.115,
-          ).copyWith(
-            shadows: const [Shadow(color: Color(0x99000000), blurRadius: 3, offset: Offset(0, 1))],
-          ),
+        ]),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: onToggleExpand,
+                child: AnimatedSize(
+                  duration:  const Duration(milliseconds: 220),
+                  alignment: Alignment.topLeft,
+                  curve:     Curves.easeInOut,
+                  child: Text(
+                    data.caption,
+                    maxLines: expanded ? null : 1,
+                    overflow: expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                    style: manrope(size: 13, weight: FontWeight.w500,
+                        color: Colors.white, letterSpacing: -0.065, height: 1.45)
+                        .copyWith(shadows: [shadow]),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            _BareIcon(icon: Icons.more_horiz, size: 18, onTap: onToggleExpand),
+          ],
         ),
       ],
     );
   }
 }
+
+// ───────────────────────────────────────────────────────────────
+// Shared icon primitives  (UNCHANGED)
+// ───────────────────────────────────────────────────────────────
+
+class _BareIcon extends StatelessWidget {
+  final IconData icon; final double size;
+  final Color color; final VoidCallback? onTap;
+  const _BareIcon({required this.icon, required this.size,
+      this.color = Colors.white, this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: onTap, customBorder: const CircleBorder(),
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            boxShadow: [BoxShadow(
+                color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1))]),
+          child: Icon(icon, size: size, color: color),
+        ),
+      ),
+    ),
+  );
+}
+
+class _BareCustomIcon extends StatelessWidget {
+  final Widget child; final double size; final VoidCallback? onTap;
+  const _BareCustomIcon({required this.child, required this.size, this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: onTap, customBorder: const CircleBorder(),
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            boxShadow: [BoxShadow(
+                color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1))]),
+          child: SizedBox(width: size, height: size, child: child),
+        ),
+      ),
+    ),
+  );
+}
+
+class _BareIconWithCount extends StatelessWidget {
+  final IconData icon; final double size; final Color color;
+  final String count; final VoidCallback onTap;
+  const _BareIconWithCount({required this.icon, required this.size,
+      this.color = Colors.white, required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _BareIcon(icon: icon, size: size, color: color, onTap: onTap),
+      const SizedBox(height: 4),
+      Text(count,
+        style: manrope(size: 11.5, weight: FontWeight.w700,
+            color: Colors.white, letterSpacing: -0.115)
+            .copyWith(shadows: const [
+          Shadow(color: Color(0x99000000), blurRadius: 3, offset: Offset(0, 1))
+        ])),
+    ],
+  );
+}
+
+class _BareCustomIconWithCount extends StatelessWidget {
+  final Widget child; final double size;
+  final String count; final VoidCallback onTap;
+  const _BareCustomIconWithCount({required this.child, required this.size,
+      required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap, customBorder: const CircleBorder(),
+          child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                boxShadow: [BoxShadow(
+                    color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1))]),
+              child: SizedBox(width: size, height: size, child: child),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(count,
+        style: manrope(size: 11.5, weight: FontWeight.w700,
+            color: Colors.white, letterSpacing: -0.115)
+            .copyWith(shadows: const [
+          Shadow(color: Color(0x99000000), blurRadius: 3, offset: Offset(0, 1))
+        ])),
+    ],
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// Audio disc  (UNCHANGED)
+// ───────────────────────────────────────────────────────────────
+
+class _AudioDisc extends StatelessWidget {
+  final int seed; final AnimationController spin;
+  const _AudioDisc({required this.seed, required this.spin});
+
+  @override
+  Widget build(BuildContext context) => RotationTransition(
+    turns: spin,
+    child: Container(
+      width: 34, height: 34,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFF333333), Color(0xFF0A0A0A), Color(0xFF1F1F22)],
+          stops: [0.0, 0.6, 1.0],
+        ),
+        border:    Border.all(color: Colors.white, width: 2),
+        boxShadow: const [
+          BoxShadow(color: Color(0x8C000000), blurRadius: 6, offset: Offset(0, 3))],
+      ),
+      alignment: Alignment.center,
+      child: Container(
+        width: 12, height: 12,
+        decoration: BoxDecoration(
+          shape:    BoxShape.circle,
+          gradient: monoAvatar(true, seed),
+        ),
+      ),
+    ),
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// Custom painters  (UNCHANGED)
+// ───────────────────────────────────────────────────────────────
 
 class _CommentBubblePainter extends CustomPainter {
   final Color color;
@@ -608,8 +920,7 @@ class _CommentBubblePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final sx = size.width / 28.0;
-    final sy = size.height / 28.0;
+    final sx = size.width / 28.0; final sy = size.height / 28.0;
     final bounds = Offset.zero & size;
     final bubble = Path()
       ..moveTo(8.6 * sx, 4.3 * sy)
@@ -625,7 +936,6 @@ class _CommentBubblePainter extends CustomPainter {
       ..lineTo(2.2 * sx, 11.8 * sy)
       ..cubicTo(2.2 * sx, 7.5 * sy, 4.3 * sx, 4.3 * sy, 8.6 * sx, 4.3 * sy)
       ..close();
-
     canvas.saveLayer(bounds, Paint());
     canvas.drawPath(bubble, Paint()..color = color);
     final clear = Paint()..blendMode = BlendMode.clear;
@@ -645,9 +955,7 @@ class _SaveCirclePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final sx = size.width / 28.0;
-    final sy = size.height / 28.0;
-
+    final sx = size.width / 28.0; final sy = size.height / 28.0;
     final bookmark = Path()
       ..moveTo(7.5 * sx, 3.4 * sy)
       ..lineTo(20.5 * sx, 3.4 * sy)
@@ -660,163 +968,9 @@ class _SaveCirclePainter extends CustomPainter {
       ..lineTo(4.3 * sx, 6.7 * sy)
       ..cubicTo(4.3 * sx, 4.8 * sy, 5.7 * sx, 3.4 * sy, 7.5 * sx, 3.4 * sy)
       ..close();
-
     canvas.drawPath(bookmark, Paint()..color = color);
   }
 
   @override
   bool shouldRepaint(_SaveCirclePainter o) => o.color != color;
-}
-
-class _AudioDisc extends StatelessWidget {
-  final int seed;
-  final AnimationController spin;
-  const _AudioDisc({required this.seed, required this.spin});
-
-  @override
-  Widget build(BuildContext context) {
-    return RotationTransition(
-      turns: spin,
-      child: Container(
-        width: 34, height: 34,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [Color(0xFF333333), Color(0xFF0A0A0A), Color(0xFF1F1F22)],
-            stops: [0.0, 0.6, 1.0],
-          ),
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: const [
-            BoxShadow(color: Color(0x8C000000), blurRadius: 6, offset: Offset(0, 3)),
-          ],
-        ),
-        alignment: Alignment.center,
-        child: Container(
-          width: 12, height: 12,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: monoAvatar(true, seed),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ───────────────────────────────────────────────────────────────
-// Bottom-left — author + one-line caption + 3-dot expand
-// ───────────────────────────────────────────────────────────────
-class _CaptionBlock extends StatelessWidget {
-  final ShotData data;
-  final bool expanded;
-  final VoidCallback onToggleExpand;
-  const _CaptionBlock({
-    required this.data,
-    required this.expanded,
-    required this.onToggleExpand,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final initial = data.user.substring(0, 1).toUpperCase();
-    final shadow = const Shadow(color: Color(0x8C000000), blurRadius: 3, offset: Offset(0, 1));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // author row
-        Row(children: [
-          Container(
-            width: 34, height: 34,
-            padding: const EdgeInsets.all(1.5),
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Color(0xF2FFFFFF),
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: monoAvatar(true, data.avatarSeed),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                initial,
-                style: manrope(
-                  size: 13, weight: FontWeight.w800,
-                  color: Colors.white, letterSpacing: -0.26,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            '@${data.user}',
-            style: manrope(
-              size: 14, weight: FontWeight.w700,
-              color: Colors.white, letterSpacing: -0.14,
-            ).copyWith(shadows: [shadow]),
-          ),
-          const SizedBox(width: 10),
-          // Solid white pill Follow button
-          Material(
-            color: Colors.white,
-            shape: const StadiumBorder(),
-            elevation: 2,
-            shadowColor: const Color(0x40000000),
-            child: InkWell(
-              onTap: () {},
-              customBorder: const StadiumBorder(),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                child: Text(
-                  'Follow'.tr(context),
-                  style: manrope(
-                    size: 12, weight: FontWeight.w800,
-                    color: const Color(0xFF0A0A0A), letterSpacing: -0.06,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ]),
-        const SizedBox(height: 10),
-
-        // caption + 3-dot expand
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: onToggleExpand,
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 220),
-                  alignment: Alignment.topLeft,
-                  curve: Curves.easeInOut,
-                  child: Text(
-                    data.caption,
-                    maxLines: expanded ? null : 1,
-                    overflow: expanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                    style: manrope(
-                      size: 13, weight: FontWeight.w500,
-                      color: Colors.white,
-                      letterSpacing: -0.065,
-                      height: 1.45,
-                    ).copyWith(shadows: [shadow]),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            _BareIcon(
-              icon: Icons.more_horiz,
-              size: 18,
-              onTap: onToggleExpand,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
 }

@@ -48,6 +48,8 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   bool _isLoading = true;
   bool _hasError = false;
   String? _myUserId;
+  double? _swipeStartX;
+  double? _swipeStartY;
 
   @override
   void initState() {
@@ -153,9 +155,27 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
     return Scaffold(
       backgroundColor: widget.dark ? GlassTokens.bgDark : GlassTokens.bgLight,
-      body: GestureDetector(
+      body: Listener(
         behavior: HitTestBehavior.translucent,
-        onHorizontalDragEnd: _handleBackSwipe,
+        onPointerDown: (e) {
+          _swipeStartX = e.position.dx;
+          _swipeStartY = e.position.dy;
+        },
+        onPointerUp: (e) {
+          if (_swipeStartX == null) return;
+          final dx = e.position.dx - _swipeStartX!;
+          final dy = (e.position.dy - (_swipeStartY ?? 0)).abs();
+          if (dx < -60 && dy < (-dx) * 0.65) {
+            HapticFeedback.selectionClick();
+            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          }
+          _swipeStartX = null;
+          _swipeStartY = null;
+        },
+        onPointerCancel: (_) {
+          _swipeStartX = null;
+          _swipeStartY = null;
+        },
         child: Stack(children: [
           GlassBackdrop(dark: widget.dark),
 

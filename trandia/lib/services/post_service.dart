@@ -159,6 +159,25 @@ class PostService {
     await ApiService.delete('/posts/$postId/like', requiresAuth: true);
   }
 
+  // ── Shots feed (filtered by section: 'fun' | 'learn') ───────────────────
+
+  Future<({List<PostModel> posts, String? nextCursor})> getShotsFeed({
+    required String section,   // 'fun' or 'learn'
+    String? cursor,
+    int limit = 10,
+  }) async {
+    final query = cursor != null
+        ? 'section=$section&cursor=$cursor&limit=$limit'
+        : 'section=$section&limit=$limit';
+    final data = await ApiService.get('/posts/shots/?$query', requiresAuth: true);
+    final rawPosts = (data['posts'] as List?) ?? [];
+    final posts = rawPosts
+        .whereType<Map<String, dynamic>>()
+        .map(PostModel.fromJson)
+        .toList();
+    return (posts: posts, nextCursor: data['next_cursor'] as String?);
+  }
+
   // ── User posts ────────────────────────────────────────────────────────────
 
   Future<({List<PostModel> posts, String? nextCursor})> getUserPosts(

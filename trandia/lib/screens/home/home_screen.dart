@@ -70,6 +70,8 @@ class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin {
   bool _navOpen   = false;
   int  _activeNav = 0;
+  double? _swipeStartX;
+  double? _swipeStartY;
   int  _totalUnread = 0;
   int  _unreadNotifs = 0;
   late AnimationController      _navCtrl;
@@ -416,12 +418,23 @@ class _HomeScreenState extends State<HomeScreen>
     return Scaffold(
       extendBodyBehindAppBar: true,
       extendBody: true,
-      body: GestureDetector(
+      body: Listener(
         behavior: HitTestBehavior.translucent,
-        onHorizontalDragEnd: (details) {
-          if (details.primaryVelocity != null && details.primaryVelocity! > 150) {
-            _openChatScreen();
-          }
+        onPointerDown: (e) {
+          _swipeStartX = e.position.dx;
+          _swipeStartY = e.position.dy;
+        },
+        onPointerUp: (e) {
+          if (_swipeStartX == null) return;
+          final dx = e.position.dx - _swipeStartX!;
+          final dy = (e.position.dy - (_swipeStartY ?? 0)).abs();
+          if (dx > 60 && dy < dx * 0.65) _openChatScreen();
+          _swipeStartX = null;
+          _swipeStartY = null;
+        },
+        onPointerCancel: (_) {
+          _swipeStartX = null;
+          _swipeStartY = null;
         },
         child: Stack(children: [
 
@@ -1047,7 +1060,7 @@ class _VideoCard extends StatefulWidget {
 class _VideoCardState extends State<_VideoCard> {
   VideoPlayerController? _ctrl;
   bool _initialized    = false;
-  bool _muted          = true;
+  bool _muted          = false;   // volume HIGH by default (unmuted)
   bool _manualPause    = false;   // user double-tapped to pause
   bool _dataSaver      = false;   // on mobile data → no autoplay
   bool _showOverlay    = false;   // brief play/pause icon flash

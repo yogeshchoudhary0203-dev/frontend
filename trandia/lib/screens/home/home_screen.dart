@@ -2496,20 +2496,22 @@ class _NavIconPainter extends CustomPainter {
         canvas.drawPath(door, stroke);
         break;
       case 1:
-        final double r = w * 0.42;
-        canvas.drawCircle(Offset(cx, cy), r, stroke);
-        final needle = Path()
-          ..moveTo(cx, cy - r * 0.50)
-          ..lineTo(cx + r * 0.20, cy)
-          ..lineTo(cx, cy + r * 0.50)
-          ..lineTo(cx - r * 0.20, cy)
+        final bounds = Offset.zero & size;
+        canvas.saveLayer(bounds, Paint());
+        final double inset = w * 0.10;
+        final rr = RRect.fromRectAndRadius(
+            Rect.fromLTWH(inset, inset, w - inset * 2, h - inset * 2),
+            Radius.circular(w * 0.26));
+        canvas.drawRRect(rr, Paint()..color = col..style = PaintingStyle.fill);
+        final double pw = w * 0.25;
+        final double ph = h * 0.30;
+        final playPath = Path()
+          ..moveTo(cx - pw * 0.38, cy - ph / 2)
+          ..lineTo(cx + pw * 0.62, cy)
+          ..lineTo(cx - pw * 0.38, cy + ph / 2)
           ..close();
-        canvas.drawPath(
-          needle,
-          Paint()
-            ..color = col
-            ..style = PaintingStyle.fill,
-        );
+        canvas.drawPath(playPath, Paint()..blendMode = BlendMode.clear);
+        canvas.restore();
         break;
       case 2:
         final double inset = w * 0.12;

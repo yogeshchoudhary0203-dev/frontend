@@ -159,6 +159,10 @@ class PostService {
     await ApiService.delete('/posts/$postId/like', requiresAuth: true);
   }
 
+  Future<void> deletePost(String postId) async {
+    await ApiService.delete('/posts/$postId', requiresAuth: true);
+  }
+
   // ── Shots feed (filtered by section: 'fun' | 'learn') ───────────────────
 
   Future<({List<PostModel> posts, String? nextCursor})> getShotsFeed({

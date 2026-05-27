@@ -116,16 +116,18 @@ class AgoraService {
     try {
       final result = await ApiService.get(
         '/agora/token?channel=$channelName&uid=$uid',
-        requiresAuth: true,
+        requiresAuth: false,  // public endpoint — no auth needed
         bypassCache: true,
       );
       final token = result['token'] as String? ?? '';
+      if (token.isEmpty) {
+        throw Exception('Backend returned empty token — check AGORA_APP_CERTIFICATE in Railway');
+      }
       developer.log('[Agora] Token fetched ✓ (len=${token.length})');
       return token;
     } catch (e) {
-      developer.log('[Agora] Token fetch failed: $e — using empty token');
-      // Empty token works when App Certificate is disabled in Agora console
-      return '';
+      developer.log('[Agora] Token fetch failed: $e');
+      rethrow; // propagate so user sees real error, not silent -3
     }
   }
 

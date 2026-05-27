@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
-import '../main.dart';
+import '../utils/navigator_key.dart';   // ← no more circular import
 import '../screens/single_post_screen.dart';
 
 class DeepLinkService {
@@ -12,28 +12,27 @@ class DeepLinkService {
   StreamSubscription<Uri>? _linkSubscription;
 
   void init() {
-    // 1. Listen for link stream when app is running (foreground or background)
+    // 1. Listen for links while app is running
     _linkSubscription = _appLinks.uriLinkStream.listen(
-      (uri) {
-        debugPrint('[DeepLink] Stream event received: $uri');
+      (Uri uri) {
+        debugPrint('[DeepLink] Stream: $uri');
         _handleDeepLink(uri);
       },
-      onError: (err) {
+      onError: (Object err) {
         debugPrint('[DeepLink] Stream error: $err');
       },
     );
 
-    // 2. Process initial link when app is cold-started
-    _appLinks.getInitialLink().then((uri) {
+    // 2. Cold-start initial link
+    _appLinks.getInitialLink().then((Uri? uri) {
       if (uri != null) {
-        debugPrint('[DeepLink] Initial link received: $uri');
-        // Add a slight delay to ensure the UI navigator is ready
+        debugPrint('[DeepLink] Initial link: $uri');
         Future.delayed(const Duration(milliseconds: 1200), () {
           _handleDeepLink(uri);
         });
       }
-    }).catchError((err) {
-      debugPrint('[DeepLink] Error getting initial link: $err');
+    }).catchError((Object err) {
+      debugPrint('[DeepLink] Initial link error: $err');
     });
   }
 
@@ -42,57 +41,51 @@ class DeepLinkService {
   }
 
   void _handleDeepLink(Uri uri) {
-    debugPrint('[DeepLink] Processing link: scheme=${uri.scheme}, host=${uri.host}, path=${uri.path}');
-    
+    debugPrint('[DeepLink] scheme=${uri.scheme} host=${uri.host} path=${uri.path}');
+
     String? postId;
 
-    // 1. Handle custom URL scheme (trandia://post/12345 or trandia://video/12345)
+    // trandia://post/ID  or  trandia://video/ID
     if (uri.scheme == 'trandia') {
       if (uri.host == 'post' || uri.host == 'video') {
-        if (uri.pathSegments.isNotEmpty) {
-          postId = uri.pathSegments.first;
-        } else {
-          postId = uri.queryParameters['id'];
-        }
+        postId = uri.pathSegments.isNotEmpty
+            ? uri.pathSegments.first
+            : uri.queryParameters['id'];
       }
     }
-    // 2. Handle HTTP/HTTPS App Links (https://trandia.com/post/12345 or https://trandia.com/video/12345)
+    // https://trandia.com/post/ID  or  https://trandia.com/video/ID
     else if (uri.scheme == 'http' || uri.scheme == 'https') {
       if (uri.host == 'trandia.com' || uri.host == 'www.trandia.com') {
-        final segments = uri.pathSegments;
-        if (segments.length >= 2 && (segments[0] == 'post' || segments[0] == 'video')) {
-          postId = segments[1];
-        } else if (segments.isNotEmpty && (segments[0] == 'post' || segments[0] == 'video')) {
+        final segs = uri.pathSegments;
+        if (segs.length >= 2 && (segs[0] == 'post' || segs[0] == 'video')) {
+          postId = segs[1];
+        } else if (segs.isNotEmpty && (segs[0] == 'post' || segs[0] == 'video')) {
           postId = uri.queryParameters['id'];
         }
       }
     }
 
     if (postId != null && postId.isNotEmpty) {
-      debugPrint('[DeepLink] Parsed Post ID: $postId. Navigating...');
+      debugPrint('[DeepLink] postId=$postId → navigating');
       _navigateToPost(postId);
     } else {
-      debugPrint('[DeepLink] No valid Post ID found in URI.');
+      debugPrint('[DeepLink] No valid postId found');
     }
   }
 
   void _navigateToPost(String postId) {
     final context = navigatorKey.currentContext;
     if (context == null) {
-      debugPrint('[DeepLink] Navigator context is null. Retrying in 1s...');
+      debugPrint('[DeepLink] context null, retrying in 1s');
       Future.delayed(const Duration(seconds: 1), () => _navigateToPost(postId));
       return;
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    // Navigate using the global navigatorKey
+
     navigatorKey.currentState?.push(
       MaterialPageRoute(
-        builder: (_) => SinglePostScreen(
-          postId: postId,
-          dark: isDark,
-        ),
+        builder: (_) => SinglePostScreen(postId: postId, dark: isDark),
       ),
     );
   }

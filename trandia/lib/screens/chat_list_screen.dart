@@ -274,7 +274,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                child: Text('ACTIVE NOW'.tr(context),
+                child: Text('FAVOURITES'.tr(context),
                     style: manrope(
                         size: 11,
                         weight: FontWeight.w700,

@@ -537,20 +537,28 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   // ── Agora Call Methods ─────────────────────────────────────────
+  // Flow: send call_invite (callee sees IncomingCallScreen) → open call screen here ("Ringing…")
   void _startVoiceCall() {
     HapticFeedback.lightImpact();
-    final otherUser = widget.conversation.getOtherParticipant(widget.myUserId);
+    final otherUser   = widget.conversation.getOtherParticipant(widget.myUserId);
     final channelName = AgoraService.buildChannelName(widget.myUserId, otherUser.id);
+    ChatService().sendCallInvite(
+      calleeId:    otherUser.id,
+      channelName: channelName,
+      callType:    'voice',
+      callerName:  '',
+    );
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, anim, __) => FadeTransition(
           opacity: anim,
           child: VoiceCallScreen(
-            dark: widget.dark,
-            channelName: channelName,
+            dark:           widget.dark,
+            channelName:    channelName,
             remoteUserName: otherUser.username,
-            myUserId: widget.myUserId,
-            remoteUserId: otherUser.id,
+            myUserId:       widget.myUserId,
+            remoteUserId:   otherUser.id,
+            isCallee:       false,
           ),
         ),
         transitionDuration: const Duration(milliseconds: 400),
@@ -560,18 +568,25 @@ class _ChatScreenState extends State<ChatScreen>
 
   void _startVideoCall() {
     HapticFeedback.lightImpact();
-    final otherUser = widget.conversation.getOtherParticipant(widget.myUserId);
+    final otherUser   = widget.conversation.getOtherParticipant(widget.myUserId);
     final channelName = AgoraService.buildChannelName(widget.myUserId, otherUser.id);
+    ChatService().sendCallInvite(
+      calleeId:    otherUser.id,
+      channelName: channelName,
+      callType:    'video',
+      callerName:  '',
+    );
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, anim, __) => FadeTransition(
           opacity: anim,
           child: VideoCallScreen(
-            dark: widget.dark,
-            channelName: channelName,
+            dark:           widget.dark,
+            channelName:    channelName,
             remoteUserName: otherUser.username,
-            myUserId: widget.myUserId,
-            remoteUserId: otherUser.id,
+            myUserId:       widget.myUserId,
+            remoteUserId:   otherUser.id,
+            isCallee:       false,
           ),
         ),
         transitionDuration: const Duration(milliseconds: 400),

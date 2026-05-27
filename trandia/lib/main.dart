@@ -11,6 +11,7 @@ import 'screens/intro_slides.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/fcm_service.dart';
+import 'services/deep_link_service.dart';
 import 'l10n/app_localizations.dart';
 import 'utils/web_utils.dart';
 
@@ -67,12 +68,14 @@ class _TrandiaAppState extends State<TrandiaApp> {
   void initState() {
     super.initState();
     _languageController.load();
+    DeepLinkService.instance.init();
     _checkInitialNotification();
   }
 
   @override
   void dispose() {
     _languageController.dispose();
+    DeepLinkService.instance.dispose();
     super.dispose();
   }
 

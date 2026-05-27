@@ -210,4 +210,15 @@ class PostService {
         .toList();
     return (posts: posts, nextCursor: data['next_cursor'] as String?);
   }
+
+  // ── Get Single Post by ID ──────────────────────────────────────────────────
+
+  Future<PostModel?> getPostById(String postId) async {
+    try {
+      final data = await ApiService.get('/posts/$postId', requiresAuth: true);
+      return PostModel.fromJson(data);
+    } catch (e) {
+      return null;
+    }
+  }
 }

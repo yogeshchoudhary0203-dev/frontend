@@ -23,6 +23,7 @@ import '../l10n/app_localizations.dart';
 import '../services/post_service.dart';
 import 'glass_common.dart';
 import 'comments_screen.dart';
+import '../utils/share_helper.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Models / helpers (kept compatible with existing UI widgets)
@@ -919,7 +920,8 @@ class _RightRail extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         _BareIconWithCount(
-          icon: Icons.near_me_rounded, size: 28, count: data.shares, onTap: () {}),
+          icon: Icons.near_me_rounded, size: 28, count: data.shares,
+          onTap: () => ShareHelper.showShareBottomSheet(context, post)),
         const SizedBox(height: 18),
         _BareCustomIcon(
           child: CustomPaint(painter: _SaveCirclePainter(color: Colors.white)),

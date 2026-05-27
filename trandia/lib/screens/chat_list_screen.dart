@@ -49,6 +49,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   String? _myUserId;
   double? _swipeStartX;
   double? _swipeStartY;
+  bool _notificationsOn = true;
 
   @override
   void initState() {
@@ -209,21 +210,16 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                   const Spacer(),
                   GlassCircleButton(
                     dark: widget.dark,
-                    icon: Icons.search_rounded,
+                    icon: _notificationsOn
+                        ? Icons.notifications_outlined
+                        : Icons.notifications_off_outlined,
                     iconSize: 18,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => SearchScreen(dark: widget.dark)),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  GlassCircleButton(
-                      dark: widget.dark, icon: Icons.edit_outlined, iconSize: 18),
-                  const SizedBox(width: 6),
-                  GlassCircleButton(
-                    dark: widget.dark,
-                    icon: Icons.notifications_outlined,
-                    iconSize: 18,
+                    onTap: () {
+                      HapticFeedback.heavyImpact();
+                      setState(() {
+                        _notificationsOn = !_notificationsOn;
+                      });
+                    },
                   ),
                 ]),
               ),

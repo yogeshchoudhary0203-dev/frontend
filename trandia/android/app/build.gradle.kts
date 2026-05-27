@@ -52,18 +52,11 @@ android {
         }
     }
 
-    // ── ABI splits — generates one APK per architecture ─────────────────────
-    // Real Android devices are arm64-v8a (modern) or armeabi-v7a (older 32-bit).
-    // x86 / x86_64 are only emulators — no need to ship them to users.
-    // With splits: arm64 APK ~70 MB, armeabi-v7a ~60 MB (vs 248 MB fat APK).
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "armeabi-v7a")
-            isUniversalApk = false   // set true only if you need a single fat APK
-        }
-    }
+    // ── NOTE: ABI splits removed ─────────────────────────────────────────────
+    // The `splits { abi { ... } }` block conflicts with Flutter's internal
+    // ndk.abiFilters setting ("armeabi-v7a,arm64-v8a,x86_64").  Having both
+    // causes a Gradle build error.  Use `flutter build apk --split-per-abi`
+    // from the command line to get one APK per architecture instead.
 
     // ── Exclude unused Agora extension .so files ─────────────────────────────
     // agora_rtc_engine ships AI/analytics extensions we don't use in Trandia.

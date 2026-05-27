@@ -136,6 +136,7 @@ class _ShotsScreenState extends State<ShotsScreen>
       final result = await PostService.instance.getShotsFeed(
         section: _feed == ShotsFeed.fun ? 'fun' : 'learn',
         cursor:  refresh ? null : _nextCursor,
+        refresh: refresh,
       );
       if (!mounted) return;
 
@@ -715,8 +716,10 @@ class _ShotVideoPage extends StatelessWidget {
         // ── Thumbnail always shown as background ───────────────
         if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty)
           CachedNetworkImage(
-            imageUrl:    thumbnailUrl!,
-            fit:         BoxFit.cover,
+            imageUrl:         thumbnailUrl!,
+            fit:              BoxFit.cover,
+            memCacheWidth:    400,   // cap in-memory decode size → less RAM
+            maxWidthDiskCache: 400,  // cap on-disk cached size → less storage
             placeholder: (_, __) => Container(color: Colors.black),
             errorWidget: (_, __, ___) => Container(color: Colors.black),
           )

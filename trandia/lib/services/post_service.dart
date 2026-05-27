@@ -108,12 +108,17 @@ class PostService {
   Future<({List<PostModel> posts, String? nextCursor})> getFeed({
     String? cursor,
     int limit = 20,
+    bool refresh = false,   // bypass local cache on pull-to-refresh
   }) async {
     final path = cursor != null
         ? '/posts/?cursor=$cursor&limit=$limit'
         : '/posts/?limit=$limit';
 
-    final data = await ApiService.get(path, requiresAuth: true);
+    final data = await ApiService.get(
+      path,
+      requiresAuth: true,
+      bypassCache: refresh || cursor != null,  // don't cache paginated pages
+    );
     final rawPosts = (data['posts'] as List?) ?? [];
     final posts = rawPosts
         .whereType<Map<String, dynamic>>()
@@ -169,11 +174,16 @@ class PostService {
     required String section,   // 'fun' or 'learn'
     String? cursor,
     int limit = 10,
+    bool refresh = false,
   }) async {
     final query = cursor != null
         ? 'section=$section&cursor=$cursor&limit=$limit'
         : 'section=$section&limit=$limit';
-    final data = await ApiService.get('/posts/shots/?$query', requiresAuth: true);
+    final data = await ApiService.get(
+      '/posts/shots/?$query',
+      requiresAuth: true,
+      bypassCache: refresh || cursor != null,
+    );
     final rawPosts = (data['posts'] as List?) ?? [];
     final posts = rawPosts
         .whereType<Map<String, dynamic>>()

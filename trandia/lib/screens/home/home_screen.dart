@@ -152,7 +152,8 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() { _loadingFeed = true; _feedError = false; });
     try {
       final result = await PostService.instance.getFeed(
-        cursor: refresh ? null : _nextCursor,
+        cursor:  refresh ? null : _nextCursor,
+        refresh: refresh,
       );
       if (!mounted) return;
       setState(() {

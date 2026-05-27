@@ -10,6 +10,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import '../../services/fcm_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/auth_service.dart';
+import '../call_screens.dart';
 import '../../services/post_service.dart';
 import '../../services/api_service.dart';
 import '../notifications_screen.dart';
@@ -19,10 +20,14 @@ import '../profile_screen.dart';
 import '../user_profile_screen.dart' as user_profile;
 import '../chat_list_screen.dart';
 import '../create_post_screens.dart';
+import '../story_upload_screen.dart';
+import '../story_view_screen.dart';
+import '../../services/story_service.dart';
 import '../comments_screen.dart';
 import '../liked_by_screen.dart';
 import '../../services/cryptography_service.dart';
 import '../../l10n/app_localizations.dart';
+import '../../utils/share_helper.dart';
 
 extension _ColorOp on Color {
   Color op(double opacity) => withOpacity(opacity);
@@ -34,27 +39,6 @@ const double _kItemH    = 54.0;
 const double _kNavGap   = 6.0;
 const double _kIconSize = 20.0; // message icon — minor size reduction
 
-// ─── Story data ───────────────────────────────────────
-class _StoryData {
-  final String name, initials;
-  final Color  avatarColor;
-  final bool   seen, isOwn;
-  const _StoryData({
-    required this.name, required this.initials, required this.avatarColor,
-    this.seen = false, this.isOwn = false,
-  });
-}
-
-const _kStories = <_StoryData>[
-  _StoryData(name: 'Your Story', initials: '+',  avatarColor: Color(0xFF3A3A3E), isOwn: true),
-  _StoryData(name: 'Arjun',      initials: 'AK', avatarColor: Color(0xFF2D3561)),
-  _StoryData(name: 'Priya',      initials: 'PS', avatarColor: Color(0xFF1B4332)),
-  _StoryData(name: 'Rohan',      initials: 'RV', avatarColor: Color(0xFF3D0C11)),
-  _StoryData(name: 'Sneha',      initials: 'SN', avatarColor: Color(0xFF2C2C54)),
-  _StoryData(name: 'Dev',        initials: 'DM', avatarColor: Color(0xFF1A1A2E)),
-  _StoryData(name: 'Kavya',      initials: 'KR', avatarColor: Color(0xFF2D132C)),
-  _StoryData(name: 'Nikhil',     initials: 'NK', avatarColor: Color(0xFF0D3349), seen: true),
-];
 
 
 // ═════════════════════════════════════════════════════
@@ -89,6 +73,9 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Real-time notification listeners ─────────────
   StreamSubscription? _fcmNotifSub;
   StreamSubscription? _wsNotifSub;
+  StreamSubscription? _callSub;
+  String? _myUserId;
+  bool _incomingCallOpen = false;
 
   // ── Feed state ────────────────────────────────────
   final List<PostModel> _posts       = [];
@@ -131,6 +118,7 @@ class _HomeScreenState extends State<HomeScreen>
       _loadUnreadNotifCount();
       ChatService().connectWebSocket();
       _listenForNewNotifications();
+      _loadMyUserId().then((_) => _listenForIncomingCalls());
       _loadFeed();
     });
   }
@@ -142,7 +130,46 @@ class _HomeScreenState extends State<HomeScreen>
     _scrollCtrl.dispose();
     _fcmNotifSub?.cancel();
     _wsNotifSub?.cancel();
+    _callSub?.cancel();
     super.dispose();
+  }
+
+  // ── Incoming call listener ─────────────────────────
+  Future<void> _loadMyUserId() async {
+    _myUserId = await AuthService.getCurrentUserId();
+  }
+
+  void _listenForIncomingCalls() {
+    if (_callSub != null) return;
+    _callSub = ChatService().callStream.listen((data) {
+      final type = data['type'] as String?;
+      if (type != 'call_invite') return;
+      if (!mounted) return;
+      if (_incomingCallOpen) return;
+      final isDark   = Theme.of(context).brightness == Brightness.dark;
+      final myId     = _myUserId ?? '';
+      final callerId = (data['caller_id'] as String?) ?? '';
+      final channelName = (data['channel_name'] as String?) ?? '';
+      if (myId.isEmpty || callerId.isEmpty || channelName.isEmpty) return;
+      _incomingCallOpen = true;
+      Navigator.of(context, rootNavigator: true).push(
+        PageRouteBuilder(
+          pageBuilder: (_, anim, __) => FadeTransition(
+            opacity: anim,
+            child: IncomingCallScreen(
+              dark:        isDark,
+              callerName:  (data['caller_name'] as String?) ?? 'Unknown',
+              callerId:    callerId,
+              channelName: channelName,
+              callType:    (data['call_type']   as String?) ?? 'voice',
+              myUserId:    myId,
+            ),
+          ),
+          transitionDuration: const Duration(milliseconds: 400),
+          opaque: false,
+        ),
+      ).whenComplete(() => _incomingCallOpen = false);
+    });
   }
 
   // ── Feed loading ──────────────────────────────────
@@ -152,7 +179,8 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() { _loadingFeed = true; _feedError = false; });
     try {
       final result = await PostService.instance.getFeed(
-        cursor: refresh ? null : _nextCursor,
+        cursor:  refresh ? null : _nextCursor,
+        refresh: refresh,
       );
       if (!mounted) return;
       setState(() {
@@ -559,7 +587,7 @@ class _HomeScreenState extends State<HomeScreen>
                   );
                 }
                 final post = _posts[postIdx];
-                return _PostCard(
+                return PostCard(
                   key: ValueKey(post.id),
                   post: post,
                   isDark: isDark,
@@ -1532,66 +1560,260 @@ class _BreakdownSection extends StatelessWidget {
   }
 }
 
-class _StorySection extends StatelessWidget {
+// ═══════════════════════════════════════════════════════
+//  STORY SECTION — real data from API
+// ═══════════════════════════════════════════════════════
+
+class _StorySection extends StatefulWidget {
   final bool isDark;
   const _StorySection({required this.isDark});
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 110,
-    child: ListView.builder(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      physics: const BouncingScrollPhysics(),
-      itemCount: _kStories.length,
-      itemBuilder: (_, i) => Padding(
-        padding: const EdgeInsets.only(right: 14),
-        child: _StoryBubble(story: _kStories[i], isDark: isDark)),
-    ),
-  );
+  State<_StorySection> createState() => _StorySectionState();
 }
 
+class _StorySectionState extends State<_StorySection> {
+  List<StoryUserGroup>? _groups;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final groups = await StoryService.instance.getFeed();
+      if (mounted) setState(() { _groups = groups; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _groups = []; _loading = false; });
+    }
+  }
+
+  Future<void> _openUpload() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const StoryUploadScreen()),
+    );
+    if (created == true) _load();
+  }
+
+  Future<void> _openView(int groupIdx) async {
+    if (_groups == null || _groups!.isEmpty) return;
+    await Navigator.push<void>(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => StoryViewScreen(
+          groups: _groups!,
+          initialGroupIndex: groupIdx,
+        ),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 200),
+      ),
+    );
+    _load(); // refresh seen state after viewing
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups   = _groups ?? [];
+    final ownGroup = groups.firstWhere(
+      (g) => g.isOwn, orElse: () => const StoryUserGroup(
+        userId: '', userName: '', userUsername: '',
+        isOwn: true, allSeen: false, stories: [],
+      ),
+    );
+    final hasOwn   = groups.any((g) => g.isOwn);
+    final others   = groups.where((g) => !g.isOwn).toList();
+
+    // Total items = 1 (own/add) + others
+    final total = _loading ? 6 : 1 + others.length;
+
+    return SizedBox(
+      height: 110,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding:  const EdgeInsets.symmetric(horizontal: 14),
+        physics:  const BouncingScrollPhysics(),
+        itemCount: total,
+        itemBuilder: (_, i) {
+          if (_loading) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: _ShimmerBubble(isDark: widget.isDark),
+            );
+          }
+          if (i == 0) {
+            // "Your Story" bubble
+            return Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: hasOwn
+                  ? _StoryBubble(
+                      name:     'Your Story',
+                      picture:  ownGroup.userPicture,
+                      initials: ownGroup.userName.isNotEmpty
+                          ? ownGroup.userName[0].toUpperCase() : 'Y',
+                      isOwn:    true,
+                      hasStory: true,
+                      seen:     false,
+                      isDark:   widget.isDark,
+                      onTap:    () => _openView(groups.indexOf(ownGroup)),
+                    )
+                  : _StoryBubble(
+                      name:     'Your Story',
+                      picture:  null,
+                      initials: '+',
+                      isOwn:    true,
+                      hasStory: false,
+                      seen:     false,
+                      isDark:   widget.isDark,
+                      onTap:    _openUpload,
+                    ),
+            );
+          }
+          final g = others[i - 1];
+          return Padding(
+            padding: const EdgeInsets.only(right: 14),
+            child: _StoryBubble(
+              name:     g.userName,
+              picture:  g.userPicture,
+              initials: g.userName.isNotEmpty
+                  ? g.userName[0].toUpperCase() : '?',
+              isOwn:    false,
+              hasStory: g.hasStories,
+              seen:     g.allSeen,
+              isDark:   widget.isDark,
+              onTap:    () => _openView(groups.indexOf(g)),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Shimmer loading bubble ──────────────────────────────
+class _ShimmerBubble extends StatelessWidget {
+  final bool isDark;
+  const _ShimmerBubble({required this.isDark});
+  @override
+  Widget build(BuildContext context) {
+    final c = (isDark ? Colors.white : Colors.black).withOpacity(0.07);
+    return SizedBox(width: 70, child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 70, height: 70,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: c)),
+      const SizedBox(height: 6),
+      Container(width: 44, height: 8,
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: c)),
+    ]));
+  }
+}
+
+// ── Story bubble ────────────────────────────────────────
 class _StoryBubble extends StatelessWidget {
-  final _StoryData story;
-  final bool       isDark;
-  const _StoryBubble({required this.story, required this.isDark});
+  final String        name;
+  final String?       picture;
+  final String        initials;
+  final bool          isOwn;
+  final bool          hasStory;
+  final bool          seen;
+  final bool          isDark;
+  final VoidCallback  onTap;
+
+  const _StoryBubble({
+    required this.name,
+    this.picture,
+    required this.initials,
+    required this.isOwn,
+    required this.hasStory,
+    required this.seen,
+    required this.isDark,
+    required this.onTap,
+  });
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => HapticFeedback.lightImpact(),
-      child: SizedBox(width: 70,
+      onTap: () { HapticFeedback.lightImpact(); onTap(); },
+      child: SizedBox(
+        width: 70,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           SizedBox(width: 70, height: 70,
             child: CustomPaint(
+              // Dashed ring: own bubble with no story.
+              // Gradient ring: own bubble with story, or others unseen.
+              // Faded ring: others seen.
               painter: _StoryRingPainter(
-                  isDark: isDark, seen: story.seen, isOwn: story.isOwn),
-              child: Padding(padding: const EdgeInsets.all(4.5),
+                isDark: isDark,
+                seen:   seen && !isOwn,
+                isOwn:  isOwn && !hasStory,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(4.5),
                 child: Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: story.avatarColor,
+                    color: isDark
+                        ? const Color(0xFF2A2A2E)
+                        : const Color(0xFFE5E5EA),
                     border: Border.all(
-                      color: isDark ? Colors.black.op(0.60)
-                                    : Colors.white.op(0.70),
-                      width: 2)),
-                  child: Center(child: story.isOwn
-                      ? CustomPaint(size: const Size(18, 18),
-                          painter: _PlusPainter(
-                              color: isDark ? Colors.white
-                                           : const Color(0xFF1A1A1A)))
-                      : Text(story.initials, style: const TextStyle(
-                          color: Colors.white, fontSize: 15,
-                          fontWeight: FontWeight.w600))),
-                )))),
+                      color: isDark
+                          ? Colors.black.op(0.60)
+                          : Colors.white.op(0.70),
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: picture != null
+                        ? CachedNetworkImage(
+                            imageUrl:    picture!,
+                            fit:         BoxFit.cover,
+                            errorWidget: (_, __, ___) =>
+                                _AvatarContent(initials: initials,
+                                    isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                          )
+                        : _AvatarContent(initials: initials,
+                            isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                  ),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(story.name.tr(context), maxLines: 1, overflow: TextOverflow.ellipsis,
+          Text(name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: (isDark ? Colors.white : Colors.black)
-                  .op(story.seen ? 0.38 : 0.80),
-              fontSize: 10.5, fontWeight: FontWeight.w500)),
-        ])),
+                  .op(seen && !isOwn ? 0.38 : 0.80),
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ]),
+      ),
     );
   }
+}
+
+class _AvatarContent extends StatelessWidget {
+  final String initials;
+  final bool   isOwnNoStory;
+  final bool   isDark;
+  const _AvatarContent({required this.initials, required this.isOwnNoStory, required this.isDark});
+  @override
+  Widget build(BuildContext context) => Center(
+    child: isOwnNoStory
+        ? CustomPaint(
+            size: const Size(18, 18),
+            painter: _PlusPainter(
+              color: isDark ? Colors.white : const Color(0xFF1A1A1A)))
+        : Text(initials, style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+            fontSize: 15, fontWeight: FontWeight.w700)),
+  );
 }
 
 class _StoryRingPainter extends CustomPainter {
@@ -1640,12 +1862,12 @@ class _StoryRingPainter extends CustomPainter {
 // ═════════════════════════════════════════════════════
 //  POST CARD
 // ═════════════════════════════════════════════════════
-class _PostCard extends StatefulWidget {
+class PostCard extends StatefulWidget {
   final PostModel   post;
   final bool        isDark;
   final VoidCallback onLike;
   final ValueChanged<PostModel>? onLearnWatched;
-  const _PostCard({
+  const PostCard({
     super.key,
     required this.post,
     required this.isDark,
@@ -1653,10 +1875,10 @@ class _PostCard extends StatefulWidget {
     this.onLearnWatched,
   });
   @override
-  State<_PostCard> createState() => _PostCardState();
+  State<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<_PostCard> {
+class _PostCardState extends State<PostCard> {
   bool _expanded = false;
 
   Color _avatarColor(String userId) {
@@ -1837,7 +2059,10 @@ class _PostCardState extends State<_PostCard> {
             const SizedBox(width: 16),
 
             GestureDetector(
-              onTap: () => HapticFeedback.lightImpact(),
+              onTap: () {
+                HapticFeedback.lightImpact();
+                ShareHelper.showShareBottomSheet(context, p);
+              },
               child: SizedBox(width: 26, height: 26,
                 child: Icon(Icons.near_me_rounded, size: 26, color: iconCol))),
 
@@ -2501,20 +2726,22 @@ class _NavIconPainter extends CustomPainter {
         canvas.drawPath(door, stroke);
         break;
       case 1:
-        final double r = w * 0.42;
-        canvas.drawCircle(Offset(cx, cy), r, stroke);
-        final needle = Path()
-          ..moveTo(cx, cy - r * 0.50)
-          ..lineTo(cx + r * 0.20, cy)
-          ..lineTo(cx, cy + r * 0.50)
-          ..lineTo(cx - r * 0.20, cy)
+        final bounds = Offset.zero & size;
+        canvas.saveLayer(bounds, Paint());
+        final double inset = w * 0.10;
+        final rr = RRect.fromRectAndRadius(
+            Rect.fromLTWH(inset, inset, w - inset * 2, h - inset * 2),
+            Radius.circular(w * 0.26));
+        canvas.drawRRect(rr, Paint()..color = col..style = PaintingStyle.fill);
+        final double pw = w * 0.25;
+        final double ph = h * 0.30;
+        final playPath = Path()
+          ..moveTo(cx - pw * 0.38, cy - ph / 2)
+          ..lineTo(cx + pw * 0.62, cy)
+          ..lineTo(cx - pw * 0.38, cy + ph / 2)
           ..close();
-        canvas.drawPath(
-          needle,
-          Paint()
-            ..color = col
-            ..style = PaintingStyle.fill,
-        );
+        canvas.drawPath(playPath, Paint()..blendMode = BlendMode.clear);
+        canvas.restore();
         break;
       case 2:
         final double inset = w * 0.12;

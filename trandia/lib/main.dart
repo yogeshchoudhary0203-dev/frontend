@@ -11,16 +11,18 @@ import 'screens/intro_slides.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/fcm_service.dart';
+import 'services/deep_link_service.dart';
 import 'l10n/app_localizations.dart';
 import 'utils/web_utils.dart';
+import 'utils/navigator_key.dart';
+
+export 'utils/navigator_key.dart' show navigatorKey;
 
 @pragma('vm:entry-point')
 Future<void> _bgMessageHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('[FCM] background: ${message.notification?.title}');
 }
-
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,12 +69,14 @@ class _TrandiaAppState extends State<TrandiaApp> {
   void initState() {
     super.initState();
     _languageController.load();
+    DeepLinkService.instance.init();
     _checkInitialNotification();
   }
 
   @override
   void dispose() {
     _languageController.dispose();
+    DeepLinkService.instance.dispose();
     super.dispose();
   }
 

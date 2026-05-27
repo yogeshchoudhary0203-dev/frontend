@@ -51,6 +51,10 @@
 	<string>Trandia uses your location to show your city on your profile. You can hide it anytime.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Trandia uses your location to show your city on your profile. You can hide it anytime.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Trandia needs microphone access for voice and video calls.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Trandia needs camera access for video calls.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

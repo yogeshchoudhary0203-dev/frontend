@@ -19,10 +19,12 @@ class ChatService {
   Timer? _reconnectTimer;
   int _reconnectDelay = 1; // seconds, doubles each attempt
 
-  final _messageCtrl  = StreamController<ChatMessage>.broadcast();
-  final _typingCtrl   = StreamController<Map<String, dynamic>>.broadcast();
-  final _reactionCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _messageCtrl      = StreamController<ChatMessage>.broadcast();
+  final _typingCtrl       = StreamController<Map<String, dynamic>>.broadcast();
+  final _reactionCtrl     = StreamController<Map<String, dynamic>>.broadcast();
   final _notificationCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  // Call signaling stream — emits call_invite / call_accept / call_reject / call_end
+  final _callCtrl         = StreamController<Map<String, dynamic>>.broadcast();
 
   // Typing throttle — only send 1 event per 2 seconds
   DateTime? _lastTypingSent;
@@ -31,11 +33,12 @@ class ChatService {
   String? _localPublicKey;
   String? _localPrivateKey;
 
-  Stream<ChatMessage>            get messageStream  => _messageCtrl.stream;
-  Stream<Map<String, dynamic>>   get typingStream   => _typingCtrl.stream;
-  /// Emits: { "message_id": "...", "conversation_id": "...", "reactions": { emoji: [uids] } }
-  Stream<Map<String, dynamic>>   get reactionStream => _reactionCtrl.stream;
+  Stream<ChatMessage>            get messageStream      => _messageCtrl.stream;
+  Stream<Map<String, dynamic>>   get typingStream       => _typingCtrl.stream;
+  Stream<Map<String, dynamic>>   get reactionStream     => _reactionCtrl.stream;
   Stream<Map<String, dynamic>>   get notificationStream => _notificationCtrl.stream;
+  /// Emits: call_invite | call_accept | call_reject | call_end payloads
+  Stream<Map<String, dynamic>>   get callStream         => _callCtrl.stream;
   bool get isConnected => _channel != null;
 
   // ── WebSocket ────────────────────────────────────────────────
@@ -45,17 +48,16 @@ class ChatService {
     _isConnecting = true;
 
     try {
-      // Load token + keys in parallel for speed
       final results = await Future.wait([
         AuthService.getCurrentUserId(),
         CryptographyService().initKeys(),
         CryptographyService().getLocalPrivateKey(),
         ApiService.getToken(),
       ]);
-      _myUserId      = results[0] as String?;
+      _myUserId        = results[0] as String?;
       _localPublicKey  = results[1] as String?;
       _localPrivateKey = results[2] as String?;
-      final token    = results[3] as String?;
+      final token      = results[3] as String?;
 
       if (token == null) { _isConnecting = false; return; }
 
@@ -63,10 +65,8 @@ class ChatService {
       developer.log('[ChatService] Connecting WebSocket: $wsUri');
 
       _channel = WebSocketChannel.connect(wsUri);
-
-      // Wait for connection to be ready (throws if server rejects)
       await _channel!.ready.timeout(const Duration(seconds: 8));
-      _reconnectDelay = 1; // reset backoff on success
+      _reconnectDelay = 1;
       developer.log('[ChatService] WebSocket connected ✓');
 
       _channel!.stream.listen(
@@ -89,29 +89,39 @@ class ChatService {
       final data = jsonDecode(raw as String) as Map<String, dynamic>;
       final type = data['type'] as String?;
 
-      if (type == 'message') {
-        var msg = ChatMessage.fromJson(data['message'] as Map<String, dynamic>);
-        msg = decryptMessage(msg);
-        _messageCtrl.add(msg);
-      } else if (type == 'typing') {
-        _typingCtrl.add({
-          'conversation_id': data['conversation_id'],
-          'user_id': data['user_id'],
-        });
-      } else if (type == 'react') {
-        // Build typed reactions map
-        final rawReactions = data['reactions'] as Map<String, dynamic>? ?? {};
-        final Map<String, List<String>> reactions = {};
-        rawReactions.forEach((emoji, users) {
-          reactions[emoji] = List<String>.from(users as List);
-        });
-        _reactionCtrl.add({
-          'message_id':      data['message_id'] as String,
-          'conversation_id': data['conversation_id'] as String,
-          'reactions':       reactions,
-        });
-      } else if (type == 'notification') {
-        _notificationCtrl.add(data['notification'] as Map<String, dynamic>);
+      switch (type) {
+        case 'message':
+          var msg = ChatMessage.fromJson(data['message'] as Map<String, dynamic>);
+          msg = decryptMessage(msg);
+          _messageCtrl.add(msg);
+
+        case 'typing':
+          _typingCtrl.add({
+            'conversation_id': data['conversation_id'],
+            'user_id': data['user_id'],
+          });
+
+        case 'react':
+          final rawReactions = data['reactions'] as Map<String, dynamic>? ?? {};
+          final Map<String, List<String>> reactions = {};
+          rawReactions.forEach((emoji, users) {
+            reactions[emoji] = List<String>.from(users as List);
+          });
+          _reactionCtrl.add({
+            'message_id':      data['message_id'] as String,
+            'conversation_id': data['conversation_id'] as String,
+            'reactions':       reactions,
+          });
+
+        case 'notification':
+          _notificationCtrl.add(data['notification'] as Map<String, dynamic>);
+
+        // ── Call signaling ──────────────────────────────────
+        case 'call_invite':
+        case 'call_accept':
+        case 'call_reject':
+        case 'call_end':
+          _callCtrl.add(Map<String, dynamic>.from(data));
       }
     } catch (e) {
       developer.log('[ChatService] WS parse error: $e');
@@ -133,7 +143,7 @@ class ChatService {
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
     final delay = _reconnectDelay;
-    _reconnectDelay = (_reconnectDelay * 2).clamp(1, 16); // max 16s
+    _reconnectDelay = (_reconnectDelay * 2).clamp(1, 16);
     developer.log('[ChatService] Reconnecting in ${delay}s…');
     _reconnectTimer = Timer(Duration(seconds: delay), connectWebSocket);
   }
@@ -141,9 +151,52 @@ class ChatService {
   void disconnectWebSocket() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    _reconnectDelay = 1; // reset backoff so next connect starts fast
+    _reconnectDelay = 1;
     _channel?.sink.close();
     _channel = null;
+  }
+
+  // ── Call Signaling ───────────────────────────────────────────
+
+  /// Caller sends this to invite callee.
+  bool sendCallInvite({
+    required String calleeId,
+    required String channelName,
+    required String callType,   // 'voice' | 'video'
+    required String callerName,
+  }) {
+    if (_channel == null) {
+      developer.log('[ChatService] sendCallInvite: WS not connected');
+      return false;
+    }
+    _channel!.sink.add(jsonEncode({
+      'type':         'call_invite',
+      'callee_id':    calleeId,
+      'channel_name': channelName,
+      'call_type':    callType,
+      'caller_name':  callerName,
+    }));
+    developer.log('[ChatService] call_invite sent → $calleeId ($callType)');
+    return true;
+  }
+
+  /// Send call_accept / call_reject / call_end to the other party.
+  bool sendCallSignal({
+    required String signalType,   // 'call_accept' | 'call_reject' | 'call_end'
+    required String targetId,
+    required String channelName,
+  }) {
+    if (_channel == null) {
+      developer.log('[ChatService] sendCallSignal: WS not connected');
+      return false;
+    }
+    _channel!.sink.add(jsonEncode({
+      'type':         signalType,
+      'target_id':    targetId,
+      'channel_name': channelName,
+    }));
+    developer.log('[ChatService] $signalType sent → $targetId');
+    return true;
   }
 
   // ── Send helpers ─────────────────────────────────────────────
@@ -164,25 +217,17 @@ class ChatService {
     try {
       await _ensureKeysLoaded();
 
-      // 1. Generate a random AES symmetric key
-      final aesKey = CryptographyService().generateRandomAESKey();
-
-      // 2. Encrypt the plaintext text with the AES key
+      final aesKey        = CryptographyService().generateRandomAESKey();
       final encryptedText = CryptographyService().encryptAES(text, aesKey);
 
-      // 3. Encrypt the AES key with each participant's public key
       final Map<String, String> encryptedAesKeys = {};
       for (final p in participants) {
         if (p.publicKey != null && p.publicKey!.isNotEmpty) {
-          final encKey = CryptographyService().encryptAESKeyWithRSA(aesKey, p.publicKey!);
-          encryptedAesKeys[p.id] = encKey;
-        } else {
-          developer.log('[ChatService] Warning: participant ${p.username} has no public key');
+          encryptedAesKeys[p.id] =
+              CryptographyService().encryptAESKeyWithRSA(aesKey, p.publicKey!);
         }
       }
 
-      // Conversations opened from search can omit my own public key from the
-      // lightweight participant object. Add it so sender echoes/history decrypt.
       if (_myUserId != null &&
           _localPublicKey != null &&
           _localPublicKey!.isNotEmpty &&
@@ -191,14 +236,13 @@ class ChatService {
             CryptographyService().encryptAESKeyWithRSA(aesKey, _localPublicKey!);
       }
 
-      // 4. Send the payload over WebSocket
       _channel!.sink.add(jsonEncode({
-        'type': 'message',
-        'conversation_id': conversationId,
-        'text': encryptedText,
-        'client_created_at': (createdAt ?? DateTime.now()).toUtc().toIso8601String(),
+        'type':               'message',
+        'conversation_id':    conversationId,
+        'text':               encryptedText,
+        'client_created_at':  (createdAt ?? DateTime.now()).toUtc().toIso8601String(),
         'encrypted_aes_keys': encryptedAesKeys,
-        if (replyToId != null) 'reply_to_id': replyToId,
+        if (replyToId != null)   'reply_to_id':   replyToId,
         if (replyToText != null) 'reply_to_text': replyToText,
       }));
     } catch (e) {
@@ -206,7 +250,6 @@ class ChatService {
     }
   }
 
-  /// Send a reaction toggle over WebSocket.
   void sendReaction(String conversationId, String messageId, String emoji) {
     if (_channel == null) return;
     _channel!.sink.add(jsonEncode({
@@ -217,7 +260,6 @@ class ChatService {
     }));
   }
 
-  /// Throttled — sends at most 1 typing event per 2 seconds.
   void sendTyping(String conversationId) {
     if (_channel == null) return;
     final now = DateTime.now();
@@ -225,7 +267,7 @@ class ChatService {
         now.difference(_lastTypingSent!).inSeconds < 2) return;
     _lastTypingSent = now;
     _channel!.sink.add(jsonEncode({
-      'type': 'typing',
+      'type':            'typing',
       'conversation_id': conversationId,
     }));
   }
@@ -233,18 +275,13 @@ class ChatService {
   void markAsRead(String conversationId) {
     if (_channel == null) return;
     _channel!.sink.add(jsonEncode({
-      'type': 'read',
+      'type':            'read',
       'conversation_id': conversationId,
     }));
   }
 
   // ── REST endpoints ───────────────────────────────────────────
 
-  /// BUG FIX: Removed the broken ApiService.get() call that was at the top.
-  /// ApiService.get() casts the response to Map<String, dynamic>, but
-  /// /chat/conversations returns a JSON *array*. That cast always threw a
-  /// TypeError, and the correct http.get below it NEVER ran.
-  /// Result: chat list was always empty, and _startChat always failed.
   Future<List<ChatConversation>> getConversations() async {
     final token = await ApiService.getToken();
     final res = await http.get(
@@ -260,7 +297,8 @@ class ChatService {
       await _ensureKeysLoaded();
       return data.map((e) {
         final conv = ChatConversation.fromJson(e as Map<String, dynamic>);
-        final decryptedText = decryptLastMessage(conv.lastMessage, conv.lastMessageEncryptedAesKeys);
+        final decryptedText = decryptLastMessage(
+            conv.lastMessage, conv.lastMessageEncryptedAesKeys);
         return ChatConversation(
           id: conv.id,
           participants: conv.participants,
@@ -306,7 +344,7 @@ class ChatService {
     }
   }
 
-  // ── Cryptography and Key Cache Helpers ───────────────────────────
+  // ── Cryptography helpers ─────────────────────────────────────
 
   Future<void> _ensureKeysLoaded() async {
     if (_myUserId == null) {
@@ -321,38 +359,28 @@ class ChatService {
   }
 
   ChatMessage decryptMessage(ChatMessage msg) {
-    if (msg.encryptedAesKeys.isEmpty) {
-      return msg;
-    }
+    if (msg.encryptedAesKeys.isEmpty) return msg;
 
     final myId = _myUserId;
     final myPrivKey = _localPrivateKey;
 
     if (myId == null || myPrivKey == null) {
-      developer.log('[ChatService] Cannot decrypt message: user ID or local private key is null');
       return _hiddenEncryptedMessage(msg);
     }
 
     final encAesKey = msg.encryptedAesKeys[myId];
     if (encAesKey == null) {
-      developer.log('[ChatService] Cannot decrypt message: no encrypted AES key found for current user $myId');
       return _hiddenEncryptedMessage(msg);
     }
 
     try {
-      final aesKey = CryptographyService().decryptAESKeyWithRSA(encAesKey, myPrivKey);
+      final aesKey   = CryptographyService().decryptAESKeyWithRSA(encAesKey, myPrivKey);
       final plainText = CryptographyService().decryptAES(msg.text, aesKey);
       return ChatMessage(
-        id: msg.id,
-        conversationId: msg.conversationId,
-        senderId: msg.senderId,
-        text: plainText,
-        createdAt: msg.createdAt,
-        readBy: msg.readBy,
-        encryptedAesKeys: msg.encryptedAesKeys,
-        reactions: msg.reactions,
-        replyToId: msg.replyToId,
-        replyToText: msg.replyToText,
+        id: msg.id, conversationId: msg.conversationId, senderId: msg.senderId,
+        text: plainText, createdAt: msg.createdAt, readBy: msg.readBy,
+        encryptedAesKeys: msg.encryptedAesKeys, reactions: msg.reactions,
+        replyToId: msg.replyToId, replyToText: msg.replyToText,
       );
     } catch (e) {
       developer.log('[ChatService] Decryption error: $e');
@@ -365,45 +393,29 @@ class ChatService {
     for (var i = 0; i < data.length; i++) {
       final msg = ChatMessage.fromJson(data[i] as Map<String, dynamic>);
       messages.add(decryptMessage(msg));
-      // yield every 10 messages to keep UI responsive without too much overhead
-      if (i % 10 == 9) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      if (i % 10 == 9) await Future<void>.delayed(Duration.zero);
     }
     return messages;
   }
 
-  ChatMessage _hiddenEncryptedMessage(ChatMessage msg) {
-    return ChatMessage(
-      id: msg.id,
-      conversationId: msg.conversationId,
-      senderId: msg.senderId,
-      text: '',
-      createdAt: msg.createdAt,
-      readBy: msg.readBy,
-      encryptedAesKeys: msg.encryptedAesKeys,
-      reactions: msg.reactions,
-      replyToId: msg.replyToId,
-      replyToText: msg.replyToText,
-    );
-  }
+  ChatMessage _hiddenEncryptedMessage(ChatMessage msg) => ChatMessage(
+    id: msg.id, conversationId: msg.conversationId, senderId: msg.senderId,
+    text: '', createdAt: msg.createdAt, readBy: msg.readBy,
+    encryptedAesKeys: msg.encryptedAesKeys, reactions: msg.reactions,
+    replyToId: msg.replyToId, replyToText: msg.replyToText,
+  );
 
-  String? decryptLastMessage(String? lastMessage, Map<String, String> encryptedAesKeys) {
+  String? decryptLastMessage(
+      String? lastMessage, Map<String, String> encryptedAesKeys) {
     if (lastMessage == null || lastMessage.isEmpty || encryptedAesKeys.isEmpty) {
       return lastMessage;
     }
-
     final myId = _myUserId;
     final myPrivKey = _localPrivateKey;
-
-    if (myId == null || myPrivKey == null) {
-      return '🔒 [Encrypted Message]';
-    }
+    if (myId == null || myPrivKey == null) return '🔒 [Encrypted Message]';
 
     final encAesKey = encryptedAesKeys[myId];
-    if (encAesKey == null) {
-      return '🔒 [Encrypted Message]';
-    }
+    if (encAesKey == null) return '🔒 [Encrypted Message]';
 
     try {
       final aesKey = CryptographyService().decryptAESKeyWithRSA(encAesKey, myPrivKey);

@@ -20,6 +20,9 @@ import '../profile_screen.dart';
 import '../user_profile_screen.dart' as user_profile;
 import '../chat_list_screen.dart';
 import '../create_post_screens.dart';
+import '../story_upload_screen.dart';
+import '../story_view_screen.dart';
+import '../../services/story_service.dart';
 import '../comments_screen.dart';
 import '../liked_by_screen.dart';
 import '../../services/cryptography_service.dart';
@@ -36,27 +39,6 @@ const double _kItemH    = 54.0;
 const double _kNavGap   = 6.0;
 const double _kIconSize = 20.0; // message icon — minor size reduction
 
-// ─── Story data ───────────────────────────────────────
-class _StoryData {
-  final String name, initials;
-  final Color  avatarColor;
-  final bool   seen, isOwn;
-  const _StoryData({
-    required this.name, required this.initials, required this.avatarColor,
-    this.seen = false, this.isOwn = false,
-  });
-}
-
-const _kStories = <_StoryData>[
-  _StoryData(name: 'Your Story', initials: '+',  avatarColor: Color(0xFF3A3A3E), isOwn: true),
-  _StoryData(name: 'Arjun',      initials: 'AK', avatarColor: Color(0xFF2D3561)),
-  _StoryData(name: 'Priya',      initials: 'PS', avatarColor: Color(0xFF1B4332)),
-  _StoryData(name: 'Rohan',      initials: 'RV', avatarColor: Color(0xFF3D0C11)),
-  _StoryData(name: 'Sneha',      initials: 'SN', avatarColor: Color(0xFF2C2C54)),
-  _StoryData(name: 'Dev',        initials: 'DM', avatarColor: Color(0xFF1A1A2E)),
-  _StoryData(name: 'Kavya',      initials: 'KR', avatarColor: Color(0xFF2D132C)),
-  _StoryData(name: 'Nikhil',     initials: 'NK', avatarColor: Color(0xFF0D3349), seen: true),
-];
 
 
 // ═════════════════════════════════════════════════════
@@ -93,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen>
   StreamSubscription? _wsNotifSub;
   StreamSubscription? _callSub;
   String? _myUserId;
+  bool _incomingCallOpen = false;
 
   // ── Feed state ────────────────────────────────────
   final List<PostModel> _posts       = [];
@@ -135,9 +118,8 @@ class _HomeScreenState extends State<HomeScreen>
       _loadUnreadNotifCount();
       ChatService().connectWebSocket();
       _listenForNewNotifications();
-      _listenForIncomingCalls();
+      _loadMyUserId().then((_) => _listenForIncomingCalls());
       _loadFeed();
-      _loadMyUserId();
     });
   }
 
@@ -158,12 +140,18 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _listenForIncomingCalls() {
+    if (_callSub != null) return;
     _callSub = ChatService().callStream.listen((data) {
       final type = data['type'] as String?;
       if (type != 'call_invite') return;
       if (!mounted) return;
+      if (_incomingCallOpen) return;
       final isDark   = Theme.of(context).brightness == Brightness.dark;
       final myId     = _myUserId ?? '';
+      final callerId = (data['caller_id'] as String?) ?? '';
+      final channelName = (data['channel_name'] as String?) ?? '';
+      if (myId.isEmpty || callerId.isEmpty || channelName.isEmpty) return;
+      _incomingCallOpen = true;
       Navigator.of(context, rootNavigator: true).push(
         PageRouteBuilder(
           pageBuilder: (_, anim, __) => FadeTransition(
@@ -171,8 +159,8 @@ class _HomeScreenState extends State<HomeScreen>
             child: IncomingCallScreen(
               dark:        isDark,
               callerName:  (data['caller_name'] as String?) ?? 'Unknown',
-              callerId:    (data['caller_id']   as String?) ?? '',
-              channelName: (data['channel_name'] as String?) ?? '',
+              callerId:    callerId,
+              channelName: channelName,
               callType:    (data['call_type']   as String?) ?? 'voice',
               myUserId:    myId,
             ),
@@ -180,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen>
           transitionDuration: const Duration(milliseconds: 400),
           opaque: false,
         ),
-      );
+      ).whenComplete(() => _incomingCallOpen = false);
     });
   }
 
@@ -1572,66 +1560,260 @@ class _BreakdownSection extends StatelessWidget {
   }
 }
 
-class _StorySection extends StatelessWidget {
+// ═══════════════════════════════════════════════════════
+//  STORY SECTION — real data from API
+// ═══════════════════════════════════════════════════════
+
+class _StorySection extends StatefulWidget {
   final bool isDark;
   const _StorySection({required this.isDark});
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 110,
-    child: ListView.builder(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      physics: const BouncingScrollPhysics(),
-      itemCount: _kStories.length,
-      itemBuilder: (_, i) => Padding(
-        padding: const EdgeInsets.only(right: 14),
-        child: _StoryBubble(story: _kStories[i], isDark: isDark)),
-    ),
-  );
+  State<_StorySection> createState() => _StorySectionState();
 }
 
+class _StorySectionState extends State<_StorySection> {
+  List<StoryUserGroup>? _groups;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final groups = await StoryService.instance.getFeed();
+      if (mounted) setState(() { _groups = groups; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _groups = []; _loading = false; });
+    }
+  }
+
+  Future<void> _openUpload() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const StoryUploadScreen()),
+    );
+    if (created == true) _load();
+  }
+
+  Future<void> _openView(int groupIdx) async {
+    if (_groups == null || _groups!.isEmpty) return;
+    await Navigator.push<void>(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => StoryViewScreen(
+          groups: _groups!,
+          initialGroupIndex: groupIdx,
+        ),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 200),
+      ),
+    );
+    _load(); // refresh seen state after viewing
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups   = _groups ?? [];
+    final ownGroup = groups.firstWhere(
+      (g) => g.isOwn, orElse: () => const StoryUserGroup(
+        userId: '', userName: '', userUsername: '',
+        isOwn: true, allSeen: false, stories: [],
+      ),
+    );
+    final hasOwn   = groups.any((g) => g.isOwn);
+    final others   = groups.where((g) => !g.isOwn).toList();
+
+    // Total items = 1 (own/add) + others
+    final total = _loading ? 6 : 1 + others.length;
+
+    return SizedBox(
+      height: 110,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding:  const EdgeInsets.symmetric(horizontal: 14),
+        physics:  const BouncingScrollPhysics(),
+        itemCount: total,
+        itemBuilder: (_, i) {
+          if (_loading) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: _ShimmerBubble(isDark: widget.isDark),
+            );
+          }
+          if (i == 0) {
+            // "Your Story" bubble
+            return Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: hasOwn
+                  ? _StoryBubble(
+                      name:     'Your Story',
+                      picture:  ownGroup.userPicture,
+                      initials: ownGroup.userName.isNotEmpty
+                          ? ownGroup.userName[0].toUpperCase() : 'Y',
+                      isOwn:    true,
+                      hasStory: true,
+                      seen:     false,
+                      isDark:   widget.isDark,
+                      onTap:    () => _openView(groups.indexOf(ownGroup)),
+                    )
+                  : _StoryBubble(
+                      name:     'Your Story',
+                      picture:  null,
+                      initials: '+',
+                      isOwn:    true,
+                      hasStory: false,
+                      seen:     false,
+                      isDark:   widget.isDark,
+                      onTap:    _openUpload,
+                    ),
+            );
+          }
+          final g = others[i - 1];
+          return Padding(
+            padding: const EdgeInsets.only(right: 14),
+            child: _StoryBubble(
+              name:     g.userName,
+              picture:  g.userPicture,
+              initials: g.userName.isNotEmpty
+                  ? g.userName[0].toUpperCase() : '?',
+              isOwn:    false,
+              hasStory: g.hasStories,
+              seen:     g.allSeen,
+              isDark:   widget.isDark,
+              onTap:    () => _openView(groups.indexOf(g)),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Shimmer loading bubble ──────────────────────────────
+class _ShimmerBubble extends StatelessWidget {
+  final bool isDark;
+  const _ShimmerBubble({required this.isDark});
+  @override
+  Widget build(BuildContext context) {
+    final c = (isDark ? Colors.white : Colors.black).withOpacity(0.07);
+    return SizedBox(width: 70, child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 70, height: 70,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: c)),
+      const SizedBox(height: 6),
+      Container(width: 44, height: 8,
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: c)),
+    ]));
+  }
+}
+
+// ── Story bubble ────────────────────────────────────────
 class _StoryBubble extends StatelessWidget {
-  final _StoryData story;
-  final bool       isDark;
-  const _StoryBubble({required this.story, required this.isDark});
+  final String        name;
+  final String?       picture;
+  final String        initials;
+  final bool          isOwn;
+  final bool          hasStory;
+  final bool          seen;
+  final bool          isDark;
+  final VoidCallback  onTap;
+
+  const _StoryBubble({
+    required this.name,
+    this.picture,
+    required this.initials,
+    required this.isOwn,
+    required this.hasStory,
+    required this.seen,
+    required this.isDark,
+    required this.onTap,
+  });
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => HapticFeedback.lightImpact(),
-      child: SizedBox(width: 70,
+      onTap: () { HapticFeedback.lightImpact(); onTap(); },
+      child: SizedBox(
+        width: 70,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           SizedBox(width: 70, height: 70,
             child: CustomPaint(
+              // Dashed ring: own bubble with no story.
+              // Gradient ring: own bubble with story, or others unseen.
+              // Faded ring: others seen.
               painter: _StoryRingPainter(
-                  isDark: isDark, seen: story.seen, isOwn: story.isOwn),
-              child: Padding(padding: const EdgeInsets.all(4.5),
+                isDark: isDark,
+                seen:   seen && !isOwn,
+                isOwn:  isOwn && !hasStory,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(4.5),
                 child: Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: story.avatarColor,
+                    color: isDark
+                        ? const Color(0xFF2A2A2E)
+                        : const Color(0xFFE5E5EA),
                     border: Border.all(
-                      color: isDark ? Colors.black.op(0.60)
-                                    : Colors.white.op(0.70),
-                      width: 2)),
-                  child: Center(child: story.isOwn
-                      ? CustomPaint(size: const Size(18, 18),
-                          painter: _PlusPainter(
-                              color: isDark ? Colors.white
-                                           : const Color(0xFF1A1A1A)))
-                      : Text(story.initials, style: const TextStyle(
-                          color: Colors.white, fontSize: 15,
-                          fontWeight: FontWeight.w600))),
-                )))),
+                      color: isDark
+                          ? Colors.black.op(0.60)
+                          : Colors.white.op(0.70),
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: picture != null
+                        ? CachedNetworkImage(
+                            imageUrl:    picture!,
+                            fit:         BoxFit.cover,
+                            errorWidget: (_, __, ___) =>
+                                _AvatarContent(initials: initials,
+                                    isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                          )
+                        : _AvatarContent(initials: initials,
+                            isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                  ),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(story.name.tr(context), maxLines: 1, overflow: TextOverflow.ellipsis,
+          Text(name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: (isDark ? Colors.white : Colors.black)
-                  .op(story.seen ? 0.38 : 0.80),
-              fontSize: 10.5, fontWeight: FontWeight.w500)),
-        ])),
+                  .op(seen && !isOwn ? 0.38 : 0.80),
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ]),
+      ),
     );
   }
+}
+
+class _AvatarContent extends StatelessWidget {
+  final String initials;
+  final bool   isOwnNoStory;
+  final bool   isDark;
+  const _AvatarContent({required this.initials, required this.isOwnNoStory, required this.isDark});
+  @override
+  Widget build(BuildContext context) => Center(
+    child: isOwnNoStory
+        ? CustomPaint(
+            size: const Size(18, 18),
+            painter: _PlusPainter(
+              color: isDark ? Colors.white : const Color(0xFF1A1A1A)))
+        : Text(initials, style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+            fontSize: 15, fontWeight: FontWeight.w700)),
+  );
 }
 
 class _StoryRingPainter extends CustomPainter {

@@ -39,16 +39,14 @@ class AgoraService {
 
   Future<String> _fetchToken(String channelName, {int uid = 0}) async {
     try {
+      final encodedChannel = Uri.encodeQueryComponent(channelName);
       final result = await ApiService.get(
-        '/agora/token?channel=$channelName&uid=$uid',
+        '/agora/token?channel=$encodedChannel&uid=$uid',
         requiresAuth: false,
         bypassCache: true,
       );
       final token = result['token'] as String? ?? '';
-      if (token.isEmpty) {
-        throw Exception('Server returned empty token. Check AGORA_APP_CERTIFICATE in Railway.');
-      }
-      developer.log('[Agora] Token OK len=${token.length}');
+      developer.log('[Agora] Token ${token.isEmpty ? 'disabled' : 'OK len=${token.length}'}');
       return token;
     } catch (e) {
       developer.log('[Agora] Token fetch failed: $e');
@@ -108,6 +106,11 @@ class AgoraService {
       },
       onTokenPrivilegeWillExpire: (RtcConnection conn, String token) {
         developer.log('[Agora] Token expiring soon');
+        final channel = conn.channelId ?? currentChannel;
+        if (channel == null) return;
+        _fetchToken(channel, uid: conn.localUid ?? 0)
+            .then(engine.renewToken)
+            .catchError((e) => developer.log('[Agora] Token renew failed: $e'));
       },
     ));
 

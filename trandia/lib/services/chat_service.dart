@@ -159,7 +159,7 @@ class ChatService {
   // ── Call Signaling ───────────────────────────────────────────
 
   /// Caller sends this to invite callee.
-  void sendCallInvite({
+  bool sendCallInvite({
     required String calleeId,
     required String channelName,
     required String callType,   // 'voice' | 'video'
@@ -167,7 +167,7 @@ class ChatService {
   }) {
     if (_channel == null) {
       developer.log('[ChatService] sendCallInvite: WS not connected');
-      return;
+      return false;
     }
     _channel!.sink.add(jsonEncode({
       'type':         'call_invite',
@@ -177,17 +177,18 @@ class ChatService {
       'caller_name':  callerName,
     }));
     developer.log('[ChatService] call_invite sent → $calleeId ($callType)');
+    return true;
   }
 
   /// Send call_accept / call_reject / call_end to the other party.
-  void sendCallSignal({
+  bool sendCallSignal({
     required String signalType,   // 'call_accept' | 'call_reject' | 'call_end'
     required String targetId,
     required String channelName,
   }) {
     if (_channel == null) {
       developer.log('[ChatService] sendCallSignal: WS not connected');
-      return;
+      return false;
     }
     _channel!.sink.add(jsonEncode({
       'type':         signalType,
@@ -195,6 +196,7 @@ class ChatService {
       'channel_name': channelName,
     }));
     developer.log('[ChatService] $signalType sent → $targetId');
+    return true;
   }
 
   // ── Send helpers ─────────────────────────────────────────────

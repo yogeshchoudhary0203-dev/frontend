@@ -59,6 +59,7 @@ class _ChatScreenState extends State<ChatScreen>
   List<ChatMessage> _messages = [];
   bool _isLoading = true;
   bool _hasError = false;
+  bool _isStartingCall = false;
   String? _typingUserId;
   Timer? _typingTimer;
   late StreamSubscription<ChatMessage> _messageSub;
@@ -538,16 +539,44 @@ class _ChatScreenState extends State<ChatScreen>
 
   // ── Agora Call Methods ─────────────────────────────────────────
   // Flow: send call_invite (callee sees IncomingCallScreen) → open call screen here ("Ringing…")
-  void _startVoiceCall() {
+  void _showCallStartError() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not start call. Check your connection.')),
+    );
+  }
+
+  Future<bool> _ensureCallSocketReady() async {
+    if (ChatService().isConnected) return true;
+    await ChatService().connectWebSocket();
+    return ChatService().isConnected;
+  }
+
+  Future<void> _startVoiceCall() async {
+    if (_isStartingCall) return;
     HapticFeedback.lightImpact();
+    setState(() => _isStartingCall = true);
     final otherUser   = widget.conversation.getOtherParticipant(widget.myUserId);
     final channelName = AgoraService.buildChannelName(widget.myUserId, otherUser.id);
-    ChatService().sendCallInvite(
+    final ready = await _ensureCallSocketReady();
+    if (!mounted) return;
+    if (!ready) {
+      setState(() => _isStartingCall = false);
+      _showCallStartError();
+      return;
+    }
+    final sent = ChatService().sendCallInvite(
       calleeId:    otherUser.id,
       channelName: channelName,
       callType:    'voice',
       callerName:  '',
     );
+    if (!sent) {
+      setState(() => _isStartingCall = false);
+      _showCallStartError();
+      return;
+    }
+    setState(() => _isStartingCall = false);
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, anim, __) => FadeTransition(
@@ -566,16 +595,31 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  void _startVideoCall() {
+  Future<void> _startVideoCall() async {
+    if (_isStartingCall) return;
     HapticFeedback.lightImpact();
+    setState(() => _isStartingCall = true);
     final otherUser   = widget.conversation.getOtherParticipant(widget.myUserId);
     final channelName = AgoraService.buildChannelName(widget.myUserId, otherUser.id);
-    ChatService().sendCallInvite(
+    final ready = await _ensureCallSocketReady();
+    if (!mounted) return;
+    if (!ready) {
+      setState(() => _isStartingCall = false);
+      _showCallStartError();
+      return;
+    }
+    final sent = ChatService().sendCallInvite(
       calleeId:    otherUser.id,
       channelName: channelName,
       callType:    'video',
       callerName:  '',
     );
+    if (!sent) {
+      setState(() => _isStartingCall = false);
+      _showCallStartError();
+      return;
+    }
+    setState(() => _isStartingCall = false);
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, anim, __) => FadeTransition(

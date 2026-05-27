@@ -715,8 +715,11 @@ class _SearchInputPillState extends State<_SearchInputPill> {
                   ),
                 )
               else
-                SizedBox(width: 32, height: 32,
-                  child: Icon(Icons.mic_none_rounded, size: 18, color: sub)),
+                GestureDetector(
+                  onTap: () {},
+                  child: SizedBox(width: 32, height: 32,
+                    child: Icon(Icons.mic_none_rounded, size: 18, color: sub)),
+                ),
             ]),
           ]),
         ),

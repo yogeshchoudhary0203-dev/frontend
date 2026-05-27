@@ -127,29 +127,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _openScreenSmoothly(BuildContext ctx, Widget screen) {
+    return Navigator.of(ctx).push(PageRouteBuilder(
+      pageBuilder: (_, animation, __) => screen,
+      transitionDuration: const Duration(milliseconds: 320),
+      reverseTransitionDuration: const Duration(milliseconds: 260),
+      transitionsBuilder: (_, animation, __, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.05),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    ));
+  }
+
   void _openEditProfile(BuildContext ctx) {
-    Navigator.of(ctx)
-        .push(PageRouteBuilder(
-          pageBuilder: (_, animation, __) =>
-              EditProfileScreen(dark: widget.dark),
-          transitionDuration: const Duration(milliseconds: 320),
-          reverseTransitionDuration: const Duration(milliseconds: 260),
-          transitionsBuilder: (_, animation, __, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-              reverseCurve: Curves.easeInCubic,
-            );
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.05),
-                end: Offset.zero,
-              ).animate(curved),
-              child: FadeTransition(opacity: curved, child: child),
-            );
-          },
-        ))
+    _openScreenSmoothly(ctx, EditProfileScreen(dark: widget.dark))
         .then((_) => _loadProfile());
+  }
+
+  void _openDummy(BuildContext ctx) {
+    Navigator.of(ctx).push(MaterialPageRoute(
+      builder: (context) => Scaffold(
+        backgroundColor: widget.dark ? GlassTokens.bgDark : GlassTokens.bgLight,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new_rounded, color: GlassTokens.fg(widget.dark)),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+      ),
+    ));
   }
 
   void _openAccountTypeSelector(BuildContext context) {
@@ -327,6 +345,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.lock_outline_rounded,
         title: 'Privacy',
         subtitle: 'Private account, mentions, tags',
+        onTap: () => _openDummy(ctx),
       ),
       _SearchItem(
         icon: Icons.workspace_premium_outlined,
@@ -354,15 +373,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.shield_outlined,
         title: 'Security',
         subtitle: 'Password and login activity',
+        onTap: () => _openDummy(ctx),
       ),
       _SearchItem(
         icon: Icons.notifications_none_rounded,
         title: 'Notifications',
         subtitle: 'Likes, follows and messages',
-        onTap: () => Navigator.push(
+        onTap: () => _openScreenSmoothly(
           ctx,
-          MaterialPageRoute(
-              builder: (_) => NotificationSettingsScreen(dark: dark)),
+          NotificationSettingsScreen(dark: dark),
         ).then((_) => _loadSettings()),
       ),
       _SearchItem(
@@ -406,25 +425,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.supervised_user_circle,
         title: 'Parental Control',
         subtitle: 'Screen time and content filters',
-        onTap: () => Navigator.push(
+        onTap: () => _openScreenSmoothly(
           ctx,
-          MaterialPageRoute(builder: (_) => ParentalControlScreen(dark: dark)),
+          ParentalControlScreen(dark: dark),
         ),
       ),
       _SearchItem(
         icon: Icons.bookmark_border_rounded,
         title: 'Saved',
         subtitle: 'Posts and collections',
+        onTap: () => _openDummy(ctx),
       ),
       _SearchItem(
         icon: Icons.archive_outlined,
         title: 'Archive',
         subtitle: 'Stories and hidden posts',
+        onTap: () => _openDummy(ctx),
       ),
       _SearchItem(
         icon: Icons.help_outline_rounded,
         title: 'Help',
         subtitle: 'Support and app info',
+        onTap: () => _openDummy(ctx),
       ),
     ];
   }
@@ -465,12 +487,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               size: 17,
                               weight: FontWeight.w800,
                               color: fg),
-                        ),
-                        const Spacer(),
-                        GlassCircleButton(
-                          dark: dark,
-                          icon: Icons.more_horiz_rounded,
-                          iconSize: 20,
                         ),
                       ],
                     ),
@@ -514,6 +530,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           dark: dark,
           children: [
             GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: () => _openEditProfile(context),
               child: _SettingRow(
                 dark: dark,
@@ -523,6 +540,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: () => _openAccountTypeSelector(context),
               child: _SettingRow(
                 dark: dark,
@@ -531,11 +549,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '${accountType.tr(context)} ${'Account'.tr(context)}',
               ),
             ),
-            _SettingRow(
-              dark: dark,
-              icon: Icons.lock_outline_rounded,
-              title: 'Privacy',
-              subtitle: 'Private account, mentions, tags',
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openDummy(context),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.lock_outline_rounded,
+                title: 'Privacy',
+                subtitle: 'Private account, mentions, tags',
+              ),
             ),
             _SwitchRow(
               dark: dark,
@@ -560,11 +582,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _saveSettingString('settings_account_type', accountType);
               },
             ),
-            _SettingRow(
-              dark: dark,
-              icon: Icons.shield_outlined,
-              title: 'Security',
-              subtitle: 'Password and login activity',
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openDummy(context),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.shield_outlined,
+                title: 'Security',
+                subtitle: 'Password and login activity',
+              ),
             ),
           ],
         ),
@@ -574,43 +600,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
           dark: dark,
           children: [
             // Notifications: master switch + chevron to sub-settings
-            _BaseRow(
-              dark: dark,
-              icon: Icons.notifications_none_rounded,
-              title: 'Notifications',
-              subtitle: 'Likes, follows and messages',
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Switch(
-                    value: notifications,
-                    onChanged: (v) {
-                      setState(() => notifications = v);
-                      _saveSetting('settings_notifications', v);
-                    },
-                    activeColor:
-                        dark ? const Color(0xFF0A0A0A) : Colors.white,
-                    activeTrackColor:
-                        dark ? Colors.white : const Color(0xFF0A0A0A),
-                    inactiveThumbColor:
-                        dark ? Colors.white70 : Colors.black54,
-                    inactiveTrackColor:
-                        dark ? Colors.white12 : Colors.black12,
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              NotificationSettingsScreen(dark: dark)),
-                    ).then((_) => _loadSettings()),
-                    child: Padding(
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openScreenSmoothly(
+                context,
+                NotificationSettingsScreen(dark: dark),
+              ).then((_) => _loadSettings()),
+              child: _BaseRow(
+                dark: dark,
+                icon: Icons.notifications_none_rounded,
+                title: 'Notifications',
+                subtitle: 'Likes, follows and messages',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Switch(
+                      value: notifications,
+                      onChanged: (v) {
+                        setState(() => notifications = v);
+                        _saveSetting('settings_notifications', v);
+                      },
+                      activeColor:
+                          dark ? const Color(0xFF0A0A0A) : Colors.white,
+                      activeTrackColor:
+                          dark ? Colors.white : const Color(0xFF0A0A0A),
+                      inactiveThumbColor:
+                          dark ? Colors.white70 : Colors.black54,
+                      inactiveTrackColor:
+                          dark ? Colors.white12 : Colors.black12,
+                    ),
+                    Padding(
                       padding: const EdgeInsets.only(left: 2),
                       child: Icon(Icons.chevron_right_rounded,
                           color: sub, size: 24),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             _SwitchRow(
@@ -671,10 +696,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         GestureDetector(
-          onTap: () => Navigator.push(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _openScreenSmoothly(
             context,
-            MaterialPageRoute(
-                builder: (_) => ParentalControlScreen(dark: dark)),
+            ParentalControlScreen(dark: dark),
           ),
           child: _BaseRow(
             dark: dark,
@@ -690,23 +715,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _SectionCard(
           dark: dark,
           children: [
-            _SettingRow(
-              dark: dark,
-              icon: Icons.bookmark_border_rounded,
-              title: 'Saved',
-              subtitle: 'Posts and collections',
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openDummy(context),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.bookmark_border_rounded,
+                title: 'Saved',
+                subtitle: 'Posts and collections',
+              ),
             ),
-            _SettingRow(
-              dark: dark,
-              icon: Icons.archive_outlined,
-              title: 'Archive',
-              subtitle: 'Stories and hidden posts',
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openDummy(context),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.archive_outlined,
+                title: 'Archive',
+                subtitle: 'Stories and hidden posts',
+              ),
             ),
-            _SettingRow(
-              dark: dark,
-              icon: Icons.help_outline_rounded,
-              title: 'Help',
-              subtitle: 'Support and app info',
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openDummy(context),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.help_outline_rounded,
+                title: 'Help',
+                subtitle: 'Support and app info',
+              ),
             ),
           ],
         ),

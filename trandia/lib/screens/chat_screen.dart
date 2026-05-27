@@ -15,9 +15,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_model.dart';
 import '../services/chat_service.dart';
 import '../services/fcm_service.dart';
+import '../services/agora_service.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/error_dialog.dart';
 import 'glass_common.dart';
+import 'call_screens.dart';
 import 'home/home_screen.dart';
 
 // ── Quick emoji choices ───────────────────────────────────────
@@ -534,6 +536,64 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
+  // ── Agora Call Methods ─────────────────────────────────────────
+  // Flow: send call_invite (callee sees IncomingCallScreen) → open call screen here ("Ringing…")
+  void _startVoiceCall() {
+    HapticFeedback.lightImpact();
+    final otherUser   = widget.conversation.getOtherParticipant(widget.myUserId);
+    final channelName = AgoraService.buildChannelName(widget.myUserId, otherUser.id);
+    ChatService().sendCallInvite(
+      calleeId:    otherUser.id,
+      channelName: channelName,
+      callType:    'voice',
+      callerName:  '',
+    );
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, anim, __) => FadeTransition(
+          opacity: anim,
+          child: VoiceCallScreen(
+            dark:           widget.dark,
+            channelName:    channelName,
+            remoteUserName: otherUser.username,
+            myUserId:       widget.myUserId,
+            remoteUserId:   otherUser.id,
+            isCallee:       false,
+          ),
+        ),
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
+  }
+
+  void _startVideoCall() {
+    HapticFeedback.lightImpact();
+    final otherUser   = widget.conversation.getOtherParticipant(widget.myUserId);
+    final channelName = AgoraService.buildChannelName(widget.myUserId, otherUser.id);
+    ChatService().sendCallInvite(
+      calleeId:    otherUser.id,
+      channelName: channelName,
+      callType:    'video',
+      callerName:  '',
+    );
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, anim, __) => FadeTransition(
+          opacity: anim,
+          child: VideoCallScreen(
+            dark:           widget.dark,
+            channelName:    channelName,
+            remoteUserName: otherUser.username,
+            myUserId:       widget.myUserId,
+            remoteUserId:   otherUser.id,
+            isCallee:       false,
+          ),
+        ),
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
+  }
+
   Future<void> _deleteConversation() async {
     final confirm = await showGlassConfirmDialog(
       context,
@@ -747,9 +807,15 @@ class _ChatScreenState extends State<ChatScreen>
                   ],
                 ),
               ),
-              GlassCircleButton(dark: widget.dark, icon: Icons.call_outlined, iconSize: 18),
+              GestureDetector(
+                onTap: () => _startVoiceCall(),
+                child: GlassCircleButton(dark: widget.dark, icon: Icons.call_outlined, iconSize: 18),
+              ),
               const SizedBox(width: 6),
-              GlassCircleButton(dark: widget.dark, icon: Icons.videocam_outlined, iconSize: 20),
+              GestureDetector(
+                onTap: () => _startVideoCall(),
+                child: GlassCircleButton(dark: widget.dark, icon: Icons.videocam_outlined, iconSize: 20),
+              ),
               const SizedBox(width: 6),
               GestureDetector(
                 onTap: _deleteConversation,

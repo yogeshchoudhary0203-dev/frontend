@@ -10,6 +10,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import '../../services/fcm_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/auth_service.dart';
+import '../call_screens.dart';
 import '../../services/post_service.dart';
 import '../../services/api_service.dart';
 import '../notifications_screen.dart';
@@ -23,6 +24,7 @@ import '../comments_screen.dart';
 import '../liked_by_screen.dart';
 import '../../services/cryptography_service.dart';
 import '../../l10n/app_localizations.dart';
+import '../../utils/share_helper.dart';
 
 extension _ColorOp on Color {
   Color op(double opacity) => withOpacity(opacity);
@@ -89,6 +91,8 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Real-time notification listeners ─────────────
   StreamSubscription? _fcmNotifSub;
   StreamSubscription? _wsNotifSub;
+  StreamSubscription? _callSub;
+  String? _myUserId;
 
   // ── Feed state ────────────────────────────────────
   final List<PostModel> _posts       = [];
@@ -131,7 +135,9 @@ class _HomeScreenState extends State<HomeScreen>
       _loadUnreadNotifCount();
       ChatService().connectWebSocket();
       _listenForNewNotifications();
+      _listenForIncomingCalls();
       _loadFeed();
+      _loadMyUserId();
     });
   }
 
@@ -142,7 +148,40 @@ class _HomeScreenState extends State<HomeScreen>
     _scrollCtrl.dispose();
     _fcmNotifSub?.cancel();
     _wsNotifSub?.cancel();
+    _callSub?.cancel();
     super.dispose();
+  }
+
+  // ── Incoming call listener ─────────────────────────
+  Future<void> _loadMyUserId() async {
+    _myUserId = await AuthService.getCurrentUserId();
+  }
+
+  void _listenForIncomingCalls() {
+    _callSub = ChatService().callStream.listen((data) {
+      final type = data['type'] as String?;
+      if (type != 'call_invite') return;
+      if (!mounted) return;
+      final isDark   = Theme.of(context).brightness == Brightness.dark;
+      final myId     = _myUserId ?? '';
+      Navigator.of(context, rootNavigator: true).push(
+        PageRouteBuilder(
+          pageBuilder: (_, anim, __) => FadeTransition(
+            opacity: anim,
+            child: IncomingCallScreen(
+              dark:        isDark,
+              callerName:  (data['caller_name'] as String?) ?? 'Unknown',
+              callerId:    (data['caller_id']   as String?) ?? '',
+              channelName: (data['channel_name'] as String?) ?? '',
+              callType:    (data['call_type']   as String?) ?? 'voice',
+              myUserId:    myId,
+            ),
+          ),
+          transitionDuration: const Duration(milliseconds: 400),
+          opaque: false,
+        ),
+      );
+    });
   }
 
   // ── Feed loading ──────────────────────────────────
@@ -152,7 +191,8 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() { _loadingFeed = true; _feedError = false; });
     try {
       final result = await PostService.instance.getFeed(
-        cursor: refresh ? null : _nextCursor,
+        cursor:  refresh ? null : _nextCursor,
+        refresh: refresh,
       );
       if (!mounted) return;
       setState(() {
@@ -559,7 +599,7 @@ class _HomeScreenState extends State<HomeScreen>
                   );
                 }
                 final post = _posts[postIdx];
-                return _PostCard(
+                return PostCard(
                   key: ValueKey(post.id),
                   post: post,
                   isDark: isDark,
@@ -1640,12 +1680,12 @@ class _StoryRingPainter extends CustomPainter {
 // ═════════════════════════════════════════════════════
 //  POST CARD
 // ═════════════════════════════════════════════════════
-class _PostCard extends StatefulWidget {
+class PostCard extends StatefulWidget {
   final PostModel   post;
   final bool        isDark;
   final VoidCallback onLike;
   final ValueChanged<PostModel>? onLearnWatched;
-  const _PostCard({
+  const PostCard({
     super.key,
     required this.post,
     required this.isDark,
@@ -1653,10 +1693,10 @@ class _PostCard extends StatefulWidget {
     this.onLearnWatched,
   });
   @override
-  State<_PostCard> createState() => _PostCardState();
+  State<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<_PostCard> {
+class _PostCardState extends State<PostCard> {
   bool _expanded = false;
 
   Color _avatarColor(String userId) {
@@ -1837,7 +1877,10 @@ class _PostCardState extends State<_PostCard> {
             const SizedBox(width: 16),
 
             GestureDetector(
-              onTap: () => HapticFeedback.lightImpact(),
+              onTap: () {
+                HapticFeedback.lightImpact();
+                ShareHelper.showShareBottomSheet(context, p);
+              },
               child: SizedBox(width: 26, height: 26,
                 child: Icon(Icons.near_me_rounded, size: 26, color: iconCol))),
 

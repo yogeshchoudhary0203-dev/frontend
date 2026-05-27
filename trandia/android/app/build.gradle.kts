@@ -43,12 +43,65 @@ android {
 
     buildTypes {
         release {
-            // TODO: Replace with a production keystore before Play Store upload.
-            // Using the debug key for sideloaded APKs is fine but the SHA-1 of
-            // the debug key must be added to the Firebase console under
-            // Project Settings → Your apps → Android app → SHA certificate
-            // fingerprints so Google Sign-In works in release builds.
+            // R8 code shrinking — removes unused Java/Kotlin classes from
+            // Firebase, Google Sign-In, and other SDKs. Saves 5-12 MB.
+            isMinifyEnabled = true
+            // Resource shrinking — removes unused Android drawable/layout XML.
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    // ── NOTE: ABI splits removed ─────────────────────────────────────────────
+    // The `splits { abi { ... } }` block conflicts with Flutter's internal
+    // ndk.abiFilters setting ("armeabi-v7a,arm64-v8a,x86_64").  Having both
+    // causes a Gradle build error.  Use `flutter build apk --split-per-abi`
+    // from the command line to get one APK per architecture instead.
+
+    // ── Exclude unused Agora extension .so files ─────────────────────────────
+    // agora_rtc_engine ships AI/analytics extensions we don't use in Trandia.
+    // Excluding them removes ~80-100 MB from the APK with zero feature loss.
+    // Keep: core RTC, audio codecs, video encoder/decoder (needed for calls).
+    packaging {
+        jniLibs {
+            excludes += setOf(
+                // AI audio (we don't use AI noise suppression or AI echo cancel)
+                "**/libagora_ai_noise_suppression_extension.so",
+                "**/libagora_ai_echo_cancellation_extension.so",
+
+                // Audio beauty / voice changer (not used)
+                "**/libagora_audio_beauty_extension.so",
+
+                // Video analytics (Agora's internal quality metrics, not needed)
+                "**/libagora_video_quality_analyzer_extension.so",
+
+                // Content inspection / AI moderation (not used)
+                "**/libagora_content_inspect_extension.so",
+
+                // Screen sharing (we don't share screen)
+                "**/libagora_screen_capture_extension.so",
+
+                // Virtual background (not used)
+                "**/libagora_virtual_background_extension.so",
+
+                // Face features (not used)
+                "**/libagora_face_detection_extension.so",
+                "**/libagora_face_capture_extension.so",
+                "**/libagora_lips_sync_extension.so",
+
+                // Spatial / 3D audio (not used)
+                "**/libagora_spatial_audio_extension.so",
+
+                // DRM (not streaming DRM content)
+                "**/libagora_drm_loader_extension.so",
+
+                // ARES (Agora AI super resolution — not needed for calls)
+                "**/libagora_ares_extension.so",
+            )
         }
     }
 }

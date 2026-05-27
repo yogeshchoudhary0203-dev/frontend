@@ -43,11 +43,15 @@ android {
 
     buildTypes {
         release {
-            // TODO: Replace with a production keystore before Play Store upload.
-            // Using the debug key for sideloaded APKs is fine but the SHA-1 of
-            // the debug key must be added to the Firebase console under
-            // Project Settings → Your apps → Android app → SHA certificate
-            // fingerprints so Google Sign-In works in release builds.
+            // R8 code shrinking — removes unused Java/Kotlin classes from
+            // Firebase, Google Sign-In, and other SDKs. Saves 5-12 MB.
+            isMinifyEnabled = true
+            // Resource shrinking — removes unused Android drawable/layout XML.
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("debug")
         }
     }

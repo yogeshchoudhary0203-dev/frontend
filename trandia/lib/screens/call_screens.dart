@@ -369,7 +369,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen>
       };
 
     try {
-      await _agora.joinVoiceCall(channelName: widget.channelName);
+      await _agora.joinVoiceCall(
+        channelName: widget.channelName,
+        uid: AgoraService.buildNumericUid(widget.myUserId),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -648,7 +651,10 @@ class _VideoCallScreenState extends State<VideoCallScreen>
       };
 
     try {
-      await _agora.joinVideoCall(channelName: widget.channelName);
+      await _agora.joinVideoCall(
+        channelName: widget.channelName,
+        uid: AgoraService.buildNumericUid(widget.myUserId),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -731,7 +737,10 @@ class _VideoCallScreenState extends State<VideoCallScreen>
       controller: VideoViewController.remote(
         rtcEngine: _agora.rtcEngine!,
         canvas:     VideoCanvas(uid: _remoteUid!),
-        connection: RtcConnection(channelId: widget.channelName),
+        connection: RtcConnection(
+          channelId: widget.channelName,
+          localUid:  AgoraService.buildNumericUid(widget.myUserId),
+        ),
       ),
     );
   }
@@ -763,122 +772,118 @@ class _VideoCallScreenState extends State<VideoCallScreen>
       backgroundColor: Colors.black,
       body: GestureDetector(
         onTap: _showControls,
-        child: AnimatedBuilder(
-          animation: Listenable.merge([_entranceCtrl, _controlsAnim]),
-          builder: (context, _) => FadeTransition(
-            opacity: _fadeIn,
-            child: Stack(children: [
-              // Remote video (full-screen)
-              Positioned.fill(child: _buildRemoteView()),
+        // Video views are OUTSIDE AnimatedBuilder — putting AgoraVideoView inside
+        // AnimatedBuilder caused a new VideoViewController on every animation frame,
+        // destroying the texture binding and showing a white screen.
+        child: Stack(children: [
+          Positioned.fill(child: _buildRemoteView()),
 
-              // Connecting overlay
-              if (!_remoteJoined)
-                Positioned.fill(
-                    child: _LiquidBackground(dark: true, wave: 0)),
+          if (!_remoteJoined)
+            Positioned.fill(child: _LiquidBackground(dark: true, wave: 0)),
 
-              // Local video (PiP)
-              Positioned(
-                top: topPad + 16, right: 16,
-                width: 110, height: 160,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Stack(children: [
-                    Positioned.fill(child: _buildLocalView()),
-                    // Border
-                    Positioned.fill(child: Container(
+          Positioned(
+            top: topPad + 16, right: 16,
+            width: 110, height: 160,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Stack(children: [
+                Positioned.fill(child: _buildLocalView()),
+                Positioned.fill(child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.25), width: 1.5)),
+                )),
+                Positioned(
+                  bottom: 8, right: 8,
+                  child: GestureDetector(
+                    onTap: _switchCamera,
+                    child: Container(
+                      width: 28, height: 28,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: Colors.white.withOpacity(0.25), width: 1.5)),
-                    )),
-                    // Flip camera
-                    Positioned(
-                      bottom: 8, right: 8,
-                      child: GestureDetector(
-                        onTap: _switchCamera,
-                        child: Container(
-                          width: 28, height: 28,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.black.withOpacity(0.5)),
-                          child: const Icon(Icons.flip_camera_ios_rounded,
-                              color: Colors.white, size: 16),
-                        ),
-                      ),
-                    ),
-                  ]),
-                ),
-              ),
-
-              // Top bar
-              FadeTransition(
-                opacity: _controlsFade,
-                child: Positioned(
-                  top: 0, left: 0, right: 0,
-                  child: Container(
-                    padding: EdgeInsets.fromLTRB(20, topPad + 12, 20, 20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.6), Colors.transparent
-                        ],
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(widget.remoteUserName,
-                            style: manrope(size: 18, weight: FontWeight.w800,
-                                color: Colors.white, letterSpacing: -0.3)),
-                        Text(
-                          _callState == CallState.connected
-                              ? _durationStr
-                              : widget.isCallee ? 'Connecting…' : 'Ringing…',
-                          style: manrope(size: 13, weight: FontWeight.w500,
-                              color: Colors.white.withOpacity(0.7)),
-                        ),
-                      ],
+                        shape: BoxShape.circle,
+                        color: Colors.black.withOpacity(0.5)),
+                      child: const Icon(Icons.flip_camera_ios_rounded,
+                          color: Colors.white, size: 16),
                     ),
                   ),
                 ),
-              ),
-
-              // Bottom controls
-              FadeTransition(
-                opacity: _controlsFade,
-                child: Positioned(
-                  bottom: 0, left: 0, right: 0,
-                  child: Container(
-                    padding: EdgeInsets.fromLTRB(24, 28, 24, botPad + 36),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.7), Colors.transparent
-                        ],
-                      ),
-                    ),
-                    child: _CallControls(
-                      dark:       true,
-                      isMuted:    _isMuted,
-                      isSpeakerOn: true,
-                      isCameraOff: _isCameraOff,
-                      isVideoCall: true,
-                      onMute:     _toggleMute,
-                      onSpeaker:  null,
-                      onCamera:   _toggleCamera,
-                      onEndCall:  _endCall,
-                    ),
-                  ),
-                ),
-              ),
-            ]),
+              ]),
+            ),
           ),
-        ),
+
+          // Only the controls overlay animates — video is untouched by animations
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: Listenable.merge([_entranceCtrl, _controlsAnim]),
+              builder: (context, _) => Stack(children: [
+                FadeTransition(
+                  opacity: _controlsFade,
+                  child: Positioned(
+                    top: 0, left: 0, right: 0,
+                    child: Container(
+                      padding: EdgeInsets.fromLTRB(20, topPad + 12, 20, 20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withOpacity(0.6), Colors.transparent
+                          ],
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(widget.remoteUserName,
+                              style: manrope(size: 18, weight: FontWeight.w800,
+                                  color: Colors.white, letterSpacing: -0.3)),
+                          Text(
+                            _callState == CallState.connected
+                                ? _durationStr
+                                : widget.isCallee ? 'Connecting…' : 'Ringing…',
+                            style: manrope(size: 13, weight: FontWeight.w500,
+                                color: Colors.white.withOpacity(0.7)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                FadeTransition(
+                  opacity: _controlsFade,
+                  child: Positioned(
+                    bottom: 0, left: 0, right: 0,
+                    child: Container(
+                      padding: EdgeInsets.fromLTRB(24, 28, 24, botPad + 36),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Colors.black.withOpacity(0.7), Colors.transparent
+                          ],
+                        ),
+                      ),
+                      child: _CallControls(
+                        dark:        true,
+                        isMuted:     _isMuted,
+                        isSpeakerOn: true,
+                        isCameraOff: _isCameraOff,
+                        isVideoCall: true,
+                        onMute:      _toggleMute,
+                        onSpeaker:   null,
+                        onCamera:    _toggleCamera,
+                        onEndCall:   _endCall,
+                      ),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ]),
       ),
     );
   }

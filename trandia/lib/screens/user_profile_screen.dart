@@ -64,13 +64,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<PostModel> _userPosts = [];
   bool _postsLoading = false;
 
+  // Post grid pagination
+  final _scrollCtrl = ScrollController();
+  String? _nextPostCursor;
+  bool _isLoadingMorePosts = false;
+
   @override
   void initState() {
     super.initState();
     _isFollowing = widget.initialFollowing;
+    _scrollCtrl.addListener(_onScroll);
     if (widget.userId.isNotEmpty) {
       _loadProfile();
       _loadPosts(widget.userId);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 300) {
+      _loadMorePosts();
     }
   }
 
@@ -86,17 +104,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadPosts(String userId) async {
     if (!mounted) return;
-    setState(() => _postsLoading = true);
+    setState(() { _postsLoading = true; _nextPostCursor = null; });
     try {
       final result = await PostService.instance.getUserPosts(userId);
       if (mounted) {
         setState(() {
           _userPosts = result.posts;
+          _nextPostCursor = result.nextCursor;
           _postsLoading = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _postsLoading = false);
+    }
+  }
+
+  Future<void> _loadMorePosts() async {
+    if (_isLoadingMorePosts || _nextPostCursor == null || widget.userId.isEmpty) return;
+    setState(() => _isLoadingMorePosts = true);
+    try {
+      final result = await PostService.instance.getUserPosts(
+        widget.userId,
+        cursor: _nextPostCursor,
+      );
+      if (mounted) {
+        setState(() {
+          _userPosts.addAll(result.posts);
+          _nextPostCursor = result.nextCursor;
+          _isLoadingMorePosts = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMorePosts = false);
     }
   }
 
@@ -215,6 +254,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             // Scrollable content ───────────────────────────────────────
             SafeArea(
               child: SingleChildScrollView(
+                controller: _scrollCtrl,
                 physics: const ClampingScrollPhysics(),
                 padding: const EdgeInsets.only(top: 56, bottom: 24),
                 child: Column(
@@ -296,6 +336,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         t: t,
                         posts: _userPosts,
                         isLoading: _postsLoading,
+                        isLoadingMore: _isLoadingMorePosts,
                       ),
                     ),
                   ],
@@ -1190,10 +1231,12 @@ class _PostsSection extends StatelessWidget {
     required this.t,
     required this.posts,
     required this.isLoading,
+    this.isLoadingMore = false,
   });
   final _GlassTheme t;
   final List<PostModel> posts;
   final bool isLoading;
+  final bool isLoadingMore;
 
   @override
   Widget build(BuildContext context) {
@@ -1246,7 +1289,7 @@ class _PostsSection extends StatelessWidget {
                   ],
                 ),
               ),
-              _PostsGrid(t: t, posts: posts, isLoading: isLoading),
+              _PostsGrid(t: t, posts: posts, isLoading: isLoading, isLoadingMore: isLoadingMore),
             ],
           ),
         ),
@@ -1260,10 +1303,12 @@ class _PostsGrid extends StatelessWidget {
     required this.t,
     required this.posts,
     required this.isLoading,
+    this.isLoadingMore = false,
   });
   final _GlassTheme t;
   final List<PostModel> posts;
   final bool isLoading;
+  final bool isLoadingMore;
 
   @override
   Widget build(BuildContext context) {
@@ -1293,17 +1338,35 @@ class _PostsGrid extends StatelessWidget {
         ),
       );
     }
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: posts.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        mainAxisSpacing: 6,
-        crossAxisSpacing: 6,
-        childAspectRatio: 1,
-      ),
-      itemBuilder: (_, i) => _PostTile(t: t, post: posts[i], i: i),
+    return Column(
+      children: [
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: posts.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            childAspectRatio: 1,
+          ),
+          itemBuilder: (_, i) => _PostTile(t: t, post: posts[i], i: i),
+        ),
+        if (isLoadingMore)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(t.fg),
+                  strokeWidth: 2,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -738,17 +738,28 @@ class _HomeScreenState extends State<HomeScreen>
         ]),
       ),
     );
-    if (secondaryAnim == null) return scaffold;
-    return AnimatedBuilder(
-      animation: secondaryAnim,
-      builder: (_, child) {
-        final t = Curves.easeInOutCubic.transform(secondaryAnim.value);
-        return FractionalTranslation(
-          translation: Offset(-0.25 * t, 0),
-          child: child,
-        );
+    final mainWidget = secondaryAnim == null
+        ? scaffold
+        : AnimatedBuilder(
+            animation: secondaryAnim,
+            builder: (_, child) {
+              final t = Curves.easeInOutCubic.transform(secondaryAnim.value);
+              return FractionalTranslation(
+                translation: Offset(-0.25 * t, 0),
+                child: child,
+              );
+            },
+            child: scaffold,
+          );
+
+    return PopScope(
+      canPop: !_islandOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _islandOpen) {
+          _closeIsland();
+        }
       },
-      child: scaffold,
+      child: mainWidget,
     );
   }
 }
@@ -2972,7 +2983,14 @@ class _IslandNotificationOverlayState
           top   : top,
           width : right - left,
           height: bottom - top,
-          child : Opacity(
+          child : PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) {
+                widget.onClose();
+              }
+            },
+            child: Opacity(
             opacity: dragAlpha,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(borderR),
@@ -3030,6 +3048,7 @@ class _IslandNotificationOverlayState
                   ),
                 ),
               ),
+            ),
             ),
           ),
         );

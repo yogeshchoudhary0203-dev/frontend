@@ -22,9 +22,11 @@ import 'package:image_picker/image_picker.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/post_service.dart';
+import '../services/user_service.dart';
 import 'glass_common.dart';
 import 'comments_screen.dart';
 import 'create_post_screens.dart';
+import 'user_profile_screen.dart' as user_profile;
 import '../utils/share_helper.dart';
 
 // ───────────────────────────────────────────────────────────────
@@ -103,6 +105,7 @@ class _ShotsScreenState extends State<ShotsScreen>
   final Map<int, bool> _liked       = {};
   final Map<int, bool> _saved       = {};
   final Map<int, int>  _likesDelta  = {}; // +1 / -1 per optimistic like
+  final Map<String, bool> _followedUsers = {};
   bool _expanded = false;
 
   // ── Learn-feed nudge counter ──────────────────────────────────
@@ -205,6 +208,47 @@ class _ShotsScreenState extends State<ShotsScreen>
         setState(() {
           _liked[idx]      = wasLiked;
           _likesDelta[idx] = (_likesDelta[idx] ?? 0) + (wasLiked ? 1 : -1);
+        });
+      }
+    }
+  }
+
+  // ── Follow / Unfollow (real API + optimistic UI) ─────────────
+
+  Future<void> _onFollowTap(PostModel post) async {
+    final targetId = post.userId;
+    if (targetId.isEmpty) return;
+
+    final wasFollowing = _followedUsers[targetId] ?? false;
+    final nowFollowing = !wasFollowing;
+
+    HapticFeedback.mediumImpact();
+
+    // Optimistically update
+    setState(() {
+      _followedUsers[targetId] = nowFollowing;
+    });
+
+    try {
+      bool success = false;
+      if (nowFollowing) {
+        success = await UserService.followUser(targetId);
+      } else {
+        success = await UserService.unfollowUser(targetId);
+      }
+      if (!success) {
+        // Revert on failure
+        if (mounted) {
+          setState(() {
+            _followedUsers[targetId] = wasFollowing;
+          });
+        }
+      }
+    } catch (_) {
+      // Revert on exception
+      if (mounted) {
+        setState(() {
+          _followedUsers[targetId] = wasFollowing;
         });
       }
     }
@@ -553,8 +597,11 @@ class _ShotsScreenState extends State<ShotsScreen>
             left: 16, right: 78, bottom: 32,
             child: _CaptionBlock(
               data:            curData,
+              post:            _posts[_curIdx],
               expanded:        _expanded,
               onToggleExpand:  () => setState(() => _expanded = !_expanded),
+              followed:        _followedUsers[_posts[_curIdx].userId] ?? false,
+              onFollowTap:     () => _onFollowTap(_posts[_curIdx]),
             ),
           ),
       ]),
@@ -1103,10 +1150,20 @@ class _RightRail extends StatelessWidget {
 
 class _CaptionBlock extends StatelessWidget {
   final ShotData data;
+  final PostModel post;
   final bool     expanded;
   final VoidCallback onToggleExpand;
+  final bool     followed;
+  final VoidCallback onFollowTap;
+
   const _CaptionBlock({
-    required this.data, required this.expanded, required this.onToggleExpand});
+    required this.data,
+    required this.post,
+    required this.expanded,
+    required this.onToggleExpand,
+    required this.followed,
+    required this.onFollowTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1118,41 +1175,61 @@ class _CaptionBlock extends StatelessWidget {
       mainAxisSize:        MainAxisSize.min,
       children: [
         Row(children: [
-          Container(
-            width: 34, height: 34,
-            padding: const EdgeInsets.all(1.5),
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle, color: Color(0xF2FFFFFF)),
-            child: Container(
-              decoration: BoxDecoration(
-                shape:    BoxShape.circle,
-                gradient: monoAvatar(true, data.avatarSeed),
-              ),
-              alignment: Alignment.center,
-              child: Text(initial,
-                style: manrope(size: 13, weight: FontWeight.w800,
-                    color: Colors.white, letterSpacing: -0.26)),
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => user_profile.ProfileScreen(
+                    userId: post.userId,
+                    username: post.userUsername.isNotEmpty ? post.userUsername : post.userName,
+                    displayName: post.userName,
+                  ),
+                ),
+              );
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 34, height: 34,
+                  padding: const EdgeInsets.all(1.5),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle, color: Color(0xF2FFFFFF)),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape:    BoxShape.circle,
+                      gradient: monoAvatar(true, data.avatarSeed),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(initial,
+                      style: manrope(size: 13, weight: FontWeight.w800,
+                          color: Colors.white, letterSpacing: -0.26)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text('@${data.user}',
+                  style: manrope(size: 14, weight: FontWeight.w700,
+                      color: Colors.white, letterSpacing: -0.14)
+                      .copyWith(shadows: [shadow])),
+              ],
             ),
           ),
           const SizedBox(width: 10),
-          Text('@${data.user}',
-            style: manrope(size: 14, weight: FontWeight.w700,
-                color: Colors.white, letterSpacing: -0.14)
-                .copyWith(shadows: [shadow])),
-          const SizedBox(width: 10),
           Material(
-            color:       Colors.white,
+            color:       followed ? Colors.white.withOpacity(0.2) : Colors.white,
             shape:       const StadiumBorder(),
             elevation:   2,
             shadowColor: const Color(0x40000000),
             child: InkWell(
-              onTap:        () {},
+              onTap:        onFollowTap,
               customBorder: const StadiumBorder(),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                child: Text('Follow'.tr(context),
+                child: Text(followed ? 'Following'.tr(context) : 'Follow'.tr(context),
                   style: manrope(size: 12, weight: FontWeight.w800,
-                      color: const Color(0xFF0A0A0A), letterSpacing: -0.06)),
+                      color: followed ? Colors.white : const Color(0xFF0A0A0A), letterSpacing: -0.06)),
               ),
             ),
           ),

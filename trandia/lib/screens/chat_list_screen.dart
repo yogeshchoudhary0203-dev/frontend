@@ -606,6 +606,10 @@ class _ChatRow extends StatelessWidget {
         // Reload to refresh unread counts after returning
         onReload();
       },
+      onLongPress: () {
+        HapticFeedback.heavyImpact();
+        _showChatOptions(context);
+      },
       child: GlassSurface(
         dark: dark,
         radius: 22,
@@ -690,6 +694,200 @@ class _ChatRow extends StatelessWidget {
           ),
         ]),
       ),
+    );
+  }
+
+  void _showChatOptions(BuildContext context) {
+    final fg = GlassTokens.fg(dark);
+    final sub = GlassTokens.sub(dark);
+    final otherUser = c.getOtherParticipant(myUserId);
+    final displayName = otherUser.username.isNotEmpty ? otherUser.username : otherUser.name;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.5),
+      isScrollControlled: true,
+      builder: (ctx) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: dark
+                    ? [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.05)]
+                    : [Colors.white.withOpacity(0.90), Colors.white.withOpacity(0.75)],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: dark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.95),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: dark ? Colors.black.withOpacity(0.6) : Colors.black.withOpacity(0.12),
+                  blurRadius: 32,
+                  offset: const Offset(0, 8),
+                  spreadRadius: -8,
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.only(top: 12),
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: dark ? Colors.white.withOpacity(0.20) : Colors.black.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // Chat name
+                  Text(
+                    displayName,
+                    style: manrope(
+                      size: 16,
+                      weight: FontWeight.w700,
+                      color: fg,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Choose an action',
+                    style: manrope(
+                      size: 12,
+                      weight: FontWeight.w500,
+                      color: sub,
+                      letterSpacing: -0.05,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Divider
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    height: 0.5,
+                    color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+                  ),
+                  // Options
+                  _buildOptionTile(ctx, Icons.lock_outline, 'Locked', 'Lock this chat', dark, fg, sub),
+                  _buildOptionDivider(dark),
+                  _buildOptionTile(ctx, Icons.archive_outlined, 'Archived', 'Archive this chat', dark, fg, sub),
+                  _buildOptionDivider(dark),
+                  _buildOptionTile(ctx, Icons.block_outlined, 'Blocked', 'Block this user', dark, fg, sub),
+                  _buildOptionDivider(dark),
+                  _buildOptionTile(ctx, Icons.cleaning_services_outlined, 'Chat Clean', 'Clear chat history', dark, fg, sub),
+                  const SizedBox(height: 8),
+                  // Cancel button
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                    child: GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        Navigator.of(ctx).pop();
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Cancel',
+                          style: manrope(
+                            size: 15,
+                            weight: FontWeight.w600,
+                            color: sub,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOptionTile(BuildContext ctx, IconData icon, String title, String subtitle, bool dark, Color fg, Color sub) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          Navigator.of(ctx).pop();
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(
+              content: Text(
+                '$title applied',
+                style: manrope(size: 13, weight: FontWeight.w600, color: Colors.white),
+              ),
+              backgroundColor: dark ? const Color(0xFF1A1A1C) : const Color(0xFF333333),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(0),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 20, color: fg),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: manrope(size: 14.5, weight: FontWeight.w700, color: fg, letterSpacing: -0.1),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      style: manrope(size: 12, weight: FontWeight.w500, color: sub, letterSpacing: -0.05),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, size: 20, color: sub),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptionDivider(bool dark) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      height: 0.5,
+      color: dark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05),
     );
   }
 

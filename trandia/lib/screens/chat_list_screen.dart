@@ -225,49 +225,6 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
               ),
             ),
 
-            const SizedBox(height: 12),
-
-            // Search bar (tappable, opens SearchScreen)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => SearchScreen(dark: widget.dark)),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                    child: Container(
-                      height: 42,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: widget.dark
-                            ? Colors.white.withOpacity(0.06)
-                            : Colors.white.withOpacity(0.6),
-                        border: Border.all(
-                            color: widget.dark
-                                ? Colors.white.withOpacity(0.10)
-                                : Colors.white.withOpacity(0.95)),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Row(children: [
-                        Icon(Icons.search_rounded, size: 18, color: sub),
-                        const SizedBox(width: 10),
-                        Text('Search messages'.tr(context),
-                            style: manrope(
-                                size: 14,
-                                weight: FontWeight.w500,
-                                color: sub,
-                                letterSpacing: -0.07)),
-                      ]),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
             const SizedBox(height: 10),
 
             // Active now strip
@@ -373,6 +330,41 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                           ),
                         ),
               ),
+
+            // Search bar (tappable, opens SearchScreen) — moved to bottom
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => SearchScreen(dark: widget.dark)),
+                ),
+                child: Container(
+                  height: 42,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: widget.dark
+                        ? Colors.white.withOpacity(0.06)
+                        : Colors.white.withOpacity(0.6),
+                    border: Border.all(
+                        color: widget.dark
+                            ? Colors.white.withOpacity(0.10)
+                            : Colors.white.withOpacity(0.95)),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.search_rounded, size: 18, color: sub),
+                    const SizedBox(width: 10),
+                    Text('Search'.tr(context),
+                        style: manrope(
+                            size: 14,
+                            weight: FontWeight.w500,
+                            color: sub,
+                            letterSpacing: -0.07)),
+                  ]),
+                ),
+              ),
+            ),
             ],
           ),
         ]),

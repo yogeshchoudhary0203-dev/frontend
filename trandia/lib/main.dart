@@ -5,7 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
-import 'screens/home/home_screen.dart';
+import 'screens/interest_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/intro_slides.dart';
 import 'services/api_service.dart';
@@ -136,7 +136,7 @@ class _StartupRouterState extends State<_StartupRouter> {
       clearUrlSearchParams();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const InterestGateScreen()),
       );
       return;
     }
@@ -146,7 +146,7 @@ class _StartupRouterState extends State<_StartupRouter> {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) =>
-            isLoggedIn ? const HomeScreen() : const IntroSlidesScreen(),
+            isLoggedIn ? const InterestGateScreen() : const IntroSlidesScreen(),
       ),
     );
   }

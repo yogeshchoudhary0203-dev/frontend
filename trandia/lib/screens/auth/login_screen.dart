@@ -10,7 +10,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'signup_screen.dart';
-import '../home/home_screen.dart';
+import '../interest_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
 import '../../l10n/app_localizations.dart';
@@ -55,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const InterestGateScreen()),
         (_) => false,
       );
     } on ApiException catch (e) {
@@ -76,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const InterestGateScreen()),
         (_) => false,
       );
     } on ApiException catch (e) {

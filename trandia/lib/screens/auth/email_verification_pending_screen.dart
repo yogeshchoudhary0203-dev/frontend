@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../home/home_screen.dart';
+import '../interest_screen.dart';
 import '../../services/auth_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
@@ -99,7 +99,7 @@ class _EmailVerificationPendingScreenState
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const InterestGateScreen()),
         (_) => false,
       );
     } on ApiException catch (e) {

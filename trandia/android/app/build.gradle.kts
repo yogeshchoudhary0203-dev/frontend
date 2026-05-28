@@ -39,6 +39,15 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // SIZE REDUCTION — Drop x86_64 (emulator-only ABI, never shipped on
+        // production devices).  arm64-v8a covers 98%+ of Android devices since
+        // 2016; armeabi-v7a covers 32-bit devices.  Removing x86_64 shaves
+        // ~25-30 MB from the fat APK because Agora's native .so files are
+        // ~8-10 MB per ABI.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {

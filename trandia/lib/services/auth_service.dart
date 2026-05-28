@@ -210,6 +210,14 @@ class AuthService {
     await user.sendEmailVerification();
   }
 
+  static Future<void> resetPassword(String email) async {
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+    } catch (_) {
+      throw const ApiException('Failed to send reset link. Please try again.');
+    }
+  }
+
   // ── Login ──────────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> login(

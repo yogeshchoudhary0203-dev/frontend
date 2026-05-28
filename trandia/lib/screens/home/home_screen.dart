@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../../services/fcm_service.dart';
@@ -1615,6 +1616,25 @@ class _StorySectionState extends State<_StorySection> {
     _load(); // refresh seen state after viewing
   }
 
+  void _showOwnStoryOptions(BuildContext context, StoryUserGroup ownGroup) {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _OwnStoryOptionsSheet(
+        isDark: widget.isDark,
+        onView: () {
+          Navigator.pop(ctx);
+          _openView(_groups!.indexOf(ownGroup));
+        },
+        onAdd: () {
+          Navigator.pop(ctx);
+          _openUpload();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final groups   = _groups ?? [];
@@ -1659,6 +1679,8 @@ class _StorySectionState extends State<_StorySection> {
                       seen:     false,
                       isDark:   widget.isDark,
                       onTap:    () => _openView(groups.indexOf(ownGroup)),
+                      onAddTap: _openUpload,
+                      onLongPress: () => _showOwnStoryOptions(context, ownGroup),
                     )
                   : _StoryBubble(
                       name:     'Your Story',
@@ -1712,6 +1734,74 @@ class _ShimmerBubble extends StatelessWidget {
   }
 }
 
+// ── Own story options bottom sheet ──────────────────────
+class _OwnStoryOptionsSheet extends StatelessWidget {
+  final bool isDark;
+  final VoidCallback onView;
+  final VoidCallback onAdd;
+
+  const _OwnStoryOptionsSheet({
+    required this.isDark,
+    required this.onView,
+    required this.onAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = isDark ? Colors.white : Colors.black;
+    final bg = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF4F4F6);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(2),
+              color: fg.withOpacity(0.16),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Your Story Options',
+            style: GoogleFonts.manrope(
+              color: fg,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ListTile(
+            leading: Icon(Icons.remove_red_eye_rounded, color: fg),
+            title: Text(
+              'View Your Stories',
+              style: GoogleFonts.manrope(color: fg, fontWeight: FontWeight.w600),
+            ),
+            onTap: onView,
+          ),
+          Divider(height: 1, color: fg.withOpacity(0.06), indent: 16, endIndent: 16),
+          ListTile(
+            leading: Icon(Icons.add_photo_alternate_rounded, color: fg),
+            title: Text(
+              'Add New Story',
+              style: GoogleFonts.manrope(color: fg, fontWeight: FontWeight.w600),
+            ),
+            onTap: onAdd,
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Story bubble ────────────────────────────────────────
 class _StoryBubble extends StatelessWidget {
   final String        name;
@@ -1722,6 +1812,8 @@ class _StoryBubble extends StatelessWidget {
   final bool          seen;
   final bool          isDark;
   final VoidCallback  onTap;
+  final VoidCallback? onAddTap;
+  final VoidCallback? onLongPress;
 
   const _StoryBubble({
     required this.name,
@@ -1732,55 +1824,98 @@ class _StoryBubble extends StatelessWidget {
     required this.seen,
     required this.isDark,
     required this.onTap,
+    this.onAddTap,
+    this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () { HapticFeedback.lightImpact(); onTap(); },
+      onLongPress: onLongPress,
       child: SizedBox(
         width: 70,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(width: 70, height: 70,
-            child: CustomPaint(
-              // Dashed ring: own bubble with no story.
-              // Soft gradient ring: own bubble with story, or others unseen.
-              // Grey ring: others seen.
-              painter: _StoryRingPainter(
-                isDark: isDark,
-                seen:   seen && !isOwn,
-                isOwn:  isOwn && !hasStory,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(4.5),
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isDark
-                        ? const Color(0xFF2A2A2E)
-                        : const Color(0xFFE5E5EA),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.black.op(0.60)
-                          : Colors.white.op(0.70),
-                      width: 2,
-                    ),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SizedBox(width: 70, height: 70,
+                child: CustomPaint(
+                  // Dashed ring: own bubble with no story.
+                  // Gradient ring: own bubble with story, or others unseen.
+                  // Faded ring: others seen.
+                  painter: _StoryRingPainter(
+                    isDark: isDark,
+                    seen:   seen && !isOwn,
+                    isOwn:  isOwn && !hasStory,
                   ),
-                  child: ClipOval(
-                    child: picture != null
-                        ? CachedNetworkImage(
-                            imageUrl:    picture!,
-                            fit:         BoxFit.cover,
-                            errorWidget: (_, __, ___) =>
-                                _AvatarContent(initials: initials,
-                                    isOwnNoStory: isOwn && !hasStory, isDark: isDark),
-                          )
-                        : _AvatarContent(initials: initials,
-                            isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.5),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDark
+                            ? const Color(0xFF2A2A2E)
+                            : const Color(0xFFE5E5EA),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.black.op(0.60)
+                              : Colors.white.op(0.70),
+                          width: 2,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: picture != null
+                            ? CachedNetworkImage(
+                                imageUrl:    picture!,
+                                fit:         BoxFit.cover,
+                                errorWidget: (_, __, ___) =>
+                                    _AvatarContent(initials: initials,
+                                        isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                              )
+                            : _AvatarContent(initials: initials,
+                                isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              if (isOwn && hasStory && onAddTap != null)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      onAddTap!();
+                    },
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDark ? Colors.white : Colors.black,
+                        border: Border.all(
+                          color: isDark ? Colors.black : Colors.white,
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1.5),
+                          )
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.add,
+                        color: isDark ? Colors.black : Colors.white,
+                        size: 14,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(name,

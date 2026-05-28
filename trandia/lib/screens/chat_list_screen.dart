@@ -512,7 +512,7 @@ class _ActiveAvatar extends StatelessWidget {
                   width: 13, height: 13,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: dark ? Colors.white : const Color(0xFF0A0A0A),
+                    color: Colors.green,
                     border: Border.all(
                         color: dark ? const Color(0xFF0A0A0C) : const Color(0xFFFAFAFA),
                         width: 2.5),

@@ -10,6 +10,7 @@ import 'edit_profile_screen.dart';
 import 'parental_control_screen.dart';
 import 'intro_slides.dart';
 import 'notification_settings_screen.dart';
+import 'saved_posts_screen.dart';
 
 // Search item model ────────────────────────────────────────────────────────────
 class _SearchItem {
@@ -168,6 +169,217 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     ));
+  }
+
+  void _openSecurityScreen(BuildContext ctx) {
+    final dark = widget.dark;
+    Navigator.of(ctx).push(MaterialPageRoute(
+      builder: (context) => Scaffold(
+        backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: Text(
+            'Security'.tr(context),
+            style: manrope(size: 17, weight: FontWeight.w800, color: GlassTokens.fg(dark)),
+          ),
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new_rounded, color: GlassTokens.fg(dark)),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            _SectionCard(
+              dark: dark,
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openDummy(context),
+                  child: _SettingRow(
+                    dark: dark,
+                    icon: Icons.lock_outline_rounded,
+                    title: 'Reset Password',
+                    subtitle: 'Change your current password',
+                  ),
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _showForgotPasswordModal(context),
+                  child: _SettingRow(
+                    dark: dark,
+                    icon: Icons.help_outline_rounded,
+                    title: 'Forgot Password',
+                    subtitle: 'Recover your account access',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ));
+  }
+
+  void _showForgotPasswordModal(BuildContext context) {
+    final dark = widget.dark;
+    final fg = GlassTokens.fg(dark);
+    final sub = GlassTokens.sub(dark);
+    final emailCtrl = TextEditingController();
+    bool isLoading = false;
+    bool isSent = false;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: dark ? const Color(0xE00C0C0E) : const Color(0xF2FDFDFD),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                  border: Border.all(color: GlassTokens.glassBorder(dark), width: 1),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 5,
+                        margin: const EdgeInsets.only(bottom: 24),
+                        decoration: BoxDecoration(
+                          color: dark ? Colors.white24 : Colors.black12,
+                          borderRadius: BorderRadius.circular(2.5),
+                        ),
+                      ),
+                      Icon(
+                        isSent ? Icons.mark_email_read_rounded : Icons.lock_reset_rounded,
+                        size: 64,
+                        color: isSent ? Colors.green : fg,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        isSent ? 'Check Your Email' : 'Forgot Password',
+                        style: manrope(size: 22, weight: FontWeight.w800, color: fg),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        isSent 
+                            ? 'We have sent a password reset link to your email. Please check your inbox.'
+                            : 'Enter your email address and we will send you a verification link to reset your password.',
+                        style: manrope(size: 14, weight: FontWeight.w500, color: sub, height: 1.5),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 28),
+                      if (!isSent) ...[
+                        Container(
+                          decoration: BoxDecoration(
+                            color: dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.02),
+                            border: Border.all(color: dark ? Colors.white12 : Colors.black12),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: TextField(
+                            controller: emailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            style: manrope(size: 15, weight: FontWeight.w600, color: fg),
+                            decoration: InputDecoration(
+                              hintText: 'Enter your email',
+                              hintStyle: manrope(size: 15, weight: FontWeight.w500, color: sub),
+                              prefixIcon: Icon(Icons.email_outlined, color: sub, size: 20),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        GestureDetector(
+                          onTap: isLoading ? null : () async {
+                            final email = emailCtrl.text.trim();
+                            if (email.isEmpty) return;
+                            setModalState(() => isLoading = true);
+                            try {
+                              await AuthService.resetPassword(email);
+                              if (ctx.mounted) {
+                                setModalState(() {
+                                  isLoading = false;
+                                  isSent = true;
+                                });
+                              }
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                setModalState(() => isLoading = false);
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(content: Text('Failed to send reset link', style: manrope(size: 14, weight: FontWeight.w600))),
+                                );
+                              }
+                            }
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              color: dark ? Colors.white : Colors.black,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            alignment: Alignment.center,
+                            child: isLoading
+                                ? SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(dark ? Colors.black : Colors.white),
+                                    ),
+                                  )
+                                : Text(
+                                    'Send Verification Link',
+                                    style: manrope(
+                                      size: 16,
+                                      weight: FontWeight.w800,
+                                      color: dark ? Colors.black : Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ] else ...[
+                        GestureDetector(
+                          onTap: () => Navigator.pop(ctx),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              color: dark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Close',
+                              style: manrope(size: 16, weight: FontWeight.w700, color: fg),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+      ),
+    );
   }
 
   void _openAccountTypeSelector(BuildContext context) {
@@ -347,33 +559,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: 'Private account, mentions, tags',
         onTap: () => _openDummy(ctx),
       ),
-      _SearchItem(
-        icon: Icons.workspace_premium_outlined,
-        title: 'Creator account',
-        subtitle: 'Switch to creator account',
-        switchValue: creatorAccount,
-        onSwitch: (v) {
-          setState(() {
-            creatorAccount = v;
-            if (v) {
-              privateAccount = false;
-              accountType = 'Creator';
-            } else {
-              if (accountType == 'Creator') {
-                accountType = 'Personal';
-              }
-            }
-          });
-          _saveSetting('settings_creator_account', v);
-          _saveSetting('settings_private_account', privateAccount);
-          _saveSettingString('settings_account_type', accountType);
-        },
-      ),
+
       _SearchItem(
         icon: Icons.shield_outlined,
         title: 'Security',
         subtitle: 'Password and login activity',
-        onTap: () => _openDummy(ctx),
+        onTap: () => _openSecurityScreen(ctx),
       ),
       _SearchItem(
         icon: Icons.notifications_none_rounded,
@@ -384,38 +575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           NotificationSettingsScreen(dark: dark),
         ).then((_) => _loadSettings()),
       ),
-      _SearchItem(
-        icon: Icons.visibility_outlined,
-        title: 'Activity status',
-        subtitle: 'Show when you are active',
-        switchValue: activityStatus,
-        onSwitch: (v) {
-          setState(() => activityStatus = v);
-          _saveSetting('settings_activity_status', v);
-        },
-      ),
-      _SearchItem(
-        icon: Icons.privacy_tip_outlined,
-        title: 'Private account',
-        subtitle: 'Only followers see your posts',
-        switchValue: privateAccount,
-        onSwitch: (v) {
-          setState(() {
-            privateAccount = v;
-            if (v) {
-              creatorAccount = false;
-              accountType = 'Private';
-            } else {
-              if (accountType == 'Private') {
-                accountType = 'Personal';
-              }
-            }
-          });
-          _saveSetting('settings_private_account', v);
-          _saveSetting('settings_creator_account', creatorAccount);
-          _saveSettingString('settings_account_type', accountType);
-        },
-      ),
+
       _SearchItem(
         icon: Icons.language,
         title: 'Language',
@@ -434,7 +594,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.bookmark_border_rounded,
         title: 'Saved',
         subtitle: 'Posts and collections',
-        onTap: () => _openDummy(ctx),
+        onTap: () => _openScreenSmoothly(ctx, SavedPostsScreen(dark: dark)),
       ),
       _SearchItem(
         icon: Icons.archive_outlined,
@@ -559,32 +719,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'Private account, mentions, tags',
               ),
             ),
-            _SwitchRow(
-              dark: dark,
-              icon: Icons.workspace_premium_outlined,
-              title: 'Creator account',
-              subtitle: 'Switch to creator account',
-              value: creatorAccount,
-              onChanged: (v) {
-                setState(() {
-                  creatorAccount = v;
-                  if (v) {
-                    privateAccount = false;
-                    accountType = 'Creator';
-                  } else {
-                    if (accountType == 'Creator') {
-                      accountType = 'Personal';
-                    }
-                  }
-                });
-                _saveSetting('settings_creator_account', v);
-                _saveSetting('settings_private_account', privateAccount);
-                _saveSettingString('settings_account_type', accountType);
-              },
-            ),
+
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => _openDummy(context),
+              onTap: () => _openSecurityScreen(context),
               child: _SettingRow(
                 dark: dark,
                 icon: Icons.shield_outlined,
@@ -638,40 +776,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            _SwitchRow(
-              dark: dark,
-              icon: Icons.visibility_outlined,
-              title: 'Activity status',
-              subtitle: 'Show when you are active',
-              value: activityStatus,
-              onChanged: (v) {
-                setState(() => activityStatus = v);
-                _saveSetting('settings_activity_status', v);
-              },
-            ),
-            _SwitchRow(
-              dark: dark,
-              icon: Icons.privacy_tip_outlined,
-              title: 'Private account',
-              subtitle: 'Only followers see your posts',
-              value: privateAccount,
-              onChanged: (v) {
-                setState(() {
-                  privateAccount = v;
-                  if (v) {
-                    creatorAccount = false;
-                    accountType = 'Private';
-                  } else {
-                    if (accountType == 'Private') {
-                      accountType = 'Personal';
-                    }
-                  }
-                });
-                _saveSetting('settings_private_account', v);
-                _saveSetting('settings_creator_account', creatorAccount);
-                _saveSettingString('settings_account_type', accountType);
-              },
-            ),
+
           ],
         ),
         const SizedBox(height: 16),
@@ -717,7 +822,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => _openDummy(context),
+              onTap: () => _openScreenSmoothly(context, SavedPostsScreen(dark: dark)),
               child: _SettingRow(
                 dark: dark,
                 icon: Icons.bookmark_border_rounded,

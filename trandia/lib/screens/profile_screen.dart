@@ -92,10 +92,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isUpdatingLocation = false;
   List<String> _platformOrder = ['snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'];
 
+  // Post grid pagination
+  final _profileScrollCtrl = ScrollController();
+  String? _nextPostCursor;
+  bool _isLoadingMorePosts = false;
+
   @override
   void initState() {
     super.initState();
+    _profileScrollCtrl.addListener(_onProfileScroll);
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _profileScrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onProfileScroll() {
+    if (_profileScrollCtrl.position.pixels >=
+        _profileScrollCtrl.position.maxScrollExtent - 300) {
+      _loadMorePosts();
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -135,16 +154,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadPosts(String userId) async {
     if (!mounted) return;
+    setState(() { _postsLoading = true; _nextPostCursor = null; });
     try {
       final result = await PostService.instance.getUserPosts(userId);
       if (mounted) {
         setState(() {
           _userPosts = result.posts;
+          _nextPostCursor = result.nextCursor;
           _postsLoading = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _postsLoading = false);
+    }
+  }
+
+  Future<void> _loadMorePosts() async {
+    if (_isLoadingMorePosts || _nextPostCursor == null || _profile == null) return;
+    setState(() => _isLoadingMorePosts = true);
+    try {
+      final result = await PostService.instance.getUserPosts(
+        _profile!.id,
+        cursor: _nextPostCursor,
+      );
+      if (mounted) {
+        setState(() {
+          _userPosts.addAll(result.posts);
+          _nextPostCursor = result.nextCursor;
+          _isLoadingMorePosts = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMorePosts = false);
     }
   }
 
@@ -336,6 +377,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 )
               : Center(
                   child: SingleChildScrollView(
+                    controller: _profileScrollCtrl,
                     child: DefaultTextStyle(
                       style: const TextStyle(decoration: TextDecoration.none),
                       child: Column(
@@ -549,6 +591,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               sub: sub,
                               posts: _userPosts,
                               isLoading: _postsLoading,
+                              isLoadingMore: _isLoadingMorePosts,
                             ),
                           ),
 
@@ -753,12 +796,14 @@ class _PostsBox extends StatelessWidget {
   final Color sub;
   final List<PostModel> posts;
   final bool isLoading;
+  final bool isLoadingMore;
   const _PostsBox({
     required this.dark,
     required this.fg,
     required this.sub,
     required this.posts,
     required this.isLoading,
+    this.isLoadingMore = false,
   });
 
   @override
@@ -819,8 +864,23 @@ class _PostsBox extends StatelessWidget {
                 ),
               ),
             )
-          else
+          else ...[
             _ProfileGrid(dark: dark, posts: posts),
+            if (isLoadingMore)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(fg),
+                      strokeWidth: 2,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );

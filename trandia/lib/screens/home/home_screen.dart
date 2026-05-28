@@ -3219,75 +3219,6 @@ class _IslandNotificationOverlayState
             ? (1.0 - (_dragY / (dismissThreshold * 2.0)).clamp(0.0, 0.5))
             : 1.0;
 
-<<<<<<< HEAD
-        return Positioned(
-          left  : left,
-          top   : top,
-          width : right - left,
-          height: bottom - top,
-          child : PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (didPop, _) {
-              if (!didPop) {
-                widget.onClose();
-              }
-            },
-            child: Opacity(
-            opacity: dragAlpha,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(borderR),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: widget.isDark
-                        ? Colors.black.withOpacity(0.92)
-                        : Colors.white.withOpacity(0.94),
-                    borderRadius: BorderRadius.circular(borderR),
-                  ),
-                  child: GestureDetector(
-                    onVerticalDragStart: (_) {
-                      setState(() { _dragging = true; _dragY = 0; });
-                    },
-                    onVerticalDragUpdate: (d) {
-                      if (d.delta.dy > 0) {
-                        setState(() => _dragY += d.delta.dy);
-                      }
-                    },
-                    onVerticalDragEnd: (d) {
-                      if (_dragY > dismissThreshold ||
-                          (d.velocity.pixelsPerSecond.dy > 600)) {
-                        setState(() { _dragging = false; _dragY = 0; });
-                        widget.onClose();
-                      } else {
-                        setState(() { _dragging = false; _dragY = 0; });
-                      }
-                    },
-                    child: Stack(children: [
-                      Opacity(
-                        opacity: contentAlpha,
-                        child: NotificationsScreen(dark: widget.isDark, onClose: widget.onClose),
-                      ),
-
-                      if (contentAlpha > 0.1)
-                        Positioned(
-                          top: topPad + 6, left: 0, right: 0,
-                          child: Opacity(
-                            opacity: contentAlpha,
-                            child: Center(
-                              child: Container(
-                                width : 36, height: 4,
-                                decoration: BoxDecoration(
-                                  color: (widget.isDark
-                                      ? Colors.white
-                                      : Colors.black).withOpacity(0.22),
-                                  borderRadius: BorderRadius.circular(2)),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ]),
-=======
         return Stack(
           children: [
             Positioned.fill(
@@ -3297,15 +3228,10 @@ class _IslandNotificationOverlayState
                   child: ColoredBox(
                     color: (widget.isDark ? Colors.black : Colors.white)
                         .withOpacity(bgDim),
->>>>>>> 25570231acd28216786dad7bbfc6b610d735b7e7
                   ),
                 ),
               ),
             ),
-<<<<<<< HEAD
-            ),
-          ),
-=======
             Positioned(
               left: left,
               top: top,
@@ -3395,7 +3321,6 @@ class _IslandNotificationOverlayState
               ),
             ),
           ],
->>>>>>> 25570231acd28216786dad7bbfc6b610d735b7e7
         );
       },
     );

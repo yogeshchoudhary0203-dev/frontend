@@ -159,17 +159,151 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _openPicker());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showSourceSelector());
   }
 
-  Future<void> _openPicker() async {
+  Future<void> _showSourceSelector() async {
+    final c = CpColors(widget.dark);
+    final dark = widget.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: dark ? const Color(0xFF1C1C1F) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: dark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                'Create a Post',
+                style: manrope(
+                  size: 16,
+                  weight: FontWeight.w800,
+                  color: c.text,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _sourceTile(
+                icon: Icons.camera_alt_rounded,
+                label: 'Take Photo (Camera)',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickFile(ImageSource.camera, isVideo: false);
+                },
+              ),
+              const SizedBox(height: 10),
+              _sourceTile(
+                icon: Icons.videocam_rounded,
+                label: 'Record Video (Camera)',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickFile(ImageSource.camera, isVideo: true);
+                },
+              ),
+              const SizedBox(height: 10),
+              _sourceTile(
+                icon: Icons.photo_library_rounded,
+                label: 'Choose from Gallery',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickGallery();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    ).then((_) {
+      // If the sheet was dismissed without selecting anything, and no error is present, go back
+      if (mounted && _error == null) {
+        Navigator.maybePop(context);
+      }
+    });
+  }
+
+  Widget _sourceTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final dark = widget.dark;
+    final c = CpColors(dark);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: dark
+              ? Colors.white.withOpacity(0.07)
+              : Colors.black.withOpacity(0.05),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: c.text),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: manrope(
+                size: 15,
+                weight: FontWeight.w600,
+                color: c.text,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickFile(ImageSource source, {required bool isVideo}) async {
+    setState(() => _error = null);
+    try {
+      final picker = ImagePicker();
+      final XFile? file = isVideo 
+          ? await picker.pickVideo(source: source)
+          : await picker.pickImage(source: source, imageQuality: 85);
+      if (!mounted) return;
+      if (file == null) {
+        _showSourceSelector();
+        return;
+      }
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CreatePostEditScreen(
+            dark: widget.dark,
+            file: file,
+            isVideo: isVideo,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not access camera/media. Please try again.');
+    }
+  }
+
+  Future<void> _pickGallery() async {
     setState(() => _error = null);
     try {
       final picker = ImagePicker();
       final XFile? file = await picker.pickMedia();
       if (!mounted) return;
       if (file == null) {
-        Navigator.of(context).pop();
+        _showSourceSelector();
         return;
       }
       final isVideo = file.mimeType?.startsWith('video') == true ||
@@ -178,18 +312,15 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
           file.path.toLowerCase().endsWith('.avi') ||
           file.path.toLowerCase().endsWith('.webm');
 
-      // Go directly to edit screen
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => CreatePostEditScreen(
-              dark: widget.dark,
-              file: file,
-              isVideo: isVideo,
-            ),
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CreatePostEditScreen(
+            dark: widget.dark,
+            file: file,
+            isVideo: isVideo,
           ),
-        );
-      }
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'Could not open gallery. Please try again.');
@@ -216,7 +347,7 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
                     ? Column(mainAxisSize: MainAxisSize.min, children: [
                         Text(_error!, style: manrope(size: 14, weight: FontWeight.w500, color: c.sub)),
                         const SizedBox(height: 20),
-                        _PillBtn(dark: widget.dark, label: 'Try Again', onTap: _openPicker),
+                        _PillBtn(dark: widget.dark, label: 'Try Again', onTap: _showSourceSelector),
                       ])
                     : Column(mainAxisSize: MainAxisSize.min, children: [
                         SizedBox(
@@ -227,7 +358,7 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Text('Opening gallery…', style: manrope(size: 14, weight: FontWeight.w500, color: c.sub)),
+                        Text('Choose a source…', style: manrope(size: 14, weight: FontWeight.w500, color: c.sub)),
                       ]),
               ),
             ),

@@ -28,28 +28,134 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto-open gallery on first load
-    WidgetsBinding.instance.addPostFrameCallback((_) => _pickImage());
+    // Auto-open picker selection on first load
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showPhotoPickerOptions());
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _showPhotoPickerOptions() async {
     HapticFeedback.lightImpact();
-    final picked = await ImagePicker().pickImage(
-      source:       ImageSource.gallery,
-      maxWidth:     1080,
-      maxHeight:    1920,
-      imageQuality: 92,
-    );
-    if (picked == null) {
-      if (_image == null && mounted) Navigator.pop(context);
-      return;
-    }
-    if (!mounted) return;
-    setState(() {
-      _image = File(picked.path);
-      _error = null;
+    final dark = _isDark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: dark ? const Color(0xFF1C1C1F) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: dark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                'Add to Story',
+                style: GoogleFonts.manrope(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: GlassTokens.fg(dark),
+                ),
+              ),
+              const SizedBox(height: 20),
+              _optionTile(
+                dark: dark,
+                icon: Icons.camera_alt_rounded,
+                label: 'Take Photo (Camera)',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImageFromSource(ImageSource.camera);
+                },
+              ),
+              const SizedBox(height: 10),
+              _optionTile(
+                dark: dark,
+                icon: Icons.photo_library_rounded,
+                label: 'Choose from Gallery',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImageFromSource(ImageSource.gallery);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    ).then((_) {
+      if (_image == null && mounted) {
+        Navigator.maybePop(context);
+      }
     });
-    await _showDurationPicker();
+  }
+
+  Widget _optionTile({
+    required bool dark,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: dark
+              ? Colors.white.withOpacity(0.07)
+              : Colors.black.withOpacity(0.05),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: GlassTokens.fg(dark)),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: GoogleFonts.manrope(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: GlassTokens.fg(dark),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImageFromSource(ImageSource source) async {
+    HapticFeedback.lightImpact();
+    try {
+      final picked = await ImagePicker().pickImage(
+        source:       source,
+        maxWidth:     1080,
+        maxHeight:    1920,
+        imageQuality: 92,
+      );
+      if (picked == null) {
+        if (_image == null && mounted) Navigator.pop(context);
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _image = File(picked.path);
+        _error = null;
+      });
+      await _showDurationPicker();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to access camera/gallery.';
+        });
+      }
+    }
   }
 
   Future<void> _showDurationPicker() async {
@@ -110,7 +216,7 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
           if (_image != null)
             Image.file(_image!, fit: BoxFit.cover)
           else
-            _EmptyState(onPick: _pickImage),
+            _EmptyState(onPick: _showPhotoPickerOptions),
 
           // ── Gradient overlays ─────────────────────────────────────────────
           if (_image != null) ...[
@@ -196,7 +302,7 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
                             color: Colors.white70, fontSize: 13)),
                     ] else
                       Row(children: [
-                        _OutlineBtn(label: 'Change', onTap: _pickImage),
+                        _OutlineBtn(label: 'Change', onTap: _showPhotoPickerOptions),
                         const SizedBox(width: 12),
                         _SolidBtn(label: 'Share Story', onTap: _upload),
                       ]),

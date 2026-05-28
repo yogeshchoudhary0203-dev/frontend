@@ -2149,44 +2149,50 @@ class _PostCardState extends State<PostCard> {
                 ])),
 
         // ── Actions ──────────────────────────────────
-        Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-          child: Row(children: [
+        Padding(padding: const EdgeInsets.fromLTRB(8, 8, 10, 0),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-            _LikeButton(
-              isLiked: p.isLiked,
-              onTap: () {
-                HapticFeedback.lightImpact();
-                widget.onLike();
-              },
-              onLongPress: () {
-                HapticFeedback.heavyImpact();
-                Navigator.of(context).push(PageRouteBuilder(
-                  pageBuilder: (_, animation, __) => LikedByScreen(
-                    dark: dark,
-                    postUser: p.userName,
-                    likeCount: p.likesCount,
-                  ),
-                  transitionDuration: const Duration(milliseconds: 380),
-                  reverseTransitionDuration: const Duration(milliseconds: 300),
-                  transitionsBuilder: (_, animation, __, child) {
-                    final curved = CurvedAnimation(parent: animation,
-                        curve: Curves.easeOutCubic,
-                        reverseCurve: Curves.easeInCubic);
-                    return SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.06), end: Offset.zero,
-                      ).animate(curved),
-                      child: FadeTransition(opacity: curved, child: child));
-                  },
-                ));
-              },
-              likedColor: likedCol,
-              iconColor: iconCol,
+            _ActionStat(
+              count: '${p.likesCount}',
+              color: textPrimary,
+              icon: _LikeButton(
+                isLiked: p.isLiked,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  widget.onLike();
+                },
+                onLongPress: () {
+                  HapticFeedback.heavyImpact();
+                  Navigator.of(context).push(PageRouteBuilder(
+                    pageBuilder: (_, animation, __) => LikedByScreen(
+                      dark: dark,
+                      postUser: p.userName,
+                      likeCount: p.likesCount,
+                    ),
+                    transitionDuration: const Duration(milliseconds: 380),
+                    reverseTransitionDuration: const Duration(milliseconds: 300),
+                    transitionsBuilder: (_, animation, __, child) {
+                      final curved = CurvedAnimation(parent: animation,
+                          curve: Curves.easeOutCubic,
+                          reverseCurve: Curves.easeInCubic);
+                      return SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.06), end: Offset.zero,
+                        ).animate(curved),
+                        child: FadeTransition(opacity: curved, child: child));
+                    },
+                  ));
+                },
+                likedColor: likedCol,
+                iconColor: iconCol,
+              ),
             ),
 
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
 
-            GestureDetector(
+            _ActionStat(
+              count: '${p.commentsCount}',
+              color: textPrimary,
               onTap: () {
                 HapticFeedback.selectionClick();
                 Navigator.of(context).push(PageRouteBuilder(
@@ -2211,32 +2217,31 @@ class _PostCardState extends State<PostCard> {
                   },
                 ));
               },
-              child: SizedBox(width: 26, height: 26,
-                child: CustomPaint(painter: _CommentBubblePainter(color: iconCol)))),
+              icon: SizedBox(width: 26, height: 26,
+                child: CustomPaint(painter: _CommentBubblePainter(color: iconCol))),
+            ),
 
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
 
-            GestureDetector(
+            _ActionStat(
+              count: '${p.sharesCount}',
+              color: textPrimary,
               onTap: () {
                 HapticFeedback.lightImpact();
                 ShareHelper.showShareBottomSheet(context, p);
               },
-              child: SizedBox(width: 26, height: 26,
-                child: Icon(Icons.near_me_rounded, size: 26, color: iconCol))),
+              icon: Icon(Icons.near_me_rounded, size: 26, color: iconCol),
+            ),
 
             const Spacer(),
 
             GestureDetector(
               onTap: () => HapticFeedback.lightImpact(),
-              child: SizedBox(width: 26, height: 26,
-                child: CustomPaint(painter: _SaveCirclePainter(color: iconCol)))),
+              child: SizedBox(width: 34, height: 32,
+                child: Center(
+                  child: SizedBox(width: 26, height: 26,
+                    child: CustomPaint(painter: _SaveCirclePainter(color: iconCol)))))),
           ])),
-
-        // ── Likes count ──────────────────────────────
-        Padding(padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
-          child: Text('${p.likesCount} ${'likes'.tr(context)}',
-            style: TextStyle(color: textPrimary, fontSize: 13,
-              fontWeight: FontWeight.w600))),
 
         // ── Caption ──────────────────────────────────
         if (p.caption.isNotEmpty)
@@ -2510,6 +2515,57 @@ class _VideoCardState extends State<_VideoCard> {
           ]),
         ),
       ),
+    );
+  }
+}
+
+// ─── Action Count Item ───────────────────────────────
+class _ActionStat extends StatelessWidget {
+  final Widget icon;
+  final String count;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _ActionStat({
+    required this.icon,
+    required this.count,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = SizedBox(
+      width: 34,
+      height: 44,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(width: 28, height: 28, child: Center(child: icon)),
+        const SizedBox(height: 2),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 120),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          child: Text(count,
+            key: ValueKey<String>(count),
+            maxLines: 1,
+            overflow: TextOverflow.fade,
+            softWrap: false,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontSize: 11.5,
+              height: 1.0,
+              fontWeight: FontWeight.w700,
+            )),
+        ),
+      ]),
+    );
+
+    if (onTap == null) return content;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: content,
     );
   }
 }

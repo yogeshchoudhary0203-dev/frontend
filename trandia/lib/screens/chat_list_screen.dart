@@ -401,10 +401,10 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   Widget _buildPill(BuildContext context, String title, IconData icon, bool dark, bool isActive) {
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
-    final bgColor = isActive 
+    final bgColor = isActive
         ? (dark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.1))
         : (dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03));
-        
+
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
@@ -430,27 +430,30 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: isActive 
-                ? (dark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.2))
-                : Colors.transparent,
+            color: isActive
+                ? (dark ? Colors.white.withOpacity(0.30) : Colors.black.withOpacity(0.12))
+                : (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06)),
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: isActive ? fg : sub),
-            const SizedBox(width: 6),
+            Icon(icon, size: 14, color: isActive ? fg : sub),
+            const SizedBox(width: 5),
             Text(
               title.tr(context),
               style: manrope(
-                size: 13,
+                size: 12.5,
                 weight: isActive ? FontWeight.w700 : FontWeight.w600,
                 color: isActive ? fg : sub,
+                letterSpacing: -0.12,
               ),
             ),
           ],

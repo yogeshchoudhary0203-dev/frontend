@@ -21,6 +21,7 @@ class PostModel {
   final String? section;     // "fun" | "learn" for videos
   final int     likesCount;
   final int     commentsCount;
+  final int     sharesCount;
   final bool    isLiked;
   final DateTime createdAt;
 
@@ -39,6 +40,7 @@ class PostModel {
     this.section,
     required this.likesCount,
     required this.commentsCount,
+    required this.sharesCount,
     required this.isLiked,
     required this.createdAt,
   });
@@ -58,11 +60,18 @@ class PostModel {
         section:       j['section'],
         likesCount:    (j['likes_count'] as num?)?.toInt() ?? 0,
         commentsCount: (j['comments_count'] as num?)?.toInt() ?? 0,
+        sharesCount:
+            ((j['shares_count'] ?? j['share_count']) as num?)?.toInt() ?? 0,
         isLiked:       j['is_liked'] == true,
         createdAt:     DateTime.tryParse(j['created_at'] ?? '') ?? DateTime.now(),
       );
 
-  PostModel copyWith({int? likesCount, bool? isLiked}) => PostModel(
+  PostModel copyWith({
+    int? likesCount,
+    int? commentsCount,
+    int? sharesCount,
+    bool? isLiked,
+  }) => PostModel(
         id:            id,
         userId:        userId,
         userName:      userName,
@@ -76,7 +85,8 @@ class PostModel {
         aspectRatio:   aspectRatio,
         section:       section,
         likesCount:    likesCount ?? this.likesCount,
-        commentsCount: commentsCount,
+        commentsCount: commentsCount ?? this.commentsCount,
+        sharesCount:   sharesCount ?? this.sharesCount,
         isLiked:       isLiked ?? this.isLiked,
         createdAt:     createdAt,
       );

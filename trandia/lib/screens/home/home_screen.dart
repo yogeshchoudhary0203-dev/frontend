@@ -1673,6 +1673,8 @@ class _StorySectionState extends State<_StorySection> {
             );
           }
           final g = others[i - 1];
+          final seen = g.allSeen ||
+              (g.hasStories && g.stories.every((story) => story.viewed));
           return Padding(
             padding: const EdgeInsets.only(right: 14),
             child: _StoryBubble(
@@ -1682,7 +1684,7 @@ class _StorySectionState extends State<_StorySection> {
                   ? g.userName[0].toUpperCase() : '?',
               isOwn:    false,
               hasStory: g.hasStories,
-              seen:     g.allSeen,
+              seen:     seen,
               isDark:   widget.isDark,
               onTap:    () => _openView(groups.indexOf(g)),
             ),
@@ -1742,8 +1744,8 @@ class _StoryBubble extends StatelessWidget {
           SizedBox(width: 70, height: 70,
             child: CustomPaint(
               // Dashed ring: own bubble with no story.
-              // Gradient ring: own bubble with story, or others unseen.
-              // Faded ring: others seen.
+              // Soft gradient ring: own bubble with story, or others unseen.
+              // Grey ring: others seen.
               painter: _StoryRingPainter(
                 isDark: isDark,
                 seen:   seen && !isOwn,
@@ -1828,18 +1830,39 @@ class _StoryRingPainter extends CustomPainter {
     if (isOwn) { _drawDashed(canvas, Offset(cx, cy), radius); return; }
     if (seen) {
       canvas.drawCircle(Offset(cx, cy), radius, Paint()
-        ..style = PaintingStyle.stroke..strokeWidth = 1.8
-        ..color = (isDark ? Colors.white : Colors.black).op(0.20));
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..strokeCap = StrokeCap.round
+        ..color = (isDark
+                ? const Color(0xFFC8CCD2)
+                : const Color(0xFF9CA3AF))
+            .op(isDark ? 0.42 : 0.62));
       return;
     }
-    canvas.drawCircle(Offset(cx, cy), radius, Paint()
-      ..style = PaintingStyle.stroke..strokeWidth = 2.4
+    final center = Offset(cx, cy);
+    canvas.drawCircle(center, radius, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.8
+      ..color = (isDark ? Colors.white : Colors.black).op(0.06));
+    canvas.drawCircle(center, radius, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.6
       ..strokeCap = StrokeCap.round
-      ..shader = ui.Gradient.sweep(Offset(cx, cy),
+      ..shader = ui.Gradient.sweep(center,
         isDark
-            ? const [Color(0xFFFFFFFF), Color(0xFFAAAAAA), Color(0xFF666666)]
-            : const [Color(0xFF1A1A1A), Color(0xFF555555), Color(0xFF999999)],
-        const [0.0, 0.5, 1.0], TileMode.clamp,
+            ? const [
+                Color(0xFFFFC66D),
+                Color(0xFFE86D8F),
+                Color(0xFF8B7CFF),
+                Color(0xFFFFC66D),
+              ]
+            : const [
+                Color(0xFFF2A24B),
+                Color(0xFFD95778),
+                Color(0xFF7666D9),
+                Color(0xFFF2A24B),
+              ],
+        const [0.0, 0.34, 0.68, 1.0], TileMode.clamp,
         -math.pi / 2, -math.pi / 2 + math.pi * 2));
   }
   void _drawDashed(Canvas canvas, Offset center, double radius) {

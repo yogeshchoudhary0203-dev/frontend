@@ -75,11 +75,19 @@ class AgoraService {
     }
 
     final engine = createAgoraRtcEngine();
-    await engine.initialize(RtcEngineContext(appId: kAgoraAppId));
+    await engine.initialize(const RtcEngineContext(
+      appId: kAgoraAppId,
+      channelProfile: ChannelProfileType.channelProfileCommunication,
+    ));
 
     engine.registerEventHandler(RtcEngineEventHandler(
       onJoinChannelSuccess: (RtcConnection conn, int elapsed) {
         developer.log('[Agora] Joined: ${conn.channelId}');
+        // Set speakerphone after joining — calling it before joinChannel causes
+        // ERR_ADM_INIT_PLAYOUT on many Android devices.
+        if (currentCallType == CallType.voice) {
+          engine.setEnableSpeakerphone(isSpeakerOn);
+        }
         callState = CallState.connecting;
         onCallStateChanged?.call(callState);
       },
@@ -123,6 +131,7 @@ class AgoraService {
   Future<void> joinVoiceCall({required String channelName, int uid = 0}) async {
     final granted = await requestPermissions(CallType.voice);
     if (!granted) throw Exception('Microphone permission denied');
+    if (uid <= 0) throw Exception('Invalid Agora uid');
 
     final token  = await _fetchToken(channelName, uid: uid);
     final engine = await _createEngine();
@@ -133,8 +142,8 @@ class AgoraService {
     isSpeakerOn     = true;
 
     // Voice only — disable video explicitly
+    await engine.enableAudio();
     await engine.disableVideo();
-    await engine.setEnableSpeakerphone(true);
 
     await engine.joinChannel(
       token:     token,
@@ -158,6 +167,7 @@ class AgoraService {
   Future<void> joinVideoCall({required String channelName, int uid = 0}) async {
     final granted = await requestPermissions(CallType.video);
     if (!granted) throw Exception('Camera/Microphone permission denied');
+    if (uid <= 0) throw Exception('Invalid Agora uid');
 
     final token  = await _fetchToken(channelName, uid: uid);
     final engine = await _createEngine();
@@ -168,6 +178,7 @@ class AgoraService {
     isCameraOff     = false;
     isFrontCamera   = true;
 
+    await engine.enableAudio();
     await engine.enableVideo();
     await engine.startPreview();
 
@@ -252,5 +263,22 @@ class AgoraService {
   static String buildChannelName(String uid1, String uid2) {
     final sorted = [uid1, uid2]..sort();
     return 'trandia_${sorted[0]}_${sorted[1]}';
+  }
+
+  static int buildNumericUid(String userId) {
+    final compact = userId.replaceAll(RegExp(r'[^0-9a-fA-F]'), '');
+    if (compact.length >= 8) {
+      final parsed = int.tryParse(compact.substring(0, 8), radix: 16);
+      if (parsed != null && parsed > 0) {
+        final uid = parsed & 0x7fffffff;
+        if (uid > 0) return uid;
+      }
+    }
+
+    var hash = 0;
+    for (final unit in userId.codeUnits) {
+      hash = ((hash * 31) + unit) & 0x7fffffff;
+    }
+    return hash == 0 ? 1 : hash;
   }
 }

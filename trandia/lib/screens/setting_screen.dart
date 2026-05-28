@@ -559,28 +559,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: 'Private account, mentions, tags',
         onTap: () => _openDummy(ctx),
       ),
-      _SearchItem(
-        icon: Icons.workspace_premium_outlined,
-        title: 'Creator account',
-        subtitle: 'Switch to creator account',
-        switchValue: creatorAccount,
-        onSwitch: (v) {
-          setState(() {
-            creatorAccount = v;
-            if (v) {
-              privateAccount = false;
-              accountType = 'Creator';
-            } else {
-              if (accountType == 'Creator') {
-                accountType = 'Personal';
-              }
-            }
-          });
-          _saveSetting('settings_creator_account', v);
-          _saveSetting('settings_private_account', privateAccount);
-          _saveSettingString('settings_account_type', accountType);
-        },
-      ),
+
       _SearchItem(
         icon: Icons.shield_outlined,
         title: 'Security',
@@ -596,38 +575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           NotificationSettingsScreen(dark: dark),
         ).then((_) => _loadSettings()),
       ),
-      _SearchItem(
-        icon: Icons.visibility_outlined,
-        title: 'Activity status',
-        subtitle: 'Show when you are active',
-        switchValue: activityStatus,
-        onSwitch: (v) {
-          setState(() => activityStatus = v);
-          _saveSetting('settings_activity_status', v);
-        },
-      ),
-      _SearchItem(
-        icon: Icons.privacy_tip_outlined,
-        title: 'Private account',
-        subtitle: 'Only followers see your posts',
-        switchValue: privateAccount,
-        onSwitch: (v) {
-          setState(() {
-            privateAccount = v;
-            if (v) {
-              creatorAccount = false;
-              accountType = 'Private';
-            } else {
-              if (accountType == 'Private') {
-                accountType = 'Personal';
-              }
-            }
-          });
-          _saveSetting('settings_private_account', v);
-          _saveSetting('settings_creator_account', creatorAccount);
-          _saveSettingString('settings_account_type', accountType);
-        },
-      ),
+
       _SearchItem(
         icon: Icons.language,
         title: 'Language',
@@ -771,29 +719,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'Private account, mentions, tags',
               ),
             ),
-            _SwitchRow(
-              dark: dark,
-              icon: Icons.workspace_premium_outlined,
-              title: 'Creator account',
-              subtitle: 'Switch to creator account',
-              value: creatorAccount,
-              onChanged: (v) {
-                setState(() {
-                  creatorAccount = v;
-                  if (v) {
-                    privateAccount = false;
-                    accountType = 'Creator';
-                  } else {
-                    if (accountType == 'Creator') {
-                      accountType = 'Personal';
-                    }
-                  }
-                });
-                _saveSetting('settings_creator_account', v);
-                _saveSetting('settings_private_account', privateAccount);
-                _saveSettingString('settings_account_type', accountType);
-              },
-            ),
+
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => _openSecurityScreen(context),
@@ -850,40 +776,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            _SwitchRow(
-              dark: dark,
-              icon: Icons.visibility_outlined,
-              title: 'Activity status',
-              subtitle: 'Show when you are active',
-              value: activityStatus,
-              onChanged: (v) {
-                setState(() => activityStatus = v);
-                _saveSetting('settings_activity_status', v);
-              },
-            ),
-            _SwitchRow(
-              dark: dark,
-              icon: Icons.privacy_tip_outlined,
-              title: 'Private account',
-              subtitle: 'Only followers see your posts',
-              value: privateAccount,
-              onChanged: (v) {
-                setState(() {
-                  privateAccount = v;
-                  if (v) {
-                    creatorAccount = false;
-                    accountType = 'Private';
-                  } else {
-                    if (accountType == 'Private') {
-                      accountType = 'Personal';
-                    }
-                  }
-                });
-                _saveSetting('settings_private_account', v);
-                _saveSetting('settings_creator_account', creatorAccount);
-                _saveSettingString('settings_account_type', accountType);
-              },
-            ),
+
           ],
         ),
         const SizedBox(height: 16),

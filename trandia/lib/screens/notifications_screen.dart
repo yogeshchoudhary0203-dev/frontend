@@ -109,7 +109,13 @@ const double _kListStartY = 112; // header(48) + 12 + chips(30) + 22 spacing
 class NotificationsScreen extends StatefulWidget {
   final bool dark;
   final VoidCallback? onClose;
-  const NotificationsScreen({super.key, required this.dark, this.onClose});
+  final double backgroundOpacity;
+  const NotificationsScreen({
+    super.key,
+    required this.dark,
+    this.onClose,
+    this.backgroundOpacity = 1.0,
+  });
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -329,11 +335,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final listTop = topPad + 104;
     const listInnerTopPadding = _kListStartY - 104;
     final listStartGlobalY = listTop + listInnerTopPadding;
+    final bgOpacity = widget.backgroundOpacity.clamp(0.0, 1.0).toDouble();
 
     return Container(
-      color: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
+      color: (dark ? GlassTokens.bgDark : GlassTokens.bgLight)
+          .withOpacity(bgOpacity),
       child: Stack(children: [
-        GlassBackdrop(dark: dark),
+        Opacity(
+          opacity: bgOpacity,
+          child: GlassBackdrop(dark: dark),
+        ),
 
         // ── Content area ──
         Positioned(
@@ -816,7 +827,7 @@ class _StaggeredEntrance extends StatefulWidget {
     super.key,
     required this.child,
     required this.index,
-    this.delay = const Duration(milliseconds: 35),
+    this.delay = const Duration(milliseconds: 24),
   });
 
   @override
@@ -826,35 +837,27 @@ class _StaggeredEntrance extends StatefulWidget {
 class _StaggeredEntranceState extends State<_StaggeredEntrance>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _opacity;
-  late Animation<Offset> _slide;
+  late Animation<double> _progress;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 430),
     );
 
-    _opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _progress = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: Curves.easeOut,
+        curve: const Cubic(0.16, 1.0, 0.3, 1.0),
       ),
     );
 
-    _slide = Tween<Offset>(
-      begin: const Offset(0.0, 0.15), // subtle slide up
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Cubic(0.175, 0.885, 0.32, 1.1), // smooth springy easeOutBack
-      ),
-    );
-
-    Future.delayed(widget.delay * widget.index, () {
+    final delayMs = (widget.delay.inMilliseconds * widget.index)
+        .clamp(0, 168)
+        .toInt();
+    Future.delayed(Duration(milliseconds: delayMs), () {
       if (mounted) {
         _controller.forward();
       }
@@ -869,12 +872,27 @@ class _StaggeredEntranceState extends State<_StaggeredEntrance>
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacity,
-      child: SlideTransition(
-        position: _slide,
-        child: widget.child,
-      ),
+    return AnimatedBuilder(
+      animation: _progress,
+      child: widget.child,
+      builder: (context, child) {
+        final p = _progress.value;
+        final depth = widget.index.clamp(0, 7).toDouble();
+        final dy = (72.0 + depth * 6.0) * (1.0 - p);
+        final scale = 0.965 + (0.035 * p);
+
+        return Opacity(
+          opacity: p,
+          child: Transform.translate(
+            offset: Offset(0, dy),
+            child: Transform.scale(
+              alignment: Alignment.bottomCenter,
+              scale: scale,
+              child: child,
+            ),
+          ),
+        );
+      },
     );
   }
 }

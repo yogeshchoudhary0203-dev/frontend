@@ -106,7 +106,8 @@ class _HomeScreenState extends State<HomeScreen>
 
     _islandCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 520),
+      duration: const Duration(milliseconds: 390),
+      reverseDuration: const Duration(milliseconds: 250),
     );
 
     VisibilityDetectorController.instance.updateInterval =
@@ -730,11 +731,13 @@ class _HomeScreenState extends State<HomeScreen>
 
         // ── Dynamic Island expand overlay ──────────────────
         if (_islandOpen)
-          _IslandNotificationOverlay(
-            islandRect : _islandRect,
-            controller : _islandCtrl,
-            isDark     : isDark,
-            onClose    : _closeIsland,
+          Positioned.fill(
+            child: _IslandNotificationOverlay(
+              islandRect : _islandRect,
+              controller : _islandCtrl,
+              isDark     : isDark,
+              onClose    : _closeIsland,
+            ),
           ),
         ]),
       ),
@@ -3162,90 +3165,151 @@ class _IslandNotificationOverlayState
       builder: (context, _) {
         final topPad = MediaQuery.paddingOf(context).top;
         final t = widget.controller.value;
+        final expandT = _expandCurve(t);
+        final blurT = _blurCurve(t);
+        final fillT = _fillCurve(t);
+        final contentT = _contentCurve(t);
 
-        final double left   = ui.lerpDouble(
-            widget.islandRect.left,   screenRect.left,   _expandCurve(t))!;
-        final double top    = ui.lerpDouble(
-            widget.islandRect.top,    screenRect.top,    _expandCurve(t))!
+        final double left = ui.lerpDouble(
+          widget.islandRect.left,
+          screenRect.left,
+          expandT,
+        )!;
+        final double top = ui.lerpDouble(
+          widget.islandRect.top,
+          screenRect.top,
+          expandT,
+        )!
             + (_dragging ? _dragY.clamp(0, dismissThreshold * 1.4) : 0);
-        final double right  = ui.lerpDouble(
-            widget.islandRect.right,  screenRect.right,  _expandCurve(t))!;
+        final double right = ui.lerpDouble(
+          widget.islandRect.right,
+          screenRect.right,
+          expandT,
+        )!;
         final double bottom = ui.lerpDouble(
-            widget.islandRect.bottom, screenRect.bottom, _expandCurve(t))!;
-        final double borderR = ui.lerpDouble(19, 0, _expandCurve(t))!;
+          widget.islandRect.bottom,
+          screenRect.bottom,
+          expandT,
+        )!;
+        final double borderR = ui.lerpDouble(19, 0, expandT)!;
+        final double bgBlur = ui.lerpDouble(0, 14, blurT)!;
+        final double bgDim =
+            ui.lerpDouble(0, widget.isDark ? 0.24 : 0.12, blurT)!;
+        final double panelAlpha = ui.lerpDouble(
+          widget.isDark ? 0.20 : 0.34,
+          widget.isDark ? 0.94 : 0.97,
+          fillT,
+        )!;
 
-        final double contentAlpha =
-            ((t - 0.35) / 0.65).clamp(0.0, 1.0);
+        final double contentAlpha = contentT;
+        final double contentLift = ui.lerpDouble(12, 0, contentT)!;
 
         final double dragAlpha = _dragging
             ? (1.0 - (_dragY / (dismissThreshold * 2.0)).clamp(0.0, 0.5))
             : 1.0;
 
-        return Positioned(
-          left  : left,
-          top   : top,
-          width : right - left,
-          height: bottom - top,
-          child : Opacity(
-            opacity: dragAlpha,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(borderR),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: widget.isDark
-                        ? Colors.black.withOpacity(0.92)
-                        : Colors.white.withOpacity(0.94),
-                    borderRadius: BorderRadius.circular(borderR),
-                  ),
-                  child: GestureDetector(
-                    onVerticalDragStart: (_) {
-                      setState(() { _dragging = true; _dragY = 0; });
-                    },
-                    onVerticalDragUpdate: (d) {
-                      if (d.delta.dy > 0) {
-                        setState(() => _dragY += d.delta.dy);
-                      }
-                    },
-                    onVerticalDragEnd: (d) {
-                      if (_dragY > dismissThreshold ||
-                          (d.velocity.pixelsPerSecond.dy > 600)) {
-                        setState(() { _dragging = false; _dragY = 0; });
-                        widget.onClose();
-                      } else {
-                        setState(() { _dragging = false; _dragY = 0; });
-                      }
-                    },
-                    child: Stack(children: [
-                      Opacity(
-                        opacity: contentAlpha,
-                        child: NotificationsScreen(dark: widget.isDark, onClose: widget.onClose),
-                      ),
-
-                      if (contentAlpha > 0.1)
-                        Positioned(
-                          top: topPad + 6, left: 0, right: 0,
-                          child: Opacity(
-                            opacity: contentAlpha,
-                            child: Center(
-                              child: Container(
-                                width : 36, height: 4,
-                                decoration: BoxDecoration(
-                                  color: (widget.isDark
-                                      ? Colors.white
-                                      : Colors.black).withOpacity(0.22),
-                                  borderRadius: BorderRadius.circular(2)),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ]),
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: bgBlur, sigmaY: bgBlur),
+                  child: ColoredBox(
+                    color: (widget.isDark ? Colors.black : Colors.white)
+                        .withOpacity(bgDim),
                   ),
                 ),
               ),
             ),
-          ),
+            Positioned(
+              left: left,
+              top: top,
+              width: right - left,
+              height: bottom - top,
+              child: Opacity(
+                opacity: dragAlpha,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(borderR),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(
+                      sigmaX: ui.lerpDouble(18, 26, fillT)!,
+                      sigmaY: ui.lerpDouble(18, 26, fillT)!,
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: widget.isDark
+                            ? Colors.black.withOpacity(panelAlpha)
+                            : Colors.white.withOpacity(panelAlpha),
+                        borderRadius: BorderRadius.circular(borderR),
+                      ),
+                      child: GestureDetector(
+                        onVerticalDragStart: (_) {
+                          setState(() {
+                            _dragging = true;
+                            _dragY = 0;
+                          });
+                        },
+                        onVerticalDragUpdate: (d) {
+                          if (d.delta.dy > 0) {
+                            setState(() => _dragY += d.delta.dy);
+                          }
+                        },
+                        onVerticalDragEnd: (d) {
+                          if (_dragY > dismissThreshold ||
+                              (d.velocity.pixelsPerSecond.dy > 600)) {
+                            setState(() {
+                              _dragging = false;
+                              _dragY = 0;
+                            });
+                            widget.onClose();
+                          } else {
+                            setState(() {
+                              _dragging = false;
+                              _dragY = 0;
+                            });
+                          }
+                        },
+                        child: Stack(children: [
+                          Transform.translate(
+                            offset: Offset(0, contentLift),
+                            child: Opacity(
+                              opacity: contentAlpha,
+                              child: NotificationsScreen(
+                                dark: widget.isDark,
+                                onClose: widget.onClose,
+                                backgroundOpacity: fillT,
+                              ),
+                            ),
+                          ),
+
+                          if (contentAlpha > 0.1)
+                            Positioned(
+                              top: topPad + 6, left: 0, right: 0,
+                              child: Opacity(
+                                opacity: contentAlpha,
+                                child: Center(
+                                  child: Container(
+                                    width: 36,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color: (widget.isDark
+                                              ? Colors.white
+                                              : Colors.black)
+                                          .withOpacity(0.22),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -3253,4 +3317,16 @@ class _IslandNotificationOverlayState
 
   static double _expandCurve(double t) =>
       Curves.fastEaseInToSlowEaseOut.transform(t);
+
+  static double _fillCurve(double t) {
+    final v = ((t - 0.08) / 0.58).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(v.toDouble());
+  }
+
+  static double _contentCurve(double t) {
+    final v = ((t - 0.16) / 0.46).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(v.toDouble());
+  }
+
+  static double _blurCurve(double t) => Curves.easeOutCubic.transform(t);
 }

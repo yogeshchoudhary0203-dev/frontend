@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../../services/fcm_service.dart';
@@ -105,7 +106,8 @@ class _HomeScreenState extends State<HomeScreen>
 
     _islandCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 520),
+      duration: const Duration(milliseconds: 390),
+      reverseDuration: const Duration(milliseconds: 250),
     );
 
     VisibilityDetectorController.instance.updateInterval =
@@ -729,11 +731,13 @@ class _HomeScreenState extends State<HomeScreen>
 
         // ── Dynamic Island expand overlay ──────────────────
         if (_islandOpen)
-          _IslandNotificationOverlay(
-            islandRect : _islandRect,
-            controller : _islandCtrl,
-            isDark     : isDark,
-            onClose    : _closeIsland,
+          Positioned.fill(
+            child: _IslandNotificationOverlay(
+              islandRect : _islandRect,
+              controller : _islandCtrl,
+              isDark     : isDark,
+              onClose    : _closeIsland,
+            ),
           ),
         ]),
       ),
@@ -1626,6 +1630,25 @@ class _StorySectionState extends State<_StorySection> {
     _load(); // refresh seen state after viewing
   }
 
+  void _showOwnStoryOptions(BuildContext context, StoryUserGroup ownGroup) {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _OwnStoryOptionsSheet(
+        isDark: widget.isDark,
+        onView: () {
+          Navigator.pop(ctx);
+          _openView(_groups!.indexOf(ownGroup));
+        },
+        onAdd: () {
+          Navigator.pop(ctx);
+          _openUpload();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final groups   = _groups ?? [];
@@ -1670,6 +1693,8 @@ class _StorySectionState extends State<_StorySection> {
                       seen:     false,
                       isDark:   widget.isDark,
                       onTap:    () => _openView(groups.indexOf(ownGroup)),
+                      onAddTap: _openUpload,
+                      onLongPress: () => _showOwnStoryOptions(context, ownGroup),
                     )
                   : _StoryBubble(
                       name:     'Your Story',
@@ -1684,6 +1709,8 @@ class _StorySectionState extends State<_StorySection> {
             );
           }
           final g = others[i - 1];
+          final seen = g.allSeen ||
+              (g.hasStories && g.stories.every((story) => story.viewed));
           return Padding(
             padding: const EdgeInsets.only(right: 14),
             child: _StoryBubble(
@@ -1693,7 +1720,7 @@ class _StorySectionState extends State<_StorySection> {
                   ? g.userName[0].toUpperCase() : '?',
               isOwn:    false,
               hasStory: g.hasStories,
-              seen:     g.allSeen,
+              seen:     seen,
               isDark:   widget.isDark,
               onTap:    () => _openView(groups.indexOf(g)),
             ),
@@ -1721,6 +1748,74 @@ class _ShimmerBubble extends StatelessWidget {
   }
 }
 
+// ── Own story options bottom sheet ──────────────────────
+class _OwnStoryOptionsSheet extends StatelessWidget {
+  final bool isDark;
+  final VoidCallback onView;
+  final VoidCallback onAdd;
+
+  const _OwnStoryOptionsSheet({
+    required this.isDark,
+    required this.onView,
+    required this.onAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = isDark ? Colors.white : Colors.black;
+    final bg = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF4F4F6);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(2),
+              color: fg.withOpacity(0.16),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Your Story Options',
+            style: GoogleFonts.manrope(
+              color: fg,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ListTile(
+            leading: Icon(Icons.remove_red_eye_rounded, color: fg),
+            title: Text(
+              'View Your Stories',
+              style: GoogleFonts.manrope(color: fg, fontWeight: FontWeight.w600),
+            ),
+            onTap: onView,
+          ),
+          Divider(height: 1, color: fg.withOpacity(0.06), indent: 16, endIndent: 16),
+          ListTile(
+            leading: Icon(Icons.add_photo_alternate_rounded, color: fg),
+            title: Text(
+              'Add New Story',
+              style: GoogleFonts.manrope(color: fg, fontWeight: FontWeight.w600),
+            ),
+            onTap: onAdd,
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Story bubble ────────────────────────────────────────
 class _StoryBubble extends StatelessWidget {
   final String        name;
@@ -1731,6 +1826,8 @@ class _StoryBubble extends StatelessWidget {
   final bool          seen;
   final bool          isDark;
   final VoidCallback  onTap;
+  final VoidCallback? onAddTap;
+  final VoidCallback? onLongPress;
 
   const _StoryBubble({
     required this.name,
@@ -1741,55 +1838,98 @@ class _StoryBubble extends StatelessWidget {
     required this.seen,
     required this.isDark,
     required this.onTap,
+    this.onAddTap,
+    this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () { HapticFeedback.lightImpact(); onTap(); },
+      onLongPress: onLongPress,
       child: SizedBox(
         width: 70,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(width: 70, height: 70,
-            child: CustomPaint(
-              // Dashed ring: own bubble with no story.
-              // Gradient ring: own bubble with story, or others unseen.
-              // Faded ring: others seen.
-              painter: _StoryRingPainter(
-                isDark: isDark,
-                seen:   seen && !isOwn,
-                isOwn:  isOwn && !hasStory,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(4.5),
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isDark
-                        ? const Color(0xFF2A2A2E)
-                        : const Color(0xFFE5E5EA),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.black.op(0.60)
-                          : Colors.white.op(0.70),
-                      width: 2,
-                    ),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SizedBox(width: 70, height: 70,
+                child: CustomPaint(
+                  // Dashed ring: own bubble with no story.
+                  // Gradient ring: own bubble with story, or others unseen.
+                  // Faded ring: others seen.
+                  painter: _StoryRingPainter(
+                    isDark: isDark,
+                    seen:   seen && !isOwn,
+                    isOwn:  isOwn && !hasStory,
                   ),
-                  child: ClipOval(
-                    child: picture != null
-                        ? CachedNetworkImage(
-                            imageUrl:    picture!,
-                            fit:         BoxFit.cover,
-                            errorWidget: (_, __, ___) =>
-                                _AvatarContent(initials: initials,
-                                    isOwnNoStory: isOwn && !hasStory, isDark: isDark),
-                          )
-                        : _AvatarContent(initials: initials,
-                            isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.5),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDark
+                            ? const Color(0xFF2A2A2E)
+                            : const Color(0xFFE5E5EA),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.black.op(0.60)
+                              : Colors.white.op(0.70),
+                          width: 2,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: picture != null
+                            ? CachedNetworkImage(
+                                imageUrl:    picture!,
+                                fit:         BoxFit.cover,
+                                errorWidget: (_, __, ___) =>
+                                    _AvatarContent(initials: initials,
+                                        isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                              )
+                            : _AvatarContent(initials: initials,
+                                isOwnNoStory: isOwn && !hasStory, isDark: isDark),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              if (isOwn && hasStory && onAddTap != null)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      onAddTap!();
+                    },
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDark ? Colors.white : Colors.black,
+                        border: Border.all(
+                          color: isDark ? Colors.black : Colors.white,
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1.5),
+                          )
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.add,
+                        color: isDark ? Colors.black : Colors.white,
+                        size: 14,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(name,
@@ -1839,18 +1979,39 @@ class _StoryRingPainter extends CustomPainter {
     if (isOwn) { _drawDashed(canvas, Offset(cx, cy), radius); return; }
     if (seen) {
       canvas.drawCircle(Offset(cx, cy), radius, Paint()
-        ..style = PaintingStyle.stroke..strokeWidth = 1.8
-        ..color = (isDark ? Colors.white : Colors.black).op(0.20));
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..strokeCap = StrokeCap.round
+        ..color = (isDark
+                ? const Color(0xFFC8CCD2)
+                : const Color(0xFF9CA3AF))
+            .op(isDark ? 0.42 : 0.62));
       return;
     }
-    canvas.drawCircle(Offset(cx, cy), radius, Paint()
-      ..style = PaintingStyle.stroke..strokeWidth = 2.4
+    final center = Offset(cx, cy);
+    canvas.drawCircle(center, radius, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.8
+      ..color = (isDark ? Colors.white : Colors.black).op(0.06));
+    canvas.drawCircle(center, radius, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.6
       ..strokeCap = StrokeCap.round
-      ..shader = ui.Gradient.sweep(Offset(cx, cy),
+      ..shader = ui.Gradient.sweep(center,
         isDark
-            ? const [Color(0xFFFFFFFF), Color(0xFFAAAAAA), Color(0xFF666666)]
-            : const [Color(0xFF1A1A1A), Color(0xFF555555), Color(0xFF999999)],
-        const [0.0, 0.5, 1.0], TileMode.clamp,
+            ? const [
+                Color(0xFFFFC66D),
+                Color(0xFFE86D8F),
+                Color(0xFF8B7CFF),
+                Color(0xFFFFC66D),
+              ]
+            : const [
+                Color(0xFFF2A24B),
+                Color(0xFFD95778),
+                Color(0xFF7666D9),
+                Color(0xFFF2A24B),
+              ],
+        const [0.0, 0.34, 0.68, 1.0], TileMode.clamp,
         -math.pi / 2, -math.pi / 2 + math.pi * 2));
   }
   void _drawDashed(Canvas canvas, Offset center, double radius) {
@@ -2002,44 +2163,50 @@ class _PostCardState extends State<PostCard> {
                 ])),
 
         // ── Actions ──────────────────────────────────
-        Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-          child: Row(children: [
+        Padding(padding: const EdgeInsets.fromLTRB(8, 8, 10, 0),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-            _LikeButton(
-              isLiked: p.isLiked,
-              onTap: () {
-                HapticFeedback.lightImpact();
-                widget.onLike();
-              },
-              onLongPress: () {
-                HapticFeedback.heavyImpact();
-                Navigator.of(context).push(PageRouteBuilder(
-                  pageBuilder: (_, animation, __) => LikedByScreen(
-                    dark: dark,
-                    postUser: p.userName,
-                    likeCount: p.likesCount,
-                  ),
-                  transitionDuration: const Duration(milliseconds: 380),
-                  reverseTransitionDuration: const Duration(milliseconds: 300),
-                  transitionsBuilder: (_, animation, __, child) {
-                    final curved = CurvedAnimation(parent: animation,
-                        curve: Curves.easeOutCubic,
-                        reverseCurve: Curves.easeInCubic);
-                    return SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.06), end: Offset.zero,
-                      ).animate(curved),
-                      child: FadeTransition(opacity: curved, child: child));
-                  },
-                ));
-              },
-              likedColor: likedCol,
-              iconColor: iconCol,
+            _ActionStat(
+              count: '${p.likesCount}',
+              color: textPrimary,
+              icon: _LikeButton(
+                isLiked: p.isLiked,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  widget.onLike();
+                },
+                onLongPress: () {
+                  HapticFeedback.heavyImpact();
+                  Navigator.of(context).push(PageRouteBuilder(
+                    pageBuilder: (_, animation, __) => LikedByScreen(
+                      dark: dark,
+                      postUser: p.userName,
+                      likeCount: p.likesCount,
+                    ),
+                    transitionDuration: const Duration(milliseconds: 380),
+                    reverseTransitionDuration: const Duration(milliseconds: 300),
+                    transitionsBuilder: (_, animation, __, child) {
+                      final curved = CurvedAnimation(parent: animation,
+                          curve: Curves.easeOutCubic,
+                          reverseCurve: Curves.easeInCubic);
+                      return SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.06), end: Offset.zero,
+                        ).animate(curved),
+                        child: FadeTransition(opacity: curved, child: child));
+                    },
+                  ));
+                },
+                likedColor: likedCol,
+                iconColor: iconCol,
+              ),
             ),
 
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
 
-            GestureDetector(
+            _ActionStat(
+              count: '${p.commentsCount}',
+              color: textPrimary,
               onTap: () {
                 HapticFeedback.selectionClick();
                 Navigator.of(context).push(PageRouteBuilder(
@@ -2064,32 +2231,31 @@ class _PostCardState extends State<PostCard> {
                   },
                 ));
               },
-              child: SizedBox(width: 26, height: 26,
-                child: CustomPaint(painter: _CommentBubblePainter(color: iconCol)))),
+              icon: SizedBox(width: 26, height: 26,
+                child: CustomPaint(painter: _CommentBubblePainter(color: iconCol))),
+            ),
 
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
 
-            GestureDetector(
+            _ActionStat(
+              count: '${p.sharesCount}',
+              color: textPrimary,
               onTap: () {
                 HapticFeedback.lightImpact();
                 ShareHelper.showShareBottomSheet(context, p);
               },
-              child: SizedBox(width: 26, height: 26,
-                child: Icon(Icons.near_me_rounded, size: 26, color: iconCol))),
+              icon: Icon(Icons.near_me_rounded, size: 26, color: iconCol),
+            ),
 
             const Spacer(),
 
             GestureDetector(
               onTap: () => HapticFeedback.lightImpact(),
-              child: SizedBox(width: 26, height: 26,
-                child: CustomPaint(painter: _SaveCirclePainter(color: iconCol)))),
+              child: SizedBox(width: 34, height: 32,
+                child: Center(
+                  child: SizedBox(width: 26, height: 26,
+                    child: CustomPaint(painter: _SaveCirclePainter(color: iconCol)))))),
           ])),
-
-        // ── Likes count ──────────────────────────────
-        Padding(padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
-          child: Text('${p.likesCount} ${'likes'.tr(context)}',
-            style: TextStyle(color: textPrimary, fontSize: 13,
-              fontWeight: FontWeight.w600))),
 
         // ── Caption ──────────────────────────────────
         if (p.caption.isNotEmpty)
@@ -2363,6 +2529,57 @@ class _VideoCardState extends State<_VideoCard> {
           ]),
         ),
       ),
+    );
+  }
+}
+
+// ─── Action Count Item ───────────────────────────────
+class _ActionStat extends StatelessWidget {
+  final Widget icon;
+  final String count;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _ActionStat({
+    required this.icon,
+    required this.count,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = SizedBox(
+      width: 34,
+      height: 44,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(width: 28, height: 28, child: Center(child: icon)),
+        const SizedBox(height: 2),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 120),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          child: Text(count,
+            key: ValueKey<String>(count),
+            maxLines: 1,
+            overflow: TextOverflow.fade,
+            softWrap: false,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontSize: 11.5,
+              height: 1.0,
+              fontWeight: FontWeight.w700,
+            )),
+        ),
+      ]),
+    );
+
+    if (onTap == null) return content;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: content,
     );
   }
 }
@@ -2959,25 +3176,50 @@ class _IslandNotificationOverlayState
       builder: (context, _) {
         final topPad = MediaQuery.paddingOf(context).top;
         final t = widget.controller.value;
+        final expandT = _expandCurve(t);
+        final blurT = _blurCurve(t);
+        final fillT = _fillCurve(t);
+        final contentT = _contentCurve(t);
 
-        final double left   = ui.lerpDouble(
-            widget.islandRect.left,   screenRect.left,   _expandCurve(t))!;
-        final double top    = ui.lerpDouble(
-            widget.islandRect.top,    screenRect.top,    _expandCurve(t))!
+        final double left = ui.lerpDouble(
+          widget.islandRect.left,
+          screenRect.left,
+          expandT,
+        )!;
+        final double top = ui.lerpDouble(
+          widget.islandRect.top,
+          screenRect.top,
+          expandT,
+        )!
             + (_dragging ? _dragY.clamp(0, dismissThreshold * 1.4) : 0);
-        final double right  = ui.lerpDouble(
-            widget.islandRect.right,  screenRect.right,  _expandCurve(t))!;
+        final double right = ui.lerpDouble(
+          widget.islandRect.right,
+          screenRect.right,
+          expandT,
+        )!;
         final double bottom = ui.lerpDouble(
-            widget.islandRect.bottom, screenRect.bottom, _expandCurve(t))!;
-        final double borderR = ui.lerpDouble(19, 0, _expandCurve(t))!;
+          widget.islandRect.bottom,
+          screenRect.bottom,
+          expandT,
+        )!;
+        final double borderR = ui.lerpDouble(19, 0, expandT)!;
+        final double bgBlur = ui.lerpDouble(0, 14, blurT)!;
+        final double bgDim =
+            ui.lerpDouble(0, widget.isDark ? 0.24 : 0.12, blurT)!;
+        final double panelAlpha = ui.lerpDouble(
+          widget.isDark ? 0.20 : 0.34,
+          widget.isDark ? 0.94 : 0.97,
+          fillT,
+        )!;
 
-        final double contentAlpha =
-            ((t - 0.35) / 0.65).clamp(0.0, 1.0);
+        final double contentAlpha = contentT;
+        final double contentLift = ui.lerpDouble(12, 0, contentT)!;
 
         final double dragAlpha = _dragging
             ? (1.0 - (_dragY / (dismissThreshold * 2.0)).clamp(0.0, 0.5))
             : 1.0;
 
+<<<<<<< HEAD
         return Positioned(
           left  : left,
           top   : top,
@@ -3045,12 +3287,115 @@ class _IslandNotificationOverlayState
                           ),
                         ),
                     ]),
+=======
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: bgBlur, sigmaY: bgBlur),
+                  child: ColoredBox(
+                    color: (widget.isDark ? Colors.black : Colors.white)
+                        .withOpacity(bgDim),
+>>>>>>> 25570231acd28216786dad7bbfc6b610d735b7e7
                   ),
                 ),
               ),
             ),
+<<<<<<< HEAD
             ),
           ),
+=======
+            Positioned(
+              left: left,
+              top: top,
+              width: right - left,
+              height: bottom - top,
+              child: Opacity(
+                opacity: dragAlpha,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(borderR),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(
+                      sigmaX: ui.lerpDouble(18, 26, fillT)!,
+                      sigmaY: ui.lerpDouble(18, 26, fillT)!,
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: widget.isDark
+                            ? Colors.black.withOpacity(panelAlpha)
+                            : Colors.white.withOpacity(panelAlpha),
+                        borderRadius: BorderRadius.circular(borderR),
+                      ),
+                      child: GestureDetector(
+                        onVerticalDragStart: (_) {
+                          setState(() {
+                            _dragging = true;
+                            _dragY = 0;
+                          });
+                        },
+                        onVerticalDragUpdate: (d) {
+                          if (d.delta.dy > 0) {
+                            setState(() => _dragY += d.delta.dy);
+                          }
+                        },
+                        onVerticalDragEnd: (d) {
+                          if (_dragY > dismissThreshold ||
+                              (d.velocity.pixelsPerSecond.dy > 600)) {
+                            setState(() {
+                              _dragging = false;
+                              _dragY = 0;
+                            });
+                            widget.onClose();
+                          } else {
+                            setState(() {
+                              _dragging = false;
+                              _dragY = 0;
+                            });
+                          }
+                        },
+                        child: Stack(children: [
+                          Transform.translate(
+                            offset: Offset(0, contentLift),
+                            child: Opacity(
+                              opacity: contentAlpha,
+                              child: NotificationsScreen(
+                                dark: widget.isDark,
+                                onClose: widget.onClose,
+                                backgroundOpacity: fillT,
+                              ),
+                            ),
+                          ),
+
+                          if (contentAlpha > 0.1)
+                            Positioned(
+                              top: topPad + 6, left: 0, right: 0,
+                              child: Opacity(
+                                opacity: contentAlpha,
+                                child: Center(
+                                  child: Container(
+                                    width: 36,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color: (widget.isDark
+                                              ? Colors.white
+                                              : Colors.black)
+                                          .withOpacity(0.22),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+>>>>>>> 25570231acd28216786dad7bbfc6b610d735b7e7
         );
       },
     );
@@ -3058,4 +3403,16 @@ class _IslandNotificationOverlayState
 
   static double _expandCurve(double t) =>
       Curves.fastEaseInToSlowEaseOut.transform(t);
+
+  static double _fillCurve(double t) {
+    final v = ((t - 0.08) / 0.58).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(v.toDouble());
+  }
+
+  static double _contentCurve(double t) {
+    final v = ((t - 0.16) / 0.46).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(v.toDouble());
+  }
+
+  static double _blurCurve(double t) => Curves.easeOutCubic.transform(t);
 }

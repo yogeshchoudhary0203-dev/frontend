@@ -69,6 +69,10 @@ class _ChatScreenState extends State<ChatScreen>
   final Set<String> _pendingIds = {};
   ChatMessage? _replyingTo;
 
+  // Older messages pagination
+  bool _isLoadingOlderMessages = false;
+  bool _hasOlderMessages = true;
+
   @override
   void initState() {
     super.initState();
@@ -134,6 +138,7 @@ class _ChatScreenState extends State<ChatScreen>
     // Tell FCM service which conversation is active so it suppresses
     // redundant notifications while user is viewing this chat.
     FcmService.setActiveConversation(widget.conversation.id);
+    _scrollController.addListener(_onChatScroll);
     _loadMessages();
     ChatService().markAsRead(widget.conversation.id);
 
@@ -259,6 +264,7 @@ class _ChatScreenState extends State<ChatScreen>
           _messages = msgs.where(_isDisplayableMessage).toList();
           _isLoading = false;
           _hasError = false;
+          _hasOlderMessages = true;
         });
         // Save fresh data to cache for next open
         _saveToCache(msgs.where(_isDisplayableMessage).toList());
@@ -270,6 +276,35 @@ class _ChatScreenState extends State<ChatScreen>
       } else if (mounted) {
         setState(() { _isLoading = false; });
       }
+    }
+  }
+
+  void _onChatScroll() {
+    // In a reversed ListView, maxScrollExtent is the visual top (oldest messages).
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadOlderMessages();
+    }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    if (_isLoadingOlderMessages || !_hasOlderMessages || _messages.isEmpty) return;
+    setState(() => _isLoadingOlderMessages = true);
+    try {
+      final older = await ChatService().getMessages(
+        widget.conversation.id,
+        skip: _messages.length,
+        limit: 30,
+      );
+      final displayable = older.where(_isDisplayableMessage).toList();
+      if (mounted) {
+        setState(() {
+          _messages.addAll(displayable);
+          _hasOlderMessages = displayable.length >= 30;
+          _isLoadingOlderMessages = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingOlderMessages = false);
     }
   }
 
@@ -704,9 +739,101 @@ class _ChatScreenState extends State<ChatScreen>
     final otherUser    = widget.conversation.getOtherParticipant(widget.myUserId);
     final avatarLetter = otherUser.username.isNotEmpty ? otherUser.username[0].toUpperCase() : '?';
 
+    // Build message list as a stable child — AnimatedBuilder will NOT rebuild
+    // this on every animation tick, only on setState (new message/reaction).
+    final msgListChild = _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _hasError
+            ? Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text('Could not load messages'.tr(context), style: manrope(size: 14, color: sub)),
+                  const SizedBox(height: 8),
+                  TextButton(onPressed: _loadMessages, child: Text('Retry'.tr(context))),
+                ]),
+              )
+            : ListView.builder(
+                controller: _scrollController,
+                reverse: true,
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                addAutomaticKeepAlives: false,
+                itemCount: _messages.length +
+                    (_typingUserId != null ? 1 : 0) +
+                    1 +
+                    (_isLoadingOlderMessages ? 1 : 0),
+                itemBuilder: (context, index) {
+                  final typingOffset = _typingUserId != null ? 1 : 0;
+                  final bannerIndex = _messages.length + typingOffset;
+                  final loadingIndex = bannerIndex + 1;
+
+                  // Loading older messages spinner (visually topmost)
+                  if (_isLoadingOlderMessages && index == loadingIndex) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: widget.dark
+                                ? Colors.white.withOpacity(0.5)
+                                : Colors.black.withOpacity(0.5),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  // 🔒 E2E banner
+                  if (index == bannerIndex) {
+                    return _E2EBanner(dark: widget.dark);
+                  }
+                  if (_typingUserId != null) {
+                    if (index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: _BubbleTyping(dark: widget.dark, sub: sub),
+                      );
+                    }
+                    index--;
+                  }
+
+                  final msg       = _messages[index];
+                  final isMe      = msg.senderId == widget.myUserId;
+                  final isPending = _pendingIds.contains(msg.id);
+
+                  bool last = true;
+                  if (index > 0) {
+                    final newer = _messages[index - 1];
+                    if (newer.senderId == msg.senderId) last = false;
+                  }
+
+                  // ValueKey stabilises element identity when messages are
+                  // inserted at index 0 — prevents full list rebuild on each send.
+                  return Padding(
+                    key: ValueKey(msg.id),
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: SwipeToReply(
+                      dark: widget.dark,
+                      onReply: () => setState(() => _replyingTo = msg),
+                      child: GestureDetector(
+                        onLongPress: () => _showMessageOptions(msg),
+                        child: _Bubble(
+                          m: msg, isMe: isMe, dark: widget.dark,
+                          last: last, isPending: isPending,
+                          myUserId: widget.myUserId,
+                          onReact: (emoji) => _onReact(msg, emoji),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+
     return AnimatedBuilder(
       animation: _entranceCtrl,
-      builder: (context, _) => Scaffold(
+      child: msgListChild,
+      builder: (context, child) => Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: widget.dark ? GlassTokens.bgDark : GlassTokens.bgLight,
       body: Stack(children: [
@@ -725,65 +852,7 @@ class _ChatScreenState extends State<ChatScreen>
             child: Transform.scale(
               scale: _bodyScale.value,
               alignment: Alignment.center,
-              child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _hasError
-                  ? Center(
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text('Could not load messages'.tr(context), style: manrope(size: 14, color: sub)),
-                        const SizedBox(height: 8),
-                        TextButton(onPressed: _loadMessages, child: Text('Retry'.tr(context))),
-                      ]),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      reverse: true,
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                      itemCount: _messages.length + (_typingUserId != null ? 1 : 0) + 1,
-                      itemBuilder: (context, index) {
-                        final bannerIndex = _messages.length + (_typingUserId != null ? 1 : 0);
-                        // 🔒 E2E banner
-                        if (index == bannerIndex) {
-                          return _E2EBanner(dark: widget.dark);
-                        }
-                        if (_typingUserId != null) {
-                          if (index == 0) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 3),
-                              child: _BubbleTyping(dark: widget.dark, sub: sub),
-                            );
-                          }
-                          index--;
-                        }
-
-                        final msg       = _messages[index];
-                        final isMe      = msg.senderId == widget.myUserId;
-                        final isPending = _pendingIds.contains(msg.id);
-
-                        bool last = true;
-                        if (index > 0) {
-                          final newer = _messages[index - 1];
-                          if (newer.senderId == msg.senderId) last = false;
-                        }
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 3),
-                          child: SwipeToReply(
-                            dark: widget.dark,
-                            onReply: () => setState(() => _replyingTo = msg),
-                            child: GestureDetector(
-                              onLongPress: () => _showMessageOptions(msg),
-                              child: _Bubble(
-                                m: msg, isMe: isMe, dark: widget.dark,
-                                last: last, isPending: isPending,
-                                myUserId: widget.myUserId,
-                                onReact: (emoji) => _onReact(msg, emoji),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+              child: child,
             ),
           ),
         ),

@@ -47,6 +47,19 @@
 			</array>
 		</dict>
 	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.trandia.trandia</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>trandia</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Trandia uses your location to show your city on your profile. You can hide it anytime.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

@@ -1,16 +1,9 @@
 // chat_list_screen.dart
-// BUGS FIXED:
-// 1. getConversations() always threw TypeError (ApiService.get cast fix in chat_service.dart)
-//    — chat list now actually loads conversations from MongoDB
-// 2. Every incoming WebSocket message triggered full API refetch (inefficient)
-//    — now updates conversation in-place, only refetches when needed
-// 3. No error state shown to user — now shows retry button on network failure
-// 4. otherUser.username[0] could crash if username empty — guarded with isNotEmpty
-// 5. No safe-area top padding — header overlapped status bar on some devices
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../l10n/app_localizations.dart';
@@ -51,6 +44,12 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   double? _swipeStartY;
   bool _notificationsOn = true;
 
+  // Filter state — persisted in SharedPreferences
+  Set<String> _lockedIds = {};
+  Set<String> _archivedIds = {};
+  Set<String> _blockedIds = {};
+  String _activeFilter = 'all'; // 'all' | 'locked' | 'archived' | 'blocked'
+
   @override
   void initState() {
     super.initState();
@@ -66,7 +65,6 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Reconnect WebSocket when app comes to foreground
     if (state == AppLifecycleState.resumed) {
       ChatService().connectWebSocket();
       _loadConversations();
@@ -75,25 +73,21 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
   Future<void> _initData() async {
     _myUserId = await AuthService.getCurrentUserId();
-    // Connect WS and load conversations in parallel for faster startup
     await Future.wait([
       ChatService().connectWebSocket(),
       _loadConversations(),
+      _loadFilterState(),
     ]);
 
-    // FIX: instead of refetching ALL conversations on every message,
-    // update the matching conversation in-place (fast, no API call).
     ChatService().messageStream.listen((msg) {
       if (!mounted) return;
       final idx = _conversations.indexWhere((c) => c.id == msg.conversationId);
       if (idx == -1) {
-        // New conversation appeared — do a full refresh
         _loadConversations();
         return;
       }
       final old = _conversations[idx];
       final updatedUnread = Map<String, int>.from(old.unreadCounts);
-      // Increment unread for everyone except sender
       for (final p in old.participants) {
         if (p.id != msg.senderId) {
           updatedUnread[p.id] = (updatedUnread[p.id] ?? 0) + 1;
@@ -110,10 +104,109 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
       );
       setState(() {
         _conversations.removeAt(idx);
-        _conversations.insert(0, updated); // move to top
+        _conversations.insert(0, updated);
       });
     });
   }
+
+  // ── SharedPreferences persistence ────────────────────────────
+
+  Future<void> _loadFilterState() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _lockedIds = Set.from(prefs.getStringList('chat_locked') ?? []);
+      _archivedIds = Set.from(prefs.getStringList('chat_archived') ?? []);
+      _blockedIds = Set.from(prefs.getStringList('chat_blocked') ?? []);
+    });
+  }
+
+  Future<void> _saveFilterState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('chat_locked', _lockedIds.toList());
+    await prefs.setStringList('chat_archived', _archivedIds.toList());
+    await prefs.setStringList('chat_blocked', _blockedIds.toList());
+  }
+
+  // ── Toggle actions (called from _ChatRow via callbacks) ──────
+
+  void _toggleLock(String convId) {
+    setState(() {
+      if (_lockedIds.contains(convId)) {
+        _lockedIds.remove(convId);
+      } else {
+        _lockedIds.add(convId);
+        _archivedIds.remove(convId);
+        _blockedIds.remove(convId);
+      }
+    });
+    _saveFilterState();
+  }
+
+  void _toggleArchive(String convId) {
+    setState(() {
+      if (_archivedIds.contains(convId)) {
+        _archivedIds.remove(convId);
+      } else {
+        _archivedIds.add(convId);
+        _lockedIds.remove(convId);
+        _blockedIds.remove(convId);
+      }
+    });
+    _saveFilterState();
+  }
+
+  void _toggleBlock(String convId) {
+    setState(() {
+      if (_blockedIds.contains(convId)) {
+        _blockedIds.remove(convId);
+      } else {
+        _blockedIds.add(convId);
+        _lockedIds.remove(convId);
+        _archivedIds.remove(convId);
+      }
+    });
+    _saveFilterState();
+  }
+
+  // ── Filtered list ─────────────────────────────────────────────
+
+  List<ChatConversation> get _filteredConversations {
+    switch (_activeFilter) {
+      case 'locked':
+        return _conversations.where((c) => _lockedIds.contains(c.id)).toList();
+      case 'archived':
+        return _conversations.where((c) => _archivedIds.contains(c.id)).toList();
+      case 'blocked':
+        return _conversations.where((c) => _blockedIds.contains(c.id)).toList();
+      default:
+        return _conversations.where((c) =>
+          !_lockedIds.contains(c.id) &&
+          !_archivedIds.contains(c.id) &&
+          !_blockedIds.contains(c.id)
+        ).toList();
+    }
+  }
+
+  String _emptyStateMessage(BuildContext context) {
+    switch (_activeFilter) {
+      case 'locked':   return 'No locked chats'.tr(context);
+      case 'archived': return 'No archived chats'.tr(context);
+      case 'blocked':  return 'No blocked chats'.tr(context);
+      default:         return 'No messages yet'.tr(context);
+    }
+  }
+
+  String _emptyStateSubtitle(BuildContext context) {
+    switch (_activeFilter) {
+      case 'locked':   return 'Hold a chat and tap Lock to add it here'.tr(context);
+      case 'archived': return 'Hold a chat and tap Archive to add it here'.tr(context);
+      case 'blocked':  return 'Hold a chat and tap Block to add it here'.tr(context);
+      default:         return 'Search for someone to start chatting'.tr(context);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
 
   Future<void> _loadConversations() async {
     if (mounted) setState(() { _hasError = false; });
@@ -130,27 +223,16 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _hasError = _conversations.isEmpty; // only show error if no data
+          _hasError = _conversations.isEmpty;
         });
       }
     }
-  }
-
-  void _handleBackSwipe(DragEndDetails details) {
-    final velocity = details.primaryVelocity;
-    if (velocity == null || velocity > -150 || !Navigator.of(context).canPop()) {
-      return;
-    }
-
-    HapticFeedback.selectionClick();
-    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final fg  = GlassTokens.fg(widget.dark);
     final sub = GlassTokens.sub(widget.dark);
-    // FIX: respect status bar height
     final topPad = MediaQuery.paddingOf(context).top;
 
     return Scaffold(
@@ -184,168 +266,120 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
             children: [
               SizedBox(height: topPad + 10),
 
-            // Header pill
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: GlassHeader(
-                dark: widget.dark,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Row(children: [
-                  GlassCircleButton(
-                    dark: widget.dark,
-                    icon: Icons.arrow_back_ios_new,
-                    iconSize: 15,
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      Navigator.of(context).pop();
-                    },
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: GlassHeader(
+                  dark: widget.dark,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Row(children: [
+                    GlassCircleButton(
+                      dark: widget.dark,
+                      icon: Icons.arrow_back_ios_new,
+                      iconSize: 15,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Text('Messages'.tr(context),
+                        style: manrope(
+                            size: 17,
+                            weight: FontWeight.w700,
+                            color: fg,
+                            letterSpacing: -0.34)),
+                    const Spacer(),
+                    GlassCircleButton(
+                      dark: widget.dark,
+                      icon: _notificationsOn
+                          ? Icons.notifications_outlined
+                          : Icons.notifications_off_outlined,
+                      iconSize: 18,
+                      onTap: () {
+                        HapticFeedback.heavyImpact();
+                        setState(() { _notificationsOn = !_notificationsOn; });
+                      },
+                    ),
+                  ]),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Favourites strip — only show in "all" tab
+              if (_activeFilter == 'all') ...[
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                    child: Text('FAVOURITES'.tr(context),
+                        style: manrope(
+                            size: 11,
+                            weight: FontWeight.w700,
+                            color: sub,
+                            letterSpacing: 0.88)),
                   ),
-                  const SizedBox(width: 8),
-                  Text('Messages'.tr(context),
-                      style: manrope(
-                          size: 17,
-                          weight: FontWeight.w700,
-                          color: fg,
-                          letterSpacing: -0.34)),
-                  const Spacer(),
-                  GlassCircleButton(
-                    dark: widget.dark,
-                    icon: _notificationsOn
-                        ? Icons.notifications_outlined
-                        : Icons.notifications_off_outlined,
-                    iconSize: 18,
-                    onTap: () {
-                      HapticFeedback.heavyImpact();
-                      setState(() {
-                        _notificationsOn = !_notificationsOn;
-                      });
-                    },
+                  SizedBox(
+                    height: 84,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      itemCount: _active.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      itemBuilder: (_, i) =>
+                          _ActiveAvatar(a: _active[i], i: i, dark: widget.dark),
+                    ),
                   ),
                 ]),
-              ),
-            ),
+                const SizedBox(height: 5),
+              ],
 
-            const SizedBox(height: 10),
+              _buildPillRow(context, widget.dark),
+              const SizedBox(height: 5),
 
-            // Active now strip
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                child: Text('FAVOURITES'.tr(context),
-                    style: manrope(
-                        size: 11,
-                        weight: FontWeight.w700,
-                        color: sub,
-                        letterSpacing: 0.88)),
-              ),
-              SizedBox(
-                height: 84,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _active.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 6),
-                  itemBuilder: (_, i) =>
-                      _ActiveAvatar(a: _active[i], i: i, dark: widget.dark),
-                ),
-              ),
-            ]),
-
-            const SizedBox(height: 5),
-
-            _buildPillRow(context, widget.dark),
-            const SizedBox(height: 5),
-
-            // Conversations list
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _hasError
-                      ? Center(
-                          child: Column(mainAxisSize: MainAxisSize.min, children: [
-                            Text('Could not load chats'.tr(context),
-                                style: manrope(size: 14, color: sub)),
-                            const SizedBox(height: 8),
-                            TextButton(
-                              onPressed: _loadConversations,
-                              child: Text('Retry'.tr(context)),
-                            ),
-                          ]),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _loadConversations,
-                          child: ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
-                            // +1 for header, +1 if empty state
-                            itemCount: 1 + (_conversations.isEmpty ? 1 : _conversations.length),
-                            itemBuilder: (context, index) {
-                              // Header row
-                              if (index == 0) {
-                                return Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                  child: Text('CHATS'.tr(context),
-                                      style: manrope(
-                                          size: 11,
-                                          weight: FontWeight.w700,
-                                          color: sub,
-                                          letterSpacing: 0.88)),
-                                );
-                              }
-                              // Empty state
-                              if (_conversations.isEmpty) {
-                                return Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text('No messages yet'.tr(context),
-                                            style: manrope(
-                                                size: 14,
-                                                weight: FontWeight.w500,
-                                                color: sub),
-                                            textAlign: TextAlign.center),
-                                        const SizedBox(height: 8),
-                                        Text('Search for someone to start chatting'.tr(context),
-                                            style: manrope(
-                                                size: 12,
-                                                weight: FontWeight.w400,
-                                                color: sub),
-                                            textAlign: TextAlign.center),
-                                      ]),
-                                );
-                              }
-                              // Conversation row (index - 1 because of header)
-                              final i = index - 1;
-                              return Padding(
-                                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-                                child: _ChatRow(
-                                  c: _conversations[i],
-                                  i: i + 1,
-                                  dark: widget.dark,
-                                  myUserId: _myUserId ?? '',
-                                  onReload: _loadConversations,
-                                ),
-                              );
-                            },
+              // Conversations list
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _hasError
+                        ? Center(
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              Text('Could not load chats'.tr(context),
+                                  style: manrope(size: 14, color: sub)),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: _loadConversations,
+                                child: Text('Retry'.tr(context)),
+                              ),
+                            ]),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadConversations,
+                            child: _buildConversationList(context, sub),
                           ),
-                        ),
               ),
 
-            // Search bar (tappable, opens SearchScreen) — moved to bottom
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => SearchScreen(dark: widget.dark)),
-                ),
-                child: SizedBox(
-                  height: 42,
-                  child: GlassSurface(
-                    dark: widget.dark,
-                    radius: 999,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                    blurSigma: 28,
+              // Search bar
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => SearchScreen(dark: widget.dark)),
+                  ),
+                  child: Container(
+                    height: 42,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: widget.dark
+                          ? Colors.white.withOpacity(0.06)
+                          : Colors.white.withOpacity(0.6),
+                      border: Border.all(
+                          color: widget.dark
+                              ? Colors.white.withOpacity(0.10)
+                              : Colors.white.withOpacity(0.95)),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                     child: Row(children: [
                       Icon(Icons.search_rounded, size: 18, color: sub),
                       const SizedBox(width: 10),
@@ -359,11 +393,66 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                   ),
                 ),
               ),
-            ),
             ],
           ),
         ]),
       ),
+    );
+  }
+
+  Widget _buildConversationList(BuildContext context, Color sub) {
+    final list = _filteredConversations;
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
+      itemCount: 1 + (list.isEmpty ? 1 : list.length),
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text('CHATS'.tr(context),
+                style: manrope(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: sub,
+                    letterSpacing: 0.88)),
+          );
+        }
+        if (list.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_emptyStateMessage(context),
+                    style: manrope(size: 14, weight: FontWeight.w500, color: sub),
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 8),
+                Text(_emptyStateSubtitle(context),
+                    style: manrope(size: 12, weight: FontWeight.w400, color: sub),
+                    textAlign: TextAlign.center),
+              ],
+            ),
+          );
+        }
+        final i = index - 1;
+        final conv = list[i];
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+          child: _ChatRow(
+            c: conv,
+            i: i + 1,
+            dark: widget.dark,
+            myUserId: _myUserId ?? '',
+            onReload: _loadConversations,
+            isLocked: _lockedIds.contains(conv.id),
+            isArchived: _archivedIds.contains(conv.id),
+            isBlocked: _blockedIds.contains(conv.id),
+            onLock: () => _toggleLock(conv.id),
+            onArchive: () => _toggleArchive(conv.id),
+            onBlock: () => _toggleBlock(conv.id),
+          ),
+        );
+      },
     );
   }
 
@@ -374,72 +463,91 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _buildPill(context, 'Archived', Icons.archive_outlined, dark, false),
+            _buildPill(context, 'all', 'All', Icons.chat_bubble_outline, dark),
             const SizedBox(width: 8),
-            _buildPill(context, 'Locked', Icons.lock_outline, dark, false),
+            _buildPill(context, 'archived', 'Archived', Icons.archive_outlined, dark),
             const SizedBox(width: 8),
-            _buildPill(context, 'Blocked', Icons.block_outlined, dark, false),
+            _buildPill(context, 'locked', 'Locked', Icons.lock_outline, dark),
+            const SizedBox(width: 8),
+            _buildPill(context, 'blocked', 'Blocked', Icons.block_outlined, dark),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPill(BuildContext context, String title, IconData icon, bool dark, bool isActive) {
+  Widget _buildPill(BuildContext context, String filter, String title, IconData icon, bool dark) {
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
-    final bgColor = isActive 
-        ? (dark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.1))
+    final isActive = _activeFilter == filter;
+
+    final bgColor = isActive
+        ? (dark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.10))
         : (dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03));
-        
+
+    // Badge count for each filter
+    int count = 0;
+    if (filter == 'locked')   count = _lockedIds.length;
+    if (filter == 'archived') count = _archivedIds.length;
+    if (filter == 'blocked')  count = _blockedIds.length;
+
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
-        if (title != 'Chats') {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => Scaffold(
-                backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
-                appBar: AppBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  iconTheme: IconThemeData(color: fg),
-                  title: Text(title.tr(context), style: manrope(size: 17, weight: FontWeight.w700, color: fg)),
-                ),
-                body: Stack(
-                  children: [
-                    GlassBackdrop(dark: dark),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
+        setState(() { _activeFilter = filter; });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: isActive 
-                ? (dark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.2))
-                : Colors.transparent,
+            color: isActive
+                ? (dark ? Colors.white.withOpacity(0.30) : Colors.black.withOpacity(0.12))
+                : (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06)),
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: isActive ? fg : sub),
-            const SizedBox(width: 6),
+            Icon(icon, size: 14, color: isActive ? fg : sub),
+            const SizedBox(width: 5),
             Text(
               title.tr(context),
               style: manrope(
-                size: 13,
+                size: 12.5,
                 weight: isActive ? FontWeight.w700 : FontWeight.w600,
                 color: isActive ? fg : sub,
+                letterSpacing: -0.12,
               ),
             ),
+            if (count > 0) ...[
+              const SizedBox(width: 5),
+              Container(
+                width: 18,
+                height: 18,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? (dark ? Colors.white : Colors.black)
+                      : (dark ? Colors.white.withOpacity(0.20) : Colors.black.withOpacity(0.10)),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$count',
+                  style: manrope(
+                    size: 10,
+                    weight: FontWeight.w800,
+                    color: isActive
+                        ? (dark ? Colors.black : Colors.white)
+                        : (dark ? Colors.white : Colors.black),
+                    height: 1,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -514,15 +622,10 @@ class _ActiveAvatar extends StatelessWidget {
   }
 
   Widget _innerAvatar() => Container(
-        decoration:
-            BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
+        decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
         alignment: Alignment.center,
         child: Text(a.name[0].toUpperCase(),
-            style: manrope(
-                size: 18,
-                weight: FontWeight.w700,
-                color: Colors.white,
-                letterSpacing: -0.3)),
+            style: manrope(size: 18, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3)),
       );
 }
 
@@ -534,6 +637,12 @@ class _ChatRow extends StatelessWidget {
   final bool dark;
   final String myUserId;
   final VoidCallback onReload;
+  final bool isLocked;
+  final bool isArchived;
+  final bool isBlocked;
+  final VoidCallback onLock;
+  final VoidCallback onArchive;
+  final VoidCallback onBlock;
 
   const _ChatRow({
     required this.c,
@@ -541,6 +650,12 @@ class _ChatRow extends StatelessWidget {
     required this.dark,
     required this.myUserId,
     required this.onReload,
+    required this.isLocked,
+    required this.isArchived,
+    required this.isBlocked,
+    required this.onLock,
+    required this.onArchive,
+    required this.onBlock,
   });
 
   @override
@@ -549,12 +664,10 @@ class _ChatRow extends StatelessWidget {
     final sub = GlassTokens.sub(dark);
 
     final otherUser = c.getOtherParticipant(myUserId);
-    // FIX: guard against empty username to avoid RangeError
     final avatarLetter =
         otherUser.username.isNotEmpty ? otherUser.username[0].toUpperCase() : '?';
 
     final unread    = c.unreadCounts[myUserId] ?? 0;
-    // Clean up encrypted/failed preview — show plain fallback instead
     final rawLast   = c.lastMessage ?? '';
     final lastText  = _cleanPreview(context, rawLast);
     final timeStr   = _formatTime(context, c.lastMessageTime);
@@ -562,9 +675,26 @@ class _ChatRow extends StatelessWidget {
     final previewColor  = unread > 0 ? fg : sub;
     final previewWeight = unread > 0 ? FontWeight.w600 : FontWeight.w500;
 
+    // Status icon to show on the row
+    IconData? statusIcon;
+    if (isLocked)   statusIcon = Icons.lock_rounded;
+    if (isArchived) statusIcon = Icons.archive_rounded;
+    if (isBlocked)  statusIcon = Icons.block_rounded;
+
     return GestureDetector(
       onTap: () async {
         HapticFeedback.selectionClick();
+        // Blocked users — confirm before opening
+        if (isBlocked) {
+          final open = await _confirmDialog(
+            context,
+            title: 'Chat is Blocked',
+            message: 'This user is blocked. You can unblock them from the hold menu.',
+            confirmText: 'Open Anyway',
+          );
+          if (!open) return;
+        }
+        if (!context.mounted) return;
         await Navigator.of(context).push(
           PageRouteBuilder(
             pageBuilder: (_, animation, __) => ChatScreen(
@@ -590,7 +720,6 @@ class _ChatRow extends StatelessWidget {
             },
           ),
         );
-        // Reload to refresh unread counts after returning
         onReload();
       },
       onLongPress: () {
@@ -602,19 +731,39 @@ class _ChatRow extends StatelessWidget {
         radius: 22,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(children: [
-          // Avatar
-          Container(
-            width: 50, height: 50,
-            decoration: BoxDecoration(
-                shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
-            alignment: Alignment.center,
-            child: Text(avatarLetter,
-                style: manrope(
-                    size: 18,
-                    weight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.36)),
-          ),
+          // Avatar with optional status overlay
+          Stack(clipBehavior: Clip.none, children: [
+            Container(
+              width: 50, height: 50,
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
+              alignment: Alignment.center,
+              child: Text(avatarLetter,
+                  style: manrope(
+                      size: 18,
+                      weight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.36)),
+            ),
+            if (statusIcon != null)
+              Positioned(
+                right: -2, bottom: -2,
+                child: Container(
+                  width: 18, height: 18,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: dark ? const Color(0xFF1A1A1C) : const Color(0xFFF0F0F0),
+                    border: Border.all(
+                      color: dark ? const Color(0xFF0A0A0C) : const Color(0xFFFAFAFA),
+                      width: 1.5,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(statusIcon, size: 10,
+                      color: isBlocked ? Colors.redAccent : sub),
+                ),
+              ),
+          ]),
           const SizedBox(width: 12),
           // Name + preview
           Expanded(
@@ -633,14 +782,15 @@ class _ChatRow extends StatelessWidget {
                         letterSpacing: -0.14),
                   ),
                   const SizedBox(height: 2),
-                  Text(lastText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: manrope(
-                          size: 12.5,
-                          weight: previewWeight,
-                          color: previewColor,
-                          letterSpacing: -0.05)),
+                  Text(
+                    isBlocked ? 'Blocked'.tr(context) : lastText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: manrope(
+                        size: 12.5,
+                        weight: previewWeight,
+                        color: isBlocked ? Colors.redAccent.withOpacity(0.7) : previewColor,
+                        letterSpacing: -0.05)),
                 ]),
           ),
           const SizedBox(width: 8),
@@ -657,7 +807,7 @@ class _ChatRow extends StatelessWidget {
                           weight: unread > 0 ? FontWeight.w700 : FontWeight.w500,
                           color: unread > 0 ? fg : sub,
                           letterSpacing: -0.05)),
-                  if (unread > 0) ...[  // unread badge
+                  if (unread > 0 && !isBlocked) ...[
                     const SizedBox(height: 6),
                     Container(
                       constraints: const BoxConstraints(minWidth: 20),
@@ -729,51 +879,103 @@ class _ChatRow extends StatelessWidget {
                   // Handle bar
                   Container(
                     margin: const EdgeInsets.only(top: 12),
-                    width: 36,
-                    height: 4,
+                    width: 36, height: 4,
                     decoration: BoxDecoration(
                       color: dark ? Colors.white.withOpacity(0.20) : Colors.black.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(height: 14),
-                  // Chat name
                   Text(
                     displayName,
-                    style: manrope(
-                      size: 16,
-                      weight: FontWeight.w700,
-                      color: fg,
-                      letterSpacing: -0.2,
-                    ),
+                    style: manrope(size: 16, weight: FontWeight.w700, color: fg, letterSpacing: -0.2),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Choose an action',
-                    style: manrope(
-                      size: 12,
-                      weight: FontWeight.w500,
-                      color: sub,
-                      letterSpacing: -0.05,
-                    ),
+                    style: manrope(size: 12, weight: FontWeight.w500, color: sub, letterSpacing: -0.05),
                   ),
                   const SizedBox(height: 16),
-                  // Divider
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16),
                     height: 0.5,
                     color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
                   ),
-                  // Options
-                  _buildOptionTile(ctx, Icons.lock_outline, 'Locked', 'Lock this chat', dark, fg, sub),
+
+                  // Lock / Unlock
+                  _buildOptionTile(
+                    ctx,
+                    isLocked ? Icons.lock_open_rounded : Icons.lock_outline,
+                    isLocked ? 'Unlock' : 'Lock',
+                    isLocked ? 'Remove from locked chats' : 'Hide in Locked tab',
+                    dark, fg, sub,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      onLock();
+                      _showSnackbar(ctx, isLocked ? 'Chat unlocked' : 'Chat locked', dark);
+                    },
+                  ),
                   _buildOptionDivider(dark),
-                  _buildOptionTile(ctx, Icons.archive_outlined, 'Archived', 'Archive this chat', dark, fg, sub),
+
+                  // Archive / Unarchive
+                  _buildOptionTile(
+                    ctx,
+                    isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                    isArchived ? 'Unarchive' : 'Archive',
+                    isArchived ? 'Move back to main chats' : 'Hide in Archived tab',
+                    dark, fg, sub,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      onArchive();
+                      _showSnackbar(ctx, isArchived ? 'Chat unarchived' : 'Chat archived', dark);
+                    },
+                  ),
                   _buildOptionDivider(dark),
-                  _buildOptionTile(ctx, Icons.block_outlined, 'Blocked', 'Block this user', dark, fg, sub),
+
+                  // Block / Unblock
+                  _buildOptionTile(
+                    ctx,
+                    isBlocked ? Icons.check_circle_outline : Icons.block_outlined,
+                    isBlocked ? 'Unblock' : 'Block',
+                    isBlocked ? 'Allow messages from this user' : 'Block messages from this user',
+                    dark, fg, sub,
+                    isDestructive: !isBlocked,
+                    onTap: () async {
+                      if (!isBlocked) {
+                        // Confirm BEFORE closing bottom sheet so ctx stays valid
+                        final confirmed = await _confirmDialog(
+                          ctx,
+                          title: 'Block $displayName?',
+                          message: 'They will be moved to your Blocked tab.',
+                          confirmText: 'Block',
+                          isDestructive: true,
+                        );
+                        if (!confirmed) return;
+                      }
+                      if (ctx.mounted) Navigator.of(ctx).pop();
+                      onBlock();
+                      if (ctx.mounted) {
+                        _showSnackbar(ctx, isBlocked ? '$displayName unblocked' : '$displayName blocked', dark);
+                      }
+                    },
+                  ),
                   _buildOptionDivider(dark),
-                  _buildOptionTile(ctx, Icons.cleaning_services_outlined, 'Chat Clean', 'Clear chat history', dark, fg, sub),
+
+                  // Chat Clean
+                  _buildOptionTile(
+                    ctx,
+                    Icons.cleaning_services_outlined,
+                    'Chat Clean',
+                    'Clear chat history',
+                    dark, fg, sub,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _showSnackbar(ctx, 'Chat cleared', dark);
+                    },
+                  ),
+
                   const SizedBox(height: 8),
-                  // Cancel button
+                  // Cancel
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                     child: GestureDetector(
@@ -791,11 +993,7 @@ class _ChatRow extends StatelessWidget {
                         alignment: Alignment.center,
                         child: Text(
                           'Cancel',
-                          style: manrope(
-                            size: 15,
-                            weight: FontWeight.w600,
-                            color: sub,
-                          ),
+                          style: manrope(size: 15, weight: FontWeight.w600, color: sub),
                         ),
                       ),
                     ),
@@ -809,26 +1007,26 @@ class _ChatRow extends StatelessWidget {
     );
   }
 
-  Widget _buildOptionTile(BuildContext ctx, IconData icon, String title, String subtitle, bool dark, Color fg, Color sub) {
+  Widget _buildOptionTile(
+    BuildContext ctx,
+    IconData icon,
+    String title,
+    String subtitle,
+    bool dark,
+    Color fg,
+    Color sub, {
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    final titleColor = isDestructive ? Colors.redAccent : fg;
+    final iconColor  = isDestructive ? Colors.redAccent : fg;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
           HapticFeedback.mediumImpact();
-          Navigator.of(ctx).pop();
-          ScaffoldMessenger.of(ctx).showSnackBar(
-            SnackBar(
-              content: Text(
-                '$title applied',
-                style: manrope(size: 13, weight: FontWeight.w600, color: Colors.white),
-              ),
-              backgroundColor: dark ? const Color(0xFF1A1A1C) : const Color(0xFF333333),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              duration: const Duration(seconds: 2),
-            ),
-          );
+          onTap();
         },
         borderRadius: BorderRadius.circular(0),
         child: Padding(
@@ -836,29 +1034,26 @@ class _ChatRow extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 38, height: 38,
                 decoration: BoxDecoration(
-                  color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+                  color: isDestructive
+                      ? Colors.redAccent.withOpacity(0.10)
+                      : (dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05)),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, size: 20, color: fg),
+                child: Icon(icon, size: 20, color: iconColor),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: manrope(size: 14.5, weight: FontWeight.w700, color: fg, letterSpacing: -0.1),
-                    ),
+                    Text(title,
+                        style: manrope(size: 14.5, weight: FontWeight.w700, color: titleColor, letterSpacing: -0.1)),
                     const SizedBox(height: 1),
-                    Text(
-                      subtitle,
-                      style: manrope(size: 12, weight: FontWeight.w500, color: sub, letterSpacing: -0.05),
-                    ),
+                    Text(subtitle,
+                        style: manrope(size: 12, weight: FontWeight.w500, color: sub, letterSpacing: -0.05)),
                   ],
                 ),
               ),
@@ -878,9 +1073,67 @@ class _ChatRow extends StatelessWidget {
     );
   }
 
+  void _showSnackbar(BuildContext ctx, String message, bool dark) {
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(
+        content: Text(message,
+            style: manrope(size: 13, weight: FontWeight.w600, color: Colors.white)),
+        backgroundColor: dark ? const Color(0xFF1A1A1C) : const Color(0xFF333333),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<bool> _confirmDialog(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmText,
+    bool isDestructive = false,
+  }) async {
+    final dark = this.dark;
+    final fg   = GlassTokens.fg(dark);
+    final sub  = GlassTokens.sub(dark);
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: AlertDialog(
+          backgroundColor: dark ? const Color(0xFF1C1C1E) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(title,
+              style: manrope(size: 16, weight: FontWeight.w700, color: fg, letterSpacing: -0.2)),
+          content: Text(message,
+              style: manrope(size: 13, weight: FontWeight.w500, color: sub)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('Cancel',
+                  style: manrope(size: 14, weight: FontWeight.w600, color: sub)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(confirmText,
+                  style: manrope(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: isDestructive ? Colors.redAccent : fg,
+                  )),
+            ),
+          ],
+        ),
+      ),
+    );
+    return result ?? false;
+  }
+
   String _cleanPreview(BuildContext context, String raw) {
     if (raw.isEmpty) return 'No messages yet'.tr(context);
-    // Hide raw encrypted payloads and fallback strings from chat_service
     if (raw.contains('[Encrypted Message]') ||
         raw.startsWith('{"ct":') ||
         raw.startsWith('{"ct" :')) {
@@ -894,7 +1147,6 @@ class _ChatRow extends StatelessWidget {
     final localTime = time.toLocal();
     final now = DateTime.now();
     final diff = now.difference(localTime);
-    // Agar diff negative ho (future time) ya bahut chhota ho — 'now' dikhao
     if (diff.isNegative || diff.inSeconds < 30) return 'now'.tr(context);
     if (diff.inDays > 7) return '${localTime.day}/${localTime.month}';
     if (diff.inDays > 0) return '${diff.inDays}d';

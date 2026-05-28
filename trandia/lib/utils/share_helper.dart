@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/post_service.dart';
+import '../services/share_service.dart';
 import '../screens/glass_common.dart';
 import '../l10n/app_localizations.dart';
 
@@ -14,7 +15,7 @@ class ShareHelper {
 
   static void showShareBottomSheet(BuildContext context, PostModel post) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -27,7 +28,7 @@ class ShareHelper {
   }
 }
 
-class _ShareSheetContent extends StatelessWidget {
+class _ShareSheetContent extends StatefulWidget {
   final PostModel post;
   final bool isDark;
 
@@ -36,18 +37,41 @@ class _ShareSheetContent extends StatelessWidget {
     required this.isDark,
   });
 
-  String get _shareUrl {
+  @override
+  State<_ShareSheetContent> createState() => _ShareSheetContentState();
+}
+
+class _ShareSheetContentState extends State<_ShareSheetContent> {
+  PostModel get post => widget.post;
+  bool get isDark => widget.isDark;
+
+  String _shareUrl = '';
+  bool _loadingUrl = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-populate with fallback immediately, then replace with smart URL
+    _shareUrl = _buildFallbackUrl();
+    _fetchSmartUrl();
+  }
+
+  String _buildFallbackUrl() {
     final path = post.isVideo ? 'video' : 'post';
     return 'https://trandia.com/$path/${post.id}';
   }
 
-  String get _shareText {
-    final type = post.isVideo ? 'video' : 'post';
-    if (post.caption.isNotEmpty) {
-      return 'Check out this $type by @${post.userUsername} on Trandia: "${post.caption}"\n\n$_shareUrl';
+  Future<void> _fetchSmartUrl() async {
+    final url = await ShareService.getShareUrl(post);
+    if (mounted) {
+      setState(() {
+        _shareUrl = url;
+        _loadingUrl = false;
+      });
     }
-    return 'Check out this $type by @${post.userUsername} on Trandia!\n\n$_shareUrl';
   }
+
+  String get _shareText => ShareService.buildShareText(post, _shareUrl);
 
   Future<void> _launchSocialApp(BuildContext context, String url, String fallbackText) async {
     final uri = Uri.parse(url);
@@ -67,7 +91,7 @@ class _ShareSheetContent extends StatelessWidget {
 
   void _copyToClipboard(BuildContext context) {
     Clipboard.setData(ClipboardData(text: _shareUrl));
-    Navigator.of(context).pop();
+    if (context.mounted) Navigator.of(context).pop();
     
     // Show glassmorphic snackbar
     ScaffoldMessenger.of(context).showSnackBar(
@@ -119,12 +143,10 @@ class _ShareSheetContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Styling constants
-    final bgColors = GlassTokens.glassBg(isDark);
+    final bgColors    = GlassTokens.glassBg(isDark);
     final borderColor = GlassTokens.glassBorder(isDark);
     final textPrimary = GlassTokens.fg(isDark);
 
-    // List of share options
     final shareOptions = [
       _ShareOption(
         name: 'WhatsApp',
@@ -274,8 +296,38 @@ class _ShareSheetContent extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 22),
-              
+              const SizedBox(height: 12),
+
+              // Smart link loading indicator
+              if (_loadingUrl)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: textPrimary.withOpacity(0.4),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Generating link…',
+                        style: manrope(
+                          size: 11,
+                          weight: FontWeight.w500,
+                          color: textPrimary.withOpacity(0.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                const SizedBox(height: 10),
+
               // Share Options Grid
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),

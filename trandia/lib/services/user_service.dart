@@ -136,12 +136,16 @@ class UserService {
     }
   }
 
-  static Future<List<UserProfile>> getFollowers(String userId) async {
+  static Future<List<UserProfile>> getFollowers(
+    String userId, {
+    int skip = 0,
+    int limit = 20,
+  }) async {
     try {
       final token = await ApiService.getToken();
       if (token == null) return [];
       final res = await http.get(
-        Uri.parse('$baseUrl/users/$userId/followers'),
+        Uri.parse('$baseUrl/users/$userId/followers?skip=$skip&limit=$limit'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -211,12 +215,16 @@ class UserService {
     }
   }
 
-  static Future<List<UserProfile>> getFollowing(String userId) async {
+  static Future<List<UserProfile>> getFollowing(
+    String userId, {
+    int skip = 0,
+    int limit = 20,
+  }) async {
     try {
       final token = await ApiService.getToken();
       if (token == null) return [];
       final res = await http.get(
-        Uri.parse('$baseUrl/users/$userId/following'),
+        Uri.parse('$baseUrl/users/$userId/following?skip=$skip&limit=$limit'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

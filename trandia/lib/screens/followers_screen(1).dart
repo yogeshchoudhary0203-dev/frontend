@@ -159,30 +159,101 @@ class _FollowersScreenState extends State<FollowersScreen> {
   List<UserProfile> _following = [];
   bool _isLoading = true;
 
+  // Pagination state
+  static const _pageSize = 20;
+  final _scrollCtrl = ScrollController();
+  bool _isLoadingMoreFollowers = false;
+  bool _isLoadingMoreFollowing = false;
+  bool _hasMoreFollowers = true;
+  bool _hasMoreFollowing = true;
+  int _followersSkip = 0;
+  int _followingSkip = 0;
+
+  bool get _activeIsLoadingMore =>
+      _tab == FollowersTab.followers ? _isLoadingMoreFollowers : _isLoadingMoreFollowing;
+  bool get _activeHasMore =>
+      _tab == FollowersTab.followers ? _hasMoreFollowers : _hasMoreFollowing;
+
   @override
   void initState() {
     super.initState();
+    _scrollCtrl.addListener(_onScroll);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
   }
 
   Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
+      _followers = [];
+      _following = [];
+      _followersSkip = 0;
+      _followingSkip = 0;
+      _hasMoreFollowers = true;
+      _hasMoreFollowing = true;
     });
     try {
-      final fers = await UserService.getFollowers(widget.userId);
-      final fing = await UserService.getFollowing(widget.userId);
+      final fers = await UserService.getFollowers(widget.userId, skip: 0, limit: _pageSize);
+      final fing = await UserService.getFollowing(widget.userId, skip: 0, limit: _pageSize);
       if (mounted) {
         setState(() {
           _followers = fers;
           _following = fing;
+          _followersSkip = fers.length;
+          _followingSkip = fing.length;
+          _hasMoreFollowers = fers.length == _pageSize;
+          _hasMoreFollowing = fing.length == _pageSize;
           _isLoading = false;
         });
       }
     } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_activeIsLoadingMore || !_activeHasMore || _query.isNotEmpty) return;
+    final isFollowers = _tab == FollowersTab.followers;
+    setState(() {
+      if (isFollowers) _isLoadingMoreFollowers = true;
+      else _isLoadingMoreFollowing = true;
+    });
+    try {
+      final skip = isFollowers ? _followersSkip : _followingSkip;
+      final newItems = isFollowers
+          ? await UserService.getFollowers(widget.userId, skip: skip, limit: _pageSize)
+          : await UserService.getFollowing(widget.userId, skip: skip, limit: _pageSize);
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          if (isFollowers) {
+            _followers.addAll(newItems);
+            _followersSkip += newItems.length;
+            _hasMoreFollowers = newItems.length == _pageSize;
+            _isLoadingMoreFollowers = false;
+          } else {
+            _following.addAll(newItems);
+            _followingSkip += newItems.length;
+            _hasMoreFollowing = newItems.length == _pageSize;
+            _isLoadingMoreFollowing = false;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          if (_tab == FollowersTab.followers) _isLoadingMoreFollowers = false;
+          else _isLoadingMoreFollowing = false;
         });
       }
     }
@@ -328,10 +399,27 @@ class _FollowersScreenState extends State<FollowersScreen> {
                             ),
                           )
                         : ListView.separated(
+                            controller: _scrollCtrl,
                             padding: const EdgeInsets.symmetric(horizontal: 10),
-                            itemCount: list.length,
+                            itemCount: list.length +
+                                (_activeIsLoadingMore && _query.isEmpty ? 1 : 0),
                             separatorBuilder: (_, __) => const SizedBox(height: 8),
                             itemBuilder: (_, i) {
+                              if (i >= list.length) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: dark ? Colors.white : Colors.black,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
                               final u = list[i];
                               return _UserRowCard(
                                 u: u,

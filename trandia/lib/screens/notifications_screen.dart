@@ -101,11 +101,10 @@ IconData _kindIcon(NfKind k) {
   }
 }
 
-/// Fixed item height so cascade math works deterministically.
+/// Fixed item height so card sizing stays consistent.
 const double _kCardHeight = 76;
 const double _kCardGap    = 10;
 const double _kListStartY = 112; // header(48) + 12 + chips(30) + 22 spacing
-const int    _kMaxStack   = 4;
 
 class NotificationsScreen extends StatefulWidget {
   final bool dark;
@@ -176,16 +175,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     // ── FCM foreground ──────────────────────────────────────────────────────
     _fcmSub = FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
       final msgType = msg.data['type'] as String?;
-      if (msgType != 'follow') return;
+      if (msgType == null) return;
 
       final String notifId = msg.data['id'] ?? '';
       if (_isDuplicate(notifId)) return;
 
       final newItem = NfItem(
         id: notifId,
-        kind: NfKind.follow,
-        name: msg.data['username'] ?? msg.data['title'] ?? '',
-        text: msg.data['body'] ?? 'started following you',
+        kind: NfItem._parseKind(msgType),
+        name: msg.data['username'] ?? msg.data['from_username'] ?? msg.data['title'] ?? '',
+        text: msg.data['text'] ?? msg.data['body'] ?? '',
         time: 'just now',
         unread: true,
       );
@@ -367,29 +366,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildCascadeList(List<NfItem> items, bool dark, double listInnerTopPadding, double listStartGlobalY) {
-    final viewportHeight = MediaQuery.of(context).size.height;
-    return AnimatedBuilder(
-      animation: _scroll,
-      builder: (context, _) {
-        final offset = _scroll.hasClients ? _scroll.offset : 0.0;
-        return RefreshIndicator(
-          onRefresh: _fetchNotifications,
-          color: dark ? Colors.white : Colors.black,
-          backgroundColor: dark ? const Color(0xFF1A1A1A) : Colors.white,
-          child: SingleChildScrollView(
-            controller: _scroll,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.only(top: listInnerTopPadding, bottom: 40, left: 10, right: 10),
+    return RefreshIndicator(
+      onRefresh: _fetchNotifications,
+      color: dark ? Colors.white : Colors.black,
+      backgroundColor: dark ? const Color(0xFF1A1A1A) : Colors.white,
+      child: ListView.builder(
+        controller: _scroll,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.only(top: listInnerTopPadding, bottom: 40, left: 10, right: 10),
+        itemCount: items.length,
+        addAutomaticKeepAlives: false,
+        itemBuilder: (context, i) => RepaintBoundary(
+          key: ValueKey(items[i].id.isEmpty ? i.toString() : items[i].id),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: _kCardGap),
             child: SizedBox(
-              height: items.length * (_kCardHeight + _kCardGap),
-              child: Stack(clipBehavior: Clip.none, children: [
-                for (int i = items.length - 1; i >= 0; i--)
-                  _buildCascadeCard(items[i], i, offset, dark, viewportHeight, listStartGlobalY),
-              ]),
+              height: _kCardHeight,
+              child: _NfCardInner(
+                n: items[i],
+                i: i,
+                dark: dark,
+                onDelete: () => _deleteNotification(items[i]),
+              ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -501,57 +503,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  /// Computes per-card transform & places each card via Positioned + Transform.
-  Widget _buildCascadeCard(NfItem item, int i, double scrollOffset, bool dark, double viewportHeight, double listStartGlobalY) {
-    final stride = _kCardHeight + _kCardGap;
-    final cardTop = i * stride;
-    final card = _StaggeredEntrance(
-      index: i + 2,
-      child: _NfCardInner(
-        n: item,
-        i: i,
-        dark: dark,
-        onDelete: () => _deleteNotification(item),
-      ),
-    );
-
-    final screenY = listStartGlobalY - scrollOffset + cardTop;
-    final stackZoneScreenY = viewportHeight - 100.0;
-
-    final overage = screenY - stackZoneScreenY;
-
-    if (overage <= 0) {
-      return Positioned(
-        left: 0, right: 0, top: cardTop,
-        height: _kCardHeight,
-        child: card,
-      );
-    }
-
-    final double depth = overage / stride;
-    if (depth >= _kMaxStack) {
-      return const SizedBox.shrink();
-    }
-
-    final pinScreenY = stackZoneScreenY + depth * 14.0;
-    final pinY = pinScreenY - (listStartGlobalY - scrollOffset);
-    final ty = pinY - cardTop;
-    final scale = 1.0 - depth * 0.05;
-    final opacity = (1.0 - depth * 0.25).clamp(0.0, 1.0);
-
-    return Positioned(
-      left: 0, right: 0, top: cardTop,
-      height: _kCardHeight,
-      child: Transform.translate(
-        offset: Offset(0, ty),
-        child: Transform.scale(
-          alignment: Alignment.topCenter,
-          scale: scale,
-          child: Opacity(opacity: opacity, child: card),
-        ),
-      ),
-    );
-  }
 }
 
 /// Single notification card body.

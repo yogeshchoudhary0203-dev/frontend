@@ -163,6 +163,56 @@ class UserService {
     }
   }
 
+  static Future<List<UserProfile>> getPostLikers(
+    String postId, {
+    int skip = 0,
+    int limit = 30,
+  }) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return [];
+      final res = await http.get(
+        Uri.parse('$baseUrl/posts/$postId/likers?skip=$skip&limit=$limit'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      developer.log('getPostLikers $postId → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final List decoded = jsonDecode(res.body) as List;
+        return decoded.map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (e) {
+      developer.log('getPostLikers error: $e');
+      return [];
+    }
+  }
+
+  static Future<List<UserProfile>> getSuggestedUsers({int limit = 10}) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return [];
+      final res = await http.get(
+        Uri.parse('$baseUrl/users/suggested?limit=$limit'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      developer.log('getSuggestedUsers → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final List decoded = jsonDecode(res.body) as List;
+        return decoded.map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (e) {
+      developer.log('getSuggestedUsers error: $e');
+      return [];
+    }
+  }
+
   // ── Location ─────────────────────────────────────────────────────────────
 
   static Future<bool> updateLocation(double lat, double lng, String city) async {

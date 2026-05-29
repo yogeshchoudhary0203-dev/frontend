@@ -5,11 +5,14 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
+import 'screens/home/home_screen.dart';
 import 'screens/interest_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/intro_slides.dart';
+import 'screens/app_lock_screen.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
+import 'services/app_lock_service.dart';
 import 'services/fcm_service.dart';
 import 'services/deep_link_service.dart';
 import 'l10n/app_localizations.dart';
@@ -62,12 +65,14 @@ class TrandiaApp extends StatefulWidget {
   State<TrandiaApp> createState() => _TrandiaAppState();
 }
 
-class _TrandiaAppState extends State<TrandiaApp> {
+class _TrandiaAppState extends State<TrandiaApp> with WidgetsBindingObserver {
   final AppLanguageController _languageController = AppLanguageController();
+  bool _wasInBackground = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _languageController.load();
     DeepLinkService.instance.init();
     _checkInitialNotification();
@@ -75,9 +80,43 @@ class _TrandiaAppState extends State<TrandiaApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _languageController.dispose();
     DeepLinkService.instance.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _wasInBackground = true;
+    } else if (state == AppLifecycleState.resumed && _wasInBackground) {
+      _wasInBackground = false;
+      _maybeShowLock();
+    }
+  }
+
+  Future<void> _maybeShowLock() async {
+    final isLoggedIn = await AuthService.isLoggedIn();
+    if (!isLoggedIn) return;
+    final enabled = await AppLockService.isEnabled();
+    if (!enabled) return;
+    if (AppLockService.lockShown) return;
+    AppLockService.lockShown = true;
+    final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final dark = brightness == Brightness.dark;
+    navigatorKey.currentState?.push(
+      PageRouteBuilder(
+        opaque: true,
+        barrierDismissible: false,
+        transitionDuration: const Duration(milliseconds: 220),
+        pageBuilder: (_, __, ___) => AppLockVerifyScreen(dark: dark),
+        transitionsBuilder: (_, animation, __, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: child,
+        ),
+      ),
+    );
   }
 
   Future<void> _checkInitialNotification() async {
@@ -143,12 +182,39 @@ class _StartupRouterState extends State<_StartupRouter> {
 
     final isLoggedIn = await AuthService.isLoggedIn();
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) =>
-            isLoggedIn ? const InterestGateScreen() : const IntroSlidesScreen(),
-      ),
-    );
+
+    if (!isLoggedIn) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const IntroSlidesScreen()),
+      );
+      return;
+    }
+
+    final lockEnabled = await AppLockService.isEnabled();
+    if (!mounted) return;
+
+    if (lockEnabled) {
+      AppLockService.lockShown = true;
+      final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      final dark = brightness == Brightness.dark;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => AppLockVerifyScreen(
+            dark: dark,
+            onVerified: () {
+              AppLockService.lockShown = false;
+              navigatorKey.currentState?.pushReplacement(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+              );
+            },
+          ),
+        ),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    }
   }
 
   @override

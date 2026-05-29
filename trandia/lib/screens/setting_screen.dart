@@ -11,6 +11,8 @@ import 'parental_control_screen.dart';
 import 'intro_slides.dart';
 import 'notification_settings_screen.dart';
 import 'saved_posts_screen.dart';
+import 'app_lock_screen.dart';
+import '../services/app_lock_service.dart';
 
 // Search item model ────────────────────────────────────────────────────────────
 class _SearchItem {
@@ -51,6 +53,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool activityStatus = false;
   bool notifications = true;
   String accountType = 'Personal';
+  bool _appLockEnabled = false;
+  int _appLockPinLength = 4;
   UserProfile? _profile;
 
   final TextEditingController _searchCtrl = TextEditingController();
@@ -82,11 +86,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+    final lockEnabled = await AppLockService.isEnabled();
+    final lockLen = await AppLockService.getPinLength();
     setState(() {
       privateAccount = prefs.getBool('settings_private_account') ?? false;
       creatorAccount = prefs.getBool('settings_creator_account') ?? false;
       activityStatus = prefs.getBool('settings_activity_status') ?? false;
       notifications = prefs.getBool('settings_notifications') ?? true;
+      _appLockEnabled = lockEnabled;
+      _appLockPinLength = lockLen;
       final savedType = prefs.getString('settings_account_type');
       if (savedType != null) {
         accountType = savedType;
@@ -100,6 +108,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     });
+  }
+
+  Future<void> _refreshAppLockState() async {
+    final enabled = await AppLockService.isEnabled();
+    final len = await AppLockService.getPinLength();
+    if (mounted) setState(() { _appLockEnabled = enabled; _appLockPinLength = len; });
+  }
+
+  void _openAppLock(BuildContext ctx) {
+    _openScreenSmoothly(ctx, AppLockSetupScreen(dark: widget.dark))
+        .then((_) => _refreshAppLockState());
   }
 
   Future<void> _saveSetting(String key, bool value) async {
@@ -567,6 +586,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onTap: () => _openSecurityScreen(ctx),
       ),
       _SearchItem(
+        icon: Icons.phonelink_lock_rounded,
+        title: 'App Lock',
+        subtitle: 'Lock app with a PIN',
+        onTap: () => _openAppLock(ctx),
+      ),
+      _SearchItem(
         icon: Icons.notifications_none_rounded,
         title: 'Notifications',
         subtitle: 'Likes, follows and messages',
@@ -728,6 +753,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: Icons.shield_outlined,
                 title: 'Security',
                 subtitle: 'Password and login activity',
+              ),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openAppLock(context),
+              child: _BaseRow(
+                dark: dark,
+                icon: Icons.phonelink_lock_rounded,
+                title: 'App Lock',
+                subtitle: _appLockEnabled
+                    ? 'ON • $_appLockPinLength-digit PIN'
+                    : 'Protect app with a PIN',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_appLockEnabled)
+                      Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text('ON',
+                            style: manrope(size: 11, weight: FontWeight.w800, color: Colors.green)),
+                      ),
+                    Icon(Icons.chevron_right_rounded, color: sub, size: 24),
+                  ],
+                ),
               ),
             ),
           ],

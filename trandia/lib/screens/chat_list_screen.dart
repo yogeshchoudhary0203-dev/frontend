@@ -12,20 +12,6 @@ import 'glass_common.dart';
 import 'chat_screen.dart';
 import 'search_screen.dart';
 
-class ActiveUser {
-  final String name;
-  final bool story;
-  const ActiveUser(this.name, this.story);
-}
-
-const _active = <ActiveUser>[
-  ActiveUser('mikhail', true),
-  ActiveUser('aanya_', false),
-  ActiveUser('devon.b', true),
-  ActiveUser('kiraa', false),
-  ActiveUser('ren.x', false),
-  ActiveUser('noor.j', true),
-];
 
 class ChatListScreen extends StatefulWidget {
   final bool dark;
@@ -307,32 +293,6 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
               const SizedBox(height: 10),
 
-              // Favourites strip — only show in "all" tab
-              if (_activeFilter == 'all') ...[
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                    child: Text('FAVOURITES'.tr(context),
-                        style: manrope(
-                            size: 11,
-                            weight: FontWeight.w700,
-                            color: sub,
-                            letterSpacing: 0.88)),
-                  ),
-                  SizedBox(
-                    height: 84,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: _active.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 6),
-                      itemBuilder: (_, i) =>
-                          _ActiveAvatar(a: _active[i], i: i, dark: widget.dark),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 5),
-              ],
 
               _buildPillRow(context, widget.dark),
               const SizedBox(height: 5),
@@ -358,42 +318,15 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                             child: _buildConversationList(context, sub),
                           ),
               ),
-
-              // Search bar
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => SearchScreen(dark: widget.dark)),
-                  ),
-                  child: Container(
-                    height: 42,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: widget.dark
-                          ? Colors.white.withOpacity(0.06)
-                          : Colors.white.withOpacity(0.6),
-                      border: Border.all(
-                          color: widget.dark
-                              ? Colors.white.withOpacity(0.10)
-                              : Colors.white.withOpacity(0.95)),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(children: [
-                      Icon(Icons.search_rounded, size: 18, color: sub),
-                      const SizedBox(width: 10),
-                      Text('Search'.tr(context),
-                          style: manrope(
-                              size: 14,
-                              weight: FontWeight.w500,
-                              color: sub,
-                              letterSpacing: -0.07)),
-                    ]),
-                  ),
-                ),
-              ),
             ],
+          ),
+
+          // Floating Search Bar at the bottom
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.paddingOf(context).bottom + 16,
+            child: _AnimatedFloatingSearchBar(dark: widget.dark),
           ),
         ]),
       ),
@@ -402,8 +335,9 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
   Widget _buildConversationList(BuildContext context, Color sub) {
     final list = _filteredConversations;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
+      padding: EdgeInsets.fromLTRB(0, 0, 0, 84 + bottomInset),
       itemCount: 1 + (list.isEmpty ? 1 : list.length),
       itemBuilder: (context, index) {
         if (index == 0) {
@@ -555,79 +489,6 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   }
 }
 
-// ── Active Avatar ────────────────────────────────────────────
-
-class _ActiveAvatar extends StatelessWidget {
-  final ActiveUser a;
-  final int i;
-  final bool dark;
-  const _ActiveAvatar({required this.a, required this.i, required this.dark});
-
-  @override
-  Widget build(BuildContext context) {
-    final sub = GlassTokens.sub(dark);
-    return SizedBox(
-      width: 62,
-      child: Column(mainAxisAlignment: MainAxisAlignment.start, children: [
-        SizedBox(
-            width: 54,
-            height: 54,
-            child: Stack(clipBehavior: Clip.none, children: [
-              if (a.story)
-                Container(
-                  width: 54, height: 54,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: SweepGradient(
-                      startAngle: 3.49, endAngle: 9.77,
-                      colors: dark
-                          ? const [Colors.white, Color(0xFFAAAAAA), Color(0xFF555555), Colors.white]
-                          : const [Color(0xFF111111), Color(0xFF555555), Color(0xFFAAAAAA), Color(0xFF111111)],
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(2),
-                    child: Container(
-                      decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: dark ? const Color(0xFF0A0A0C) : const Color(0xFFFAFAFA)),
-                      padding: const EdgeInsets.all(2),
-                      child: _innerAvatar(),
-                    ),
-                  ),
-                )
-              else
-                _innerAvatar(),
-              Positioned(
-                right: 1, bottom: 1,
-                child: Container(
-                  width: 13, height: 13,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.green,
-                    border: Border.all(
-                        color: dark ? const Color(0xFF0A0A0C) : const Color(0xFFFAFAFA),
-                        width: 2.5),
-                  ),
-                ),
-              ),
-            ])),
-        const SizedBox(height: 5),
-        Text(a.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: manrope(size: 11, weight: FontWeight.w500, color: sub, letterSpacing: -0.05)),
-      ]),
-    );
-  }
-
-  Widget _innerAvatar() => Container(
-        decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
-        alignment: Alignment.center,
-        child: Text(a.name[0].toUpperCase(),
-            style: manrope(size: 18, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3)),
-      );
-}
 
 // ── Chat Row ─────────────────────────────────────────────────
 
@@ -1153,5 +1014,114 @@ class _ChatRow extends StatelessWidget {
     if (diff.inHours > 0) return '${diff.inHours}h';
     if (diff.inMinutes > 0) return '${diff.inMinutes}m';
     return 'now'.tr(context);
+  }
+}
+
+class _AnimatedFloatingSearchBar extends StatefulWidget {
+  final bool dark;
+  const _AnimatedFloatingSearchBar({required this.dark});
+
+  @override
+  State<_AnimatedFloatingSearchBar> createState() => _AnimatedFloatingSearchBarState();
+}
+
+class _AnimatedFloatingSearchBarState extends State<_AnimatedFloatingSearchBar>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails details) {
+    _controller.forward();
+  }
+
+  void _onTapUp(TapUpDetails details) {
+    _controller.reverse();
+    HapticFeedback.selectionClick();
+    _navigateToSearch();
+  }
+
+  void _onTapCancel() {
+    _controller.reverse();
+  }
+
+  void _navigateToSearch() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, animation, __) => SearchScreen(dark: widget.dark),
+        transitionDuration: const Duration(milliseconds: 350),
+        reverseTransitionDuration: const Duration(milliseconds: 280),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = GlassTokens.sub(widget.dark);
+
+    return ScaleTransition(
+      scale: _scaleAnimation,
+      child: GestureDetector(
+        onTapDown: _onTapDown,
+        onTapUp: _onTapUp,
+        onTapCancel: _onTapCancel,
+        child: Hero(
+          tag: 'chat_search_bar',
+          child: GlassSurface(
+            dark: widget.dark,
+            radius: 999,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Material(
+              color: Colors.transparent,
+              child: Row(
+                children: [
+                  Icon(Icons.search_rounded, size: 18, color: sub),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Search'.tr(context),
+                      style: manrope(
+                        size: 14,
+                        weight: FontWeight.w500,
+                        color: sub,
+                        letterSpacing: -0.07,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

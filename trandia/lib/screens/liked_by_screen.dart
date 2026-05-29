@@ -9,12 +9,14 @@ class LikedByScreen extends StatefulWidget {
   final bool dark;
   final String postUser;
   final int likeCount;
+  final String postId;
 
   const LikedByScreen({
     super.key,
     required this.dark,
     required this.postUser,
     required this.likeCount,
+    required this.postId,
   });
 
   @override
@@ -32,111 +34,19 @@ class _LikedByScreenState extends State<LikedByScreen> {
     _loadData();
   }
 
-  void _loadData() {
-    // Generate custom mock users list based on postUser
-    final allMockUsers = [
-      UserProfile(
-        id: 'ak_placeholder',
-        name: 'Arjun Kapoor',
-        username: 'arjun_k',
-        isFollowing: true,
-      ),
-      UserProfile(
-        id: 'ps_placeholder',
-        name: 'Priya Sharma',
-        username: 'priya_s',
-        isFollowing: false,
-      ),
-      UserProfile(
-        id: 'rv_placeholder',
-        name: 'Rohan Verma',
-        username: 'rohan_v',
-        isFollowing: true,
-      ),
-      UserProfile(
-        id: 'sn_placeholder',
-        name: 'Sneha Nair',
-        username: 'sneha_n',
-        isFollowing: false,
-      ),
-      UserProfile(
-        id: 'dm_placeholder',
-        name: 'Dev Malhotra',
-        username: 'dev_m',
-        isFollowing: false,
-      ),
-      UserProfile(
-        id: 'kr_placeholder',
-        name: 'Kavya Rao',
-        username: 'kavya_r',
-        isFollowing: true,
-      ),
-      UserProfile(
-        id: 'nk_placeholder',
-        name: 'Nikhil Kumar',
-        username: 'nikhil_k',
-        isFollowing: false,
-      ),
-      UserProfile(
-        id: 'sarah_placeholder',
-        name: 'Sarah Dietrich',
-        username: 'sarah_d',
-        isFollowing: true,
-      ),
-      UserProfile(
-        id: 'mikhail_placeholder',
-        name: 'Mikhail Volkov',
-        username: 'mikhail_v',
-        isFollowing: false,
-      ),
-      UserProfile(
-        id: 'aanya_placeholder',
-        name: 'Aanya',
-        username: 'aanya_sen',
-        isFollowing: false,
-      ),
-      UserProfile(
-        id: 'aarav_placeholder',
-        name: 'Aarav Mehta',
-        username: 'aarav_m',
-        isFollowing: true,
-      ),
-      UserProfile(
-        id: 'ishaan_placeholder',
-        name: 'Ishaan Roy',
-        username: 'ishaan_r',
-        isFollowing: false,
-      ),
-      UserProfile(
-        id: 'meera_placeholder',
-        name: 'Meera Sen',
-        username: 'meera_s',
-        isFollowing: true,
-      ),
-      UserProfile(
-        id: 'kabir_placeholder',
-        name: 'Kabir Shah',
-        username: 'kabir_s',
-        isFollowing: false,
-      ),
-    ];
-
-    // Filter out post author so they don't like their own post
-    final filtered = allMockUsers.where((u) {
-      final nameMatches = u.name.trim().toLowerCase() == widget.postUser.trim().toLowerCase();
-      final usernameMatches = widget.postUser.toLowerCase().contains(u.username.toLowerCase());
-      return !nameMatches && !usernameMatches;
-    }).toList();
-
-    // Adjust list to resemble actual like count
-    if (widget.likeCount > 0 && filtered.length > widget.likeCount) {
-      filtered.removeRange(widget.likeCount, filtered.length);
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final users = await UserService.getPostLikers(widget.postId);
+      if (mounted) {
+        setState(() {
+          _users = users;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    setState(() {
-      _users = filtered;
-      _isLoading = false;
-    });
   }
 
   Future<void> _toggleFollow(UserProfile user) async {

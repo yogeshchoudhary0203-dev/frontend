@@ -12,6 +12,7 @@
 //   • Data: on mobile data controller init deferred until visible
 //   • Switching Fun ↔ Learn disposes all controllers, loads fresh feed
 
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -23,11 +24,15 @@ import 'package:image_picker/image_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../services/post_service.dart';
 import '../services/user_service.dart';
+import '../models/quiz_model.dart';
+import '../services/quiz_service.dart';
+import '../services/auth_service.dart';
 import 'glass_common.dart';
 import 'comments_screen.dart';
 import 'create_post_screens.dart';
 import 'user_profile_screen.dart' as user_profile;
 import '../utils/share_helper.dart';
+import 'quiz_screen.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Models / helpers (kept compatible with existing UI widgets)
@@ -112,6 +117,16 @@ class _ShotsScreenState extends State<ShotsScreen>
   int  _funReelCount  = 0;   // reels watched in fun feed this session
   bool _nudgePending  = false; // debounce: don't stack multiple dialogs
 
+  // ── Quiz watch tracking ───────────────────────────────────────
+  // videoId → set of thresholds already fired: {35, 65}
+  final Map<String, Set<int>> _firedThresholds = {};
+  // videoId → wall-clock start time (for watchDurationSeconds)
+  final Map<String, DateTime> _watchStartTimes = {};
+  // Background poll after quiz is triggered
+  Timer?  _quizPollTimer;
+  String? _pendingQuizId;
+  bool    _quizBannerShown = false;
+
   // ── Spinning audio disc (purely decorative) ───────────────────
   late final AnimationController _spin = AnimationController(
     vsync: this, duration: const Duration(seconds: 6))..repeat();
@@ -125,6 +140,7 @@ class _ShotsScreenState extends State<ShotsScreen>
 
   @override
   void dispose() {
+    _quizPollTimer?.cancel();
     _spin.dispose();
     _pageCtrl.dispose();
     _disposeAll();
@@ -279,15 +295,123 @@ class _ShotsScreenState extends State<ShotsScreen>
       if (!mounted) { ctrl.dispose(); _ctrls.remove(idx); return; }
       ctrl.setLooping(true);
       ctrl.setVolume(_muted ? 0.0 : 1.0);
-      // Only auto-play if this is still the active page
+
+      // Attach threshold listener for quiz watch tracking (learn feed only)
+      if (_feed == ShotsFeed.learn) {
+        ctrl.addListener(() => _onVideoProgress(idx, ctrl, post));
+      }
+
       if (idx == _curIdx) {
         ctrl.play();
+        _recordWatchStart(post.id);
         setState(() {});
       }
     } catch (_) {
       _ctrls.remove(idx);
       if (mounted) setState(() {});
     }
+  }
+
+  void _recordWatchStart(String videoId) {
+    _watchStartTimes.putIfAbsent(videoId, () => DateTime.now());
+  }
+
+  // Called ~every frame by VideoPlayerController listener
+  void _onVideoProgress(int idx, VideoPlayerController ctrl, PostModel post) {
+    if (_feed != ShotsFeed.learn) return;
+    if (!ctrl.value.isPlaying) return;
+    final dur = ctrl.value.duration.inMilliseconds;
+    if (dur == 0) return;
+    final pct = (ctrl.value.position.inMilliseconds / dur * 100).toInt();
+    final fired = _firedThresholds.putIfAbsent(post.id, () => {});
+
+    if (pct >= 35 && !fired.contains(35)) {
+      fired.add(35);
+      _fireWatchEvent(post, 35);
+    }
+    if (pct >= 65 && !fired.contains(65)) {
+      fired.add(65);
+      _fireWatchEvent(post, 65);
+    }
+  }
+
+  Future<void> _fireWatchEvent(PostModel post, int threshold) async {
+    final userId = await AuthService.getUserId();
+    if (userId == null || !mounted) return;
+    final startTime = _watchStartTimes[post.id] ?? DateTime.now();
+    final wallSec = DateTime.now().difference(startTime).inMilliseconds / 1000.0;
+
+    // Use actual elapsed time, but ensure it's at least 30% of video duration
+    // so short videos (10s) aren't blocked by a fixed minimum
+    final ctrl = _ctrls.values.isNotEmpty
+        ? _ctrls.entries.firstWhere(
+            (e) => e.key == _posts.indexOf(post),
+            orElse: () => _ctrls.entries.first,
+          ).value
+        : null;
+    final videoDurSec = (ctrl?.value.duration.inMilliseconds ?? 0) / 1000.0;
+    final minRequired = videoDurSec > 0 ? (videoDurSec * 0.3).clamp(2.0, 30.0) : 2.0;
+    final durationSec = wallSec < minRequired ? minRequired : wallSec;
+
+    try {
+      final result = await QuizService.sendWatchEvent(
+        userId: userId,
+        videoId: post.id,
+        watchPercentage: threshold.toDouble(),
+        watchDurationSeconds: durationSec.clamp(0, 3600),
+        videoTopic: post.section ?? 'general',
+        videoUrl: post.mediaUrl,
+      );
+
+      if (result['quiz_triggered'] == true && mounted) {
+        final quizId = result['quiz_id'] as String?;
+        if (quizId != null && quizId != _pendingQuizId) {
+          _pendingQuizId = quizId;
+          _startQuizPolling(quizId);
+        }
+      }
+    } catch (_) {}
+  }
+
+  // ── Background polling — every 5 seconds until quiz is ready ──
+
+  void _startQuizPolling(String quizId) {
+    _quizPollTimer?.cancel();
+    _quizBannerShown = false;
+    int attempts = 0;
+    _quizPollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!mounted) { _quizPollTimer?.cancel(); return; }
+      attempts++;
+      if (attempts > 36) { _quizPollTimer?.cancel(); return; } // 3 min max
+
+      final quiz = await QuizService.getQuiz(quizId);
+      if (!mounted) return;
+      if (quiz?.status == 'ready' && !_quizBannerShown) {
+        _quizPollTimer?.cancel();
+        _quizBannerShown = true;
+        _autoOpenQuiz(quiz!);
+      } else if (quiz?.status == 'failed') {
+        _quizPollTimer?.cancel();
+      }
+    });
+  }
+
+  // ── Quiz ready → auto-open quiz screen, video pauses ────────
+
+  void _autoOpenQuiz(QuizModel quiz) {
+    if (!mounted) return;
+    // Pause current video while quiz is open
+    _ctrls[_curIdx]?.pause();
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => QuizScreen(quiz: quiz)),
+    ).then((_) {
+      // Resume video when user comes back from quiz
+      if (mounted) {
+        _pendingQuizId = null;
+        _quizBannerShown = false;
+        _ctrls[_curIdx]?.play();
+      }
+    });
   }
 
   /// Dispose controllers that are more than 1 page away (battery saving).
@@ -309,6 +433,11 @@ class _ShotsScreenState extends State<ShotsScreen>
       _curIdx   = idx;
       _expanded = false;
     });
+
+    // Record watch start for new video (learn feed)
+    if (_feed == ShotsFeed.learn && idx < _posts.length) {
+      _recordWatchStart(_posts[idx].id);
+    }
 
     // Play or init incoming video
     if (_ctrls.containsKey(idx)) {
@@ -343,11 +472,16 @@ class _ShotsScreenState extends State<ShotsScreen>
     if (f == _feed) return;
     HapticFeedback.selectionClick();
     _ctrls[_curIdx]?.pause();
+    _quizPollTimer?.cancel();
     setState(() {
-      _feed         = f;
-      _expanded     = false;
-      _funReelCount = 0;   // reset counter on every feed switch
-      _nudgePending = false;
+      _feed             = f;
+      _expanded         = false;
+      _funReelCount     = 0;
+      _nudgePending     = false;
+      _firedThresholds.clear();
+      _watchStartTimes.clear();
+      _pendingQuizId    = null;
+      _quizBannerShown  = false;
     });
     _loadFeed(refresh: true);
   }

@@ -197,14 +197,6 @@ class DiscoverTile {
 
 const _filters = ['Top', 'People', 'Tags', 'Posts', 'Places'];
 
-const _suggested = <SuggestedItem>[
-  SuggestedItem(name: 'studio.atelier', sub: 'Suggested'),
-  SuggestedItem(name: 'noor.j',         sub: 'Followed by you', followed: true),
-  SuggestedItem(name: 'rena.k',         sub: 'New on Trandia'),
-  SuggestedItem(name: 'oslo.house',     sub: '2 mutual'),
-  SuggestedItem(name: 'ren.x',          sub: 'You may know'),
-  SuggestedItem(name: 'devon.b',        sub: 'Suggested'),
-];
 
 const _tiles = <DiscoverTile>[
   DiscoverTile(span: 2, kind: TileKind.photo),
@@ -266,11 +258,24 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _isSearching = false;
   Timer? _debounce;
   List<RecentItem> _recentItems = [];
+  List<UserProfile> _suggestedUsers = [];
+  bool _loadingSuggested = false;
 
   @override
   void initState() {
     super.initState();
     _loadSearchHistory();
+    _loadSuggestedUsers();
+  }
+
+  Future<void> _loadSuggestedUsers() async {
+    setState(() => _loadingSuggested = true);
+    try {
+      final users = await UserService.getSuggestedUsers(limit: 10);
+      if (mounted) setState(() { _suggestedUsers = users; _loadingSuggested = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loadingSuggested = false);
+    }
   }
 
   @override
@@ -289,19 +294,7 @@ class _SearchScreenState extends State<SearchScreen> {
           _recentItems = decoded.map((e) => RecentItem.fromJson(e as Map<String, dynamic>)).toList();
         });
       } else {
-        // Seed default recents if no search history exists yet
-        final defaultRecents = [
-          const RecentItem(kind: RecentKind.user, name: 'sarah.d', sub: 'Sarah Dietrich · Following', id: 'sarah_d_placeholder', displayName: 'Sarah Dietrich', isFollowing: true),
-          const RecentItem(kind: RecentKind.tag, name: '#slowliving', sub: '128K posts'),
-          const RecentItem(kind: RecentKind.place, name: 'Studio Atelier', sub: 'Berlin, Germany'),
-          const RecentItem(kind: RecentKind.user, name: 'mikhail', sub: 'Mikhail Volkov · 2 mutual', id: 'mikhail_placeholder', displayName: 'Mikhail Volkov', isFollowing: false),
-          const RecentItem(kind: RecentKind.tag, name: '#interiors', sub: '4.2M posts'),
-          const RecentItem(kind: RecentKind.user, name: 'aanya_', sub: 'Aanya · Followed by devon.b', id: 'aanya_placeholder', displayName: 'Aanya', isFollowing: false),
-        ];
-        setState(() {
-          _recentItems = defaultRecents;
-        });
-        await _saveSearchHistory(defaultRecents);
+        setState(() { _recentItems = []; });
       }
     } catch (e) {
       developer.log('Error loading search history: $e');
@@ -478,33 +471,66 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ],
               const SizedBox(height: 10),
-              _Section(title: 'Suggested for you', action: 'See all', dark: dark),
-              SizedBox(
-                height: 174,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _suggested.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, i) {
-                    final s = _suggested[i];
-                    return _SuggestedCard(
-                      s: s,
-                      i: i,
-                      dark: dark,
-                      onTap: () async {
-                        _addRecentItem(RecentItem(
-                          kind: RecentKind.user,
-                          name: s.name,
-                          sub: s.sub,
-                          displayName: s.name,
-                        ));
-                        await _startChat(context, s.name, dark);
-                      },
-                    );
-                  },
+              if (_loadingSuggested || _suggestedUsers.isNotEmpty) ...[
+                _Section(title: 'Suggested for you', dark: dark),
+                SizedBox(
+                  height: 174,
+                  child: _loadingSuggested
+                      ? Center(child: CircularProgressIndicator(color: dark ? Colors.white : Colors.black, strokeWidth: 2))
+                      : ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: _suggestedUsers.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 10),
+                          itemBuilder: (_, i) {
+                            final u = _suggestedUsers[i];
+                            final s = SuggestedItem(
+                              name: u.username.isNotEmpty ? u.username : u.name,
+                              sub: u.followersCount > 0
+                                  ? '${u.followersCount > 999 ? "${(u.followersCount / 1000).toStringAsFixed(1)}K" : u.followersCount} followers'
+                                  : 'Suggested',
+                              followed: u.isFollowing,
+                            );
+                            return _RealSuggestedCard(
+                              u: u,
+                              s: s,
+                              i: i,
+                              dark: dark,
+                              onTap: () {
+                                _addRecentItem(RecentItem(
+                                  kind: RecentKind.user,
+                                  name: u.username,
+                                  sub: u.name,
+                                  id: u.id,
+                                  displayName: u.name,
+                                  isFollowing: u.isFollowing,
+                                ));
+                                Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (_) => ProfileScreen(
+                                    userId: u.id,
+                                    username: u.username,
+                                    displayName: u.name,
+                                    handle: u.username,
+                                    initialFollowing: u.isFollowing,
+                                  ),
+                                ));
+                              },
+                              onFollowChanged: (following) {
+                                setState(() {
+                                  _suggestedUsers[i] = UserProfile(
+                                    id: u.id, name: u.name, username: u.username,
+                                    picture: u.picture, publicKey: u.publicKey,
+                                    isFollowing: following,
+                                    followersCount: u.followersCount,
+                                    followingCount: u.followingCount,
+                                  );
+                                });
+                              },
+                            );
+                          },
+                        ),
                 ),
-              ),
+              ],
               const SizedBox(height: 14),
               _Section(title: 'Discover', dark: dark),
               Padding(
@@ -674,81 +700,87 @@ class _SearchInputPillState extends State<_SearchInputPill> {
     final sub = GlassTokens.sub(dark);
     final hasText = _controller.text.isNotEmpty;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(999),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.only(left: 14, right: 6),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter, end: Alignment.bottomCenter,
-              colors: dark
-                ? [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.04)]
-                : [Colors.white.withOpacity(0.85), Colors.white.withOpacity(0.62)],
-            ),
-            border: Border.all(color: dark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.95)),
-            borderRadius: BorderRadius.circular(999),
-            boxShadow: [
-              BoxShadow(
-                color: dark ? Colors.black.withOpacity(0.7) : const Color(0xFF14161E).withOpacity(0.20),
-                blurRadius: 28, offset: const Offset(0, 12), spreadRadius: -14,
-              ),
-            ],
-          ),
-          child: Stack(alignment: Alignment.center, children: [
-            Positioned(
-              top: 0, left: 20, right: 20, height: 1,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: dark
-                    ? [Colors.transparent, Colors.white.withOpacity(0.22), Colors.transparent]
-                    : [Colors.transparent, Colors.white, Colors.transparent]),
+    return Hero(
+      tag: 'chat_search_bar',
+      child: Material(
+        color: Colors.transparent,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.only(left: 14, right: 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: dark
+                    ? [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.04)]
+                    : [Colors.white.withOpacity(0.85), Colors.white.withOpacity(0.62)],
                 ),
-              ),
-            ),
-            Row(children: [
-              Icon(Icons.search_rounded, size: 18, color: hasText ? fg : sub),
-              const SizedBox(width: 10),
-              Expanded(child: TextField(
-                controller: _controller,
-                onChanged: (val) {
-                  setState(() {});
-                  if (widget.onChanged != null) widget.onChanged!(val);
-                },
-                style: manrope(size: 14.5, weight: hasText ? FontWeight.w600 : FontWeight.w500,
-                  color: fg, letterSpacing: -0.145),
-                decoration: InputDecoration(
-                  hintText: widget.placeholder,
-                  hintStyle: manrope(size: 14.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.145),
-                  border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero,
-                ),
-                keyboardType: TextInputType.text,
-                autocorrect: false,
-                enableSuggestions: false,
-              )),
-              const SizedBox(width: 6),
-              if (hasText)
-                GestureDetector(
-                  onTap: () { _controller.clear(); setState(() {}); widget.onClear(); },
-                  child: Container(
-                    width: 26, height: 26, alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
-                    ),
-                    child: Icon(Icons.close_rounded, size: 14, color: fg),
+                border: Border.all(color: dark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.95)),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: dark ? Colors.black.withOpacity(0.7) : const Color(0xFF14161E).withOpacity(0.20),
+                    blurRadius: 28, offset: const Offset(0, 12), spreadRadius: -14,
                   ),
-                )
-              else
-                GestureDetector(
-                  onTap: _listen,
-                  child: SizedBox(width: 32, height: 32,
-                    child: Icon(_isListening ? Icons.mic_rounded : Icons.mic_none_rounded, size: 18, color: _isListening ? Colors.red : sub)),
+                ],
+              ),
+              child: Stack(alignment: Alignment.center, children: [
+                Positioned(
+                  top: 0, left: 20, right: 20, height: 1,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: dark
+                        ? [Colors.transparent, Colors.white.withOpacity(0.22), Colors.transparent]
+                        : [Colors.transparent, Colors.white, Colors.transparent]),
+                    ),
+                  ),
                 ),
-            ]),
-          ]),
+                Row(children: [
+                  Icon(Icons.search_rounded, size: 18, color: hasText ? fg : sub),
+                  const SizedBox(width: 10),
+                  Expanded(child: TextField(
+                    controller: _controller,
+                    onChanged: (val) {
+                      setState(() {});
+                      if (widget.onChanged != null) widget.onChanged!(val);
+                    },
+                    style: manrope(size: 14.5, weight: hasText ? FontWeight.w600 : FontWeight.w500,
+                      color: fg, letterSpacing: -0.145),
+                    decoration: InputDecoration(
+                      hintText: widget.placeholder,
+                      hintStyle: manrope(size: 14.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.145),
+                      border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero,
+                    ),
+                    keyboardType: TextInputType.text,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                  )),
+                  const SizedBox(width: 6),
+                  if (hasText)
+                    GestureDetector(
+                      onTap: () { _controller.clear(); setState(() {}); widget.onClear(); },
+                      child: Container(
+                        width: 26, height: 26, alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
+                        ),
+                        child: Icon(Icons.close_rounded, size: 14, color: fg),
+                      ),
+                    )
+                  else
+                    GestureDetector(
+                      onTap: _listen,
+                      child: SizedBox(width: 32, height: 32,
+                        child: Icon(_isListening ? Icons.mic_rounded : Icons.mic_none_rounded, size: 18, color: _isListening ? Colors.red : sub)),
+                    ),
+                ]),
+              ]),
+            ),
+          ),
         ),
       ),
     );
@@ -1094,19 +1126,60 @@ class _FollowButtonState extends State<_FollowButton> {
   }
 }
 
-class _SuggestedCard extends StatelessWidget {
+class _RealSuggestedCard extends StatefulWidget {
+  final UserProfile u;
   final SuggestedItem s;
   final int i;
   final bool dark;
   final VoidCallback? onTap;
-  const _SuggestedCard({required this.s, required this.i, required this.dark, this.onTap});
+  final ValueChanged<bool>? onFollowChanged;
+  const _RealSuggestedCard({
+    required this.u, required this.s, required this.i, required this.dark,
+    this.onTap, this.onFollowChanged,
+  });
+
+  @override
+  State<_RealSuggestedCard> createState() => _RealSuggestedCardState();
+}
+
+class _RealSuggestedCardState extends State<_RealSuggestedCard> {
+  late bool _following;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _following = widget.u.isFollowing;
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_loading) return;
+    final was = _following;
+    setState(() { _following = !was; _loading = true; });
+    bool ok = false;
+    try {
+      ok = was
+          ? await UserService.unfollowUser(widget.u.id)
+          : await UserService.followUser(widget.u.id);
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        if (!ok) _following = was;
+        _loading = false;
+      });
+      widget.onFollowChanged?.call(_following);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final dark = widget.dark;
+    final s = widget.s;
+    final i = widget.i;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
     return GestureDetector(
-      onTap: onTap ?? () async => await _startChat(context, s.name, dark),
+      onTap: widget.onTap,
       child: SizedBox(
         width: 132,
         child: GlassSurface(
@@ -1117,7 +1190,7 @@ class _SuggestedCard extends StatelessWidget {
               width: 62, height: 62,
               decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(dark, i + 1)),
               alignment: Alignment.center,
-              child: Text(s.name[0].toUpperCase(),
+              child: Text(s.name.isNotEmpty ? s.name[0].toUpperCase() : '?',
                 style: manrope(size: 22, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.44)),
             ),
             const SizedBox(height: 8),
@@ -1132,21 +1205,21 @@ class _SuggestedCard extends StatelessWidget {
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   padding: EdgeInsets.zero, elevation: 0,
-                  backgroundColor: s.followed
+                  backgroundColor: _following
                     ? (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06))
                     : (dark ? Colors.white : const Color(0xFF0A0A0A)),
-                  foregroundColor: s.followed ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
+                  foregroundColor: _following ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(999),
-                    side: s.followed
+                    side: _following
                       ? BorderSide(color: dark ? Colors.white.withOpacity(0.14) : Colors.black.withOpacity(0.08))
                       : BorderSide.none,
                   ),
                 ),
-                onPressed: () {},
-                child: Text((s.followed ? 'Following' : 'Follow').tr(context),
+                onPressed: _toggleFollow,
+                child: Text((_following ? 'Following' : 'Follow').tr(context),
                   style: manrope(size: 12, weight: FontWeight.w700,
-                    color: s.followed ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
+                    color: _following ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
                     letterSpacing: -0.12)),
               ),
             ),
@@ -1156,6 +1229,7 @@ class _SuggestedCard extends StatelessWidget {
     );
   }
 }
+
 
 // ───────────────────────────────────────────────────────────────
 // Discover grid

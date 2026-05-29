@@ -13,11 +13,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/api_service.dart';
 import '../services/chat_service.dart';
+import '../services/user_service.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/error_dialog.dart';
 import 'glass_common.dart';
 import 'home/home_screen.dart';
 import 'notification_settings_screen.dart';
+import 'user_profile_screen.dart' as user_profile;
 
 enum NfKind { like, comment, follow, mention, live, msg, system }
 
@@ -579,7 +581,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 }
 
 /// Single notification card body.
-class _NfCardInner extends StatelessWidget {
+class _NfCardInner extends StatefulWidget {
   final NfItem n;
   final int i;
   final bool dark;
@@ -592,13 +594,61 @@ class _NfCardInner extends StatelessWidget {
   });
 
   @override
+  State<_NfCardInner> createState() => _NfCardInnerState();
+}
+
+class _NfCardInnerState extends State<_NfCardInner> {
+  bool _following = false;
+  bool _followLoading = false;
+
+  void _openProfile() {
+    final n = widget.n;
+    if (n.fromUserId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => user_profile.ProfileScreen(
+          userId: n.fromUserId,
+          username: n.name,
+          displayName: n.name,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onFollowTap() async {
+    final n = widget.n;
+    if (n.fromUserId.isEmpty || _followLoading) return;
+    final wasFollowing = _following;
+    setState(() { _following = !wasFollowing; _followLoading = true; });
+    bool success = false;
+    try {
+      if (!wasFollowing) {
+        success = await UserService.followUser(n.fromUserId);
+      } else {
+        success = await UserService.unfollowUser(n.fromUserId);
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        if (!success) _following = wasFollowing;
+        _followLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final n = widget.n;
+    final i = widget.i;
+    final dark = widget.dark;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
     final iconChipBg = dark ? Colors.white.withOpacity(0.16) : Colors.black.withOpacity(0.08);
     final chipBorder = dark ? const Color(0xFF0C0C0E) : const Color(0xFFFAFAFA);
 
-    return GlassSurface(
+    return GestureDetector(
+      onTap: _openProfile,
+      child: GlassSurface(
       dark: dark, radius: 22,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       blurSigma: 28,
@@ -665,10 +715,15 @@ class _NfCardInner extends StatelessWidget {
         const SizedBox(width: 10),
 
         // ── Trailing action ───────────────────────────────────────────────
-        if (n.kind == NfKind.follow && !n.unread)
-          _ActionButton(label: 'Follow', filled: false, dark: dark)
-        else if (n.kind == NfKind.follow && n.unread)
-          _ActionButton(label: 'Follow back', filled: true, dark: dark)
+        if (n.kind == NfKind.follow)
+          GestureDetector(
+            onTap: _onFollowTap,
+            child: _ActionButton(
+              label: _following ? 'Following' : (n.unread ? 'Follow back' : 'Follow'),
+              filled: !_following && n.unread,
+              dark: dark,
+            ),
+          )
         else if (n.thumb)
           Container(
             width: 44, height: 44,
@@ -679,7 +734,7 @@ class _NfCardInner extends StatelessWidget {
           ),
         const SizedBox(width: 8),
         GestureDetector(
-          onTap: onDelete,
+          onTap: widget.onDelete,
           child: Container(
             width: 30,
             height: 30,
@@ -705,7 +760,7 @@ class _NfCardInner extends StatelessWidget {
           ),
         ),
       ]),
-    );
+    ));
   }
 }
 

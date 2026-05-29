@@ -155,6 +155,9 @@ class CreatePostHubScreen extends StatefulWidget {
 
 class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
   String? _error;
+  // True once the user taps a source option — prevents the sheet's .then
+  // callback from popping the screen before the async picker finishes.
+  bool _picking = false;
 
   @override
   void initState() {
@@ -163,6 +166,7 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
   }
 
   Future<void> _showSourceSelector() async {
+    _picking = false;
     final c = CpColors(widget.dark);
     final dark = widget.dark;
     showModalBottomSheet(
@@ -199,6 +203,7 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
                 icon: Icons.camera_alt_rounded,
                 label: 'Take Photo (Camera)',
                 onTap: () {
+                  _picking = true;
                   Navigator.pop(ctx);
                   _pickFile(ImageSource.camera, isVideo: false);
                 },
@@ -208,6 +213,7 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
                 icon: Icons.videocam_rounded,
                 label: 'Record Video (Camera)',
                 onTap: () {
+                  _picking = true;
                   Navigator.pop(ctx);
                   _pickFile(ImageSource.camera, isVideo: true);
                 },
@@ -217,6 +223,7 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
                 icon: Icons.photo_library_rounded,
                 label: 'Choose from Gallery',
                 onTap: () {
+                  _picking = true;
                   Navigator.pop(ctx);
                   _pickGallery();
                 },
@@ -227,8 +234,8 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
         ),
       ),
     ).then((_) {
-      // If the sheet was dismissed without selecting anything, and no error is present, go back
-      if (mounted && _error == null) {
+      // Only auto-pop if user swiped the sheet away without selecting anything
+      if (mounted && _error == null && !_picking) {
         Navigator.maybePop(context);
       }
     });

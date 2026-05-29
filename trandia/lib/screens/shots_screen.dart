@@ -33,7 +33,7 @@ import 'create_post_screens.dart';
 import 'user_profile_screen.dart' as user_profile;
 import '../utils/share_helper.dart';
 import 'quiz_screen.dart';
-import '../main.dart' show appRouteObserver;
+import '../utils/route_observer.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Models / helpers (kept compatible with existing UI widgets)

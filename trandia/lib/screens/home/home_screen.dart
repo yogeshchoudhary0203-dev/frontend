@@ -30,7 +30,7 @@ import '../comments_screen.dart';
 import '../liked_by_screen.dart';
 import '../../services/cryptography_service.dart';
 import '../../utils/share_helper.dart';
-import '../../main.dart' show appRouteObserver;
+import '../../utils/route_observer.dart';
 
 /// Notifier shared between HomeScreen and _VideoCardState (same file).
 /// false = home route is covered → all video players must pause.

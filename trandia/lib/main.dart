@@ -18,13 +18,9 @@ import 'services/deep_link_service.dart';
 import 'l10n/app_localizations.dart';
 import 'utils/web_utils.dart';
 import 'utils/navigator_key.dart';
+import 'utils/route_observer.dart';
 
 export 'utils/navigator_key.dart' show navigatorKey;
-
-/// Global route observer — HomeScreen subscribes to detect when it's covered
-/// by a pushed route so it can pause all video players.
-final RouteObserver<ModalRoute<void>> appRouteObserver =
-    RouteObserver<ModalRoute<void>>();
 
 @pragma('vm:entry-point')
 Future<void> _bgMessageHandler(RemoteMessage message) async {

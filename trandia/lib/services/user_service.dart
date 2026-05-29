@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
 import '../models/chat_model.dart';
 import 'api_service.dart';
+import 'follow_state.dart';
 
 class UserService {
   // ── Follow / Unfollow / Status ───────────────────────────────────────────
@@ -16,7 +17,9 @@ class UserService {
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 10));
       developer.log('followUser $targetId → ${res.statusCode}');
-      return res.statusCode == 200;
+      final ok = res.statusCode == 200;
+      if (ok) FollowState.set(targetId, true);
+      return ok;
     } catch (e) {
       developer.log('followUser error: $e');
       return false;
@@ -32,7 +35,9 @@ class UserService {
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 10));
       developer.log('unfollowUser $targetId → ${res.statusCode}');
-      return res.statusCode == 200;
+      final ok = res.statusCode == 200;
+      if (ok) FollowState.set(targetId, false);
+      return ok;
     } catch (e) {
       developer.log('unfollowUser error: $e');
       return false;
@@ -210,6 +215,30 @@ class UserService {
     } catch (e) {
       developer.log('getSuggestedUsers error: $e');
       return [];
+    }
+  }
+
+  /// Returns the updated comments_count from server, or null on error.
+  static Future<int?> notifyComment(String postId, String commentText) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return null;
+      final res = await http.post(
+        Uri.parse('$baseUrl/posts/$postId/comment_notify'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'comment_text': commentText}),
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        return body['new_count'] as int?;
+      }
+      return null;
+    } catch (e) {
+      developer.log('notifyComment error: $e');
+      return null;
     }
   }
 

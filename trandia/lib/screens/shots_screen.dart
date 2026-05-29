@@ -33,6 +33,7 @@ import 'create_post_screens.dart';
 import 'user_profile_screen.dart' as user_profile;
 import '../utils/share_helper.dart';
 import 'quiz_screen.dart';
+import '../utils/route_observer.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Models / helpers (kept compatible with existing UI widgets)
@@ -88,7 +89,8 @@ class ShotsScreen extends StatefulWidget {
 }
 
 class _ShotsScreenState extends State<ShotsScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin
+    implements RouteAware {
 
   // ── Feed state ────────────────────────────────────────────────
   ShotsFeed           _feed        = ShotsFeed.fun;
@@ -107,7 +109,8 @@ class _ShotsScreenState extends State<ShotsScreen>
   final PageController _pageCtrl = PageController();
 
   // ── Per-post UI state (index → bool / int) ───────────────────
-  final Map<int, bool> _liked       = {};
+  final Map<int, bool> _liked        = {};
+  final Map<int, int>  _commentsCount = {}; // exact count override after comment
   final Map<int, bool> _saved       = {};
   final Map<int, int>  _likesDelta  = {}; // +1 / -1 per optimistic like
   final Map<String, bool> _followedUsers = {};
@@ -139,7 +142,32 @@ class _ShotsScreenState extends State<ShotsScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) appRouteObserver.subscribe(this, route);
+  }
+
+  // ── RouteAware — pause current video when another screen covers this one ──
+  @override
+  void didPushNext() => _ctrls[_curIdx]?.pause();
+
+  @override
+  void didPopNext() {
+    // Resume current video when returning from comments/profile etc.
+    if (!_muted) _ctrls[_curIdx]?.setVolume(1.0);
+    _ctrls[_curIdx]?.play();
+  }
+
+  @override
+  void didPush() {}
+
+  @override
+  void didPop() {}
+
+  @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     _quizPollTimer?.cancel();
     _spin.dispose();
     _pageCtrl.dispose();
@@ -168,6 +196,7 @@ class _ShotsScreenState extends State<ShotsScreen>
         _liked.clear();
         _saved.clear();
         _likesDelta.clear();
+        _commentsCount.clear();
         _curIdx   = 0;
         _expanded = false;
         // Jump page controller back to top without animation
@@ -660,7 +689,7 @@ class _ShotsScreenState extends State<ShotsScreen>
         avatarSeed: p.userId.hashCode.abs() % 6,
         caption:    p.caption,
         likes:      _fmt(adjustedCount),
-        comments:   _fmt(p.commentsCount),
+        comments:   _fmt(_commentsCount[_curIdx] ?? p.commentsCount),
         shares:     '0',
       );
     }() : null;
@@ -722,6 +751,9 @@ class _ShotsScreenState extends State<ShotsScreen>
               onSave: () => setState(
                   () => _saved[_curIdx] = !(_saved[_curIdx] ?? false)),
               post:   _posts[_curIdx],
+              onCommentPosted: (newCount) {
+                setState(() => _commentsCount[_curIdx] = newCount);
+              },
             ),
           ),
 
@@ -1214,11 +1246,12 @@ class _RightRail extends StatelessWidget {
   final AnimationController spin;
   final VoidCallback     onLike;
   final VoidCallback     onSave;
-  final PostModel        post;   // passed to CommentsScreen
+  final PostModel        post;
+  final void Function(int newCount)? onCommentPosted;
   const _RightRail({
     required this.data, required this.liked, required this.saved,
     required this.spin, required this.onLike, required this.onSave,
-    required this.post,
+    required this.post, this.onCommentPosted,
   });
 
   @override
@@ -1245,6 +1278,8 @@ class _RightRail extends StatelessWidget {
                 postDescription: data.caption,
                 postInitials:    initial,
                 postUserColor:   const Color(0xFF2D3561),
+                postId:          post.id,
+                onCommentPosted: onCommentPosted,
               ),
               transitionDuration:        const Duration(milliseconds: 380),
               reverseTransitionDuration: const Duration(milliseconds: 300),

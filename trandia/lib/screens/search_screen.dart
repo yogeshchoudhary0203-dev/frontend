@@ -15,6 +15,7 @@ import 'glass_common.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
+import '../services/follow_state.dart';
 import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
 import '../utils/error_dialog.dart';
@@ -272,7 +273,10 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _loadingSuggested = true);
     try {
       final users = await UserService.getSuggestedUsers(limit: 10);
-      if (mounted) setState(() { _suggestedUsers = users; _loadingSuggested = false; });
+      if (mounted) {
+        FollowState.seed(users.map((u) => MapEntry(u.id, u.isFollowing)));
+        setState(() { _suggestedUsers = users; _loadingSuggested = false; });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingSuggested = false);
     }
@@ -1149,7 +1153,19 @@ class _RealSuggestedCardState extends State<_RealSuggestedCard> {
   @override
   void initState() {
     super.initState();
-    _following = widget.u.isFollowing;
+    _following = FollowState.get(widget.u.id) ?? widget.u.isFollowing;
+    FollowState.notifier.addListener(_onGlobalFollowChanged);
+  }
+
+  @override
+  void dispose() {
+    FollowState.notifier.removeListener(_onGlobalFollowChanged);
+    super.dispose();
+  }
+
+  void _onGlobalFollowChanged() {
+    final v = FollowState.get(widget.u.id);
+    if (v != null && mounted && v != _following) setState(() => _following = v);
   }
 
   Future<void> _toggleFollow() async {

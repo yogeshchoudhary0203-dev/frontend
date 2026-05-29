@@ -736,8 +736,7 @@ class _ChatScreenState extends State<ChatScreen>
 
     final effectiveInputH = inputH + (_replyingTo != null ? replyH + 8 : 0);
 
-    final otherUser    = widget.conversation.getOtherParticipant(widget.myUserId);
-    final avatarLetter = otherUser.username.isNotEmpty ? otherUser.username[0].toUpperCase() : '?';
+    final otherUser = widget.conversation.getOtherParticipant(widget.myUserId);
 
     // Build message list as a stable child — AnimatedBuilder will NOT rebuild
     // this on every animation tick, only on setState (new message/reaction).
@@ -874,12 +873,12 @@ class _ChatScreenState extends State<ChatScreen>
                   child: Icon(Icons.arrow_back_ios_new_rounded, color: fg, size: 18),
                 ),
               ),
-              Container(
-                width: 38, height: 38,
-                decoration: BoxDecoration(shape: BoxShape.circle, gradient: monoAvatar(widget.dark, 0)),
-                alignment: Alignment.center,
-                child: Text(avatarLetter,
-                    style: manrope(size: 15, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3)),
+              UserAvatar(
+                pictureUrl: otherUser.picture,
+                name: otherUser.name.isNotEmpty ? otherUser.name : otherUser.username,
+                size: 38,
+                dark: widget.dark,
+                index: 0,
               ),
               const SizedBox(width: 10),
               Expanded(

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'glass_common.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
+import '../services/follow_state.dart';
 
 class LikedByScreen extends StatefulWidget {
   final bool dark;
@@ -32,6 +33,32 @@ class _LikedByScreenState extends State<LikedByScreen> {
   void initState() {
     super.initState();
     _loadData();
+    FollowState.notifier.addListener(_onGlobalFollowChanged);
+  }
+
+  @override
+  void dispose() {
+    FollowState.notifier.removeListener(_onGlobalFollowChanged);
+    super.dispose();
+  }
+
+  void _onGlobalFollowChanged() {
+    if (!mounted) return;
+    bool changed = false;
+    final updated = _users.map((u) {
+      final v = FollowState.get(u.id);
+      if (v != null && v != u.isFollowing) {
+        changed = true;
+        return UserProfile(
+          id: u.id, name: u.name, username: u.username,
+          picture: u.picture, publicKey: u.publicKey,
+          isFollowing: v,
+          followersCount: u.followersCount, followingCount: u.followingCount,
+        );
+      }
+      return u;
+    }).toList();
+    if (changed) setState(() => _users = updated);
   }
 
   Future<void> _loadData() async {
@@ -39,6 +66,8 @@ class _LikedByScreenState extends State<LikedByScreen> {
     try {
       final users = await UserService.getPostLikers(widget.postId);
       if (mounted) {
+        // Seed FollowState with current values
+        FollowState.seed(users.map((u) => MapEntry(u.id, u.isFollowing)));
         setState(() {
           _users = users;
           _isLoading = false;
@@ -371,23 +400,12 @@ class _UserRowCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Avatar
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: monoAvatar(dark, i),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      u.name.isEmpty ? '•' : u.name[0].toUpperCase(),
-                      style: manrope(
-                        size: 16,
-                        weight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: -0.34,
-                      ),
-                    ),
+                  UserAvatar(
+                    pictureUrl: u.picture,
+                    name: u.name,
+                    size: 44,
+                    dark: dark,
+                    index: i,
                   ),
                   const SizedBox(width: 12),
 

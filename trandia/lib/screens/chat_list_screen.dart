@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../services/app_lock_service.dart';
 import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
 import 'glass_common.dart';
@@ -35,6 +36,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   Set<String> _archivedIds = {};
   Set<String> _blockedIds = {};
   String _activeFilter = 'all'; // 'all' | 'locked' | 'archived' | 'blocked'
+  bool _lockedTabUnlocked = false; // true once user has verified PIN in this session
 
   @override
   void initState() {
@@ -297,6 +299,10 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
               _buildPillRow(context, widget.dark),
               const SizedBox(height: 5),
 
+              // Favourites strip — only in 'all' filter and when not loading
+              if (_activeFilter == 'all' && !_isLoading && _conversations.isNotEmpty)
+                _buildFavouritesStrip(context),
+
               // Conversations list
               Expanded(
                 child: _isLoading
@@ -331,6 +337,209 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
         ]),
       ),
     );
+  }
+
+  // ── Favourites strip (top recent chat partners) ───────────────
+  Widget _buildFavouritesStrip(BuildContext context) {
+    final fg = GlassTokens.fg(widget.dark);
+    final sub = GlassTokens.sub(widget.dark);
+    final myId = _myUserId ?? '';
+
+    final recent = _conversations
+        .where((c) => !_lockedIds.contains(c.id) && !_archivedIds.contains(c.id) && !_blockedIds.contains(c.id))
+        .take(6)
+        .toList();
+
+    if (recent.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+          child: Text(
+            'FAVOURITES'.tr(context),
+            style: manrope(size: 11, weight: FontWeight.w700, color: sub, letterSpacing: 0.88),
+          ),
+        ),
+        SizedBox(
+          height: 82,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: recent.length,
+            itemBuilder: (ctx, i) {
+              final conv = recent[i];
+              final other = conv.getOtherParticipant(myId);
+              final unread = (conv.unreadCounts[myId] ?? 0) > 0;
+              return GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => ChatScreen(
+                      dark: widget.dark,
+                      conversation: conv,
+                      myUserId: myId,
+                    ),
+                  ));
+                },
+                child: Container(
+                  width: 64,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundColor: widget.dark
+                                ? Colors.white.withValues(alpha: 0.15)
+                                : Colors.black.withValues(alpha: 0.08),
+                            backgroundImage: (other.picture != null && other.picture!.isNotEmpty)
+                                ? NetworkImage(other.picture!)
+                                : null,
+                            child: (other.picture == null || other.picture!.isEmpty)
+                                ? Text(
+                                    other.name.isNotEmpty ? other.name[0].toUpperCase() : '?',
+                                    style: manrope(size: 18, weight: FontWeight.w700, color: fg),
+                                  )
+                                : null,
+                          ),
+                          if (unread)
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: widget.dark ? GlassTokens.bgDark : GlassTokens.bgLight,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        other.name.isNotEmpty ? other.name.split(' ').first : other.username,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: manrope(size: 11, weight: FontWeight.w600, color: fg),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  // ── Locked chat PIN dialog ────────────────────────────────────
+  Future<void> _showPinDialog() async {
+    final lockEnabled = await AppLockService.isEnabled();
+    if (!lockEnabled) {
+      // No app lock set — just switch to locked tab
+      if (mounted) setState(() { _activeFilter = 'locked'; _lockedTabUnlocked = true; });
+      return;
+    }
+
+    final pinLength = await AppLockService.getPinLength();
+    if (!mounted) return;
+
+    final controller = TextEditingController();
+    bool hasError = false;
+    final dark = widget.dark;
+    final fg = GlassTokens.fg(dark);
+    final sub = GlassTokens.sub(dark);
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: dark ? const Color(0xFF1A1A1A) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.lock_outline, color: fg, size: 20),
+              const SizedBox(width: 8),
+              Text('Enter PIN'.tr(context),
+                  style: manrope(size: 16, weight: FontWeight.w700, color: fg)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Enter your $pinLength-digit app lock PIN'.tr(context),
+                  style: manrope(size: 13, color: sub)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: pinLength,
+                onChanged: (_) { if (hasError) setS(() { hasError = false; }); },
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: '•' * pinLength,
+                  hintStyle: manrope(size: 14, color: sub),
+                  errorText: hasError ? 'Incorrect PIN'.tr(context) : null,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: fg, width: 1.5),
+                  ),
+                ),
+                style: manrope(size: 22, weight: FontWeight.w700, color: fg, letterSpacing: 8),
+                textAlign: TextAlign.center,
+                onSubmitted: (val) async {
+                  final ok = await AppLockService.verifyPin(val);
+                  if (ok) {
+                    Navigator.of(ctx).pop();
+                    if (mounted) setState(() { _activeFilter = 'locked'; _lockedTabUnlocked = true; });
+                  } else {
+                    controller.clear();
+                    setS(() { hasError = true; });
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text('Cancel'.tr(context), style: manrope(size: 14, color: sub)),
+            ),
+            TextButton(
+              onPressed: () async {
+                final ok = await AppLockService.verifyPin(controller.text);
+                if (ok) {
+                  Navigator.of(ctx).pop();
+                  if (mounted) setState(() { _activeFilter = 'locked'; _lockedTabUnlocked = true; });
+                } else {
+                  controller.clear();
+                  setS(() { hasError = true; });
+                }
+              },
+              child: Text('Unlock'.tr(context),
+                  style: manrope(size: 14, weight: FontWeight.w700, color: fg)),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
   }
 
   Widget _buildConversationList(BuildContext context, Color sub) {
@@ -428,7 +637,15 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
-        setState(() { _activeFilter = filter; });
+        if (filter == 'locked' && !_lockedTabUnlocked) {
+          _showPinDialog();
+        } else {
+          setState(() {
+            _activeFilter = filter;
+            // Reset unlock flag when leaving locked tab
+            if (filter != 'locked') _lockedTabUnlocked = false;
+          });
+        }
       },
       child: Container(
         height: 30,
@@ -594,17 +811,12 @@ class _ChatRow extends StatelessWidget {
         child: Row(children: [
           // Avatar with optional status overlay
           Stack(clipBehavior: Clip.none, children: [
-            Container(
-              width: 50, height: 50,
-              decoration: BoxDecoration(
-                  shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
-              alignment: Alignment.center,
-              child: Text(avatarLetter,
-                  style: manrope(
-                      size: 18,
-                      weight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: -0.36)),
+            UserAvatar(
+              pictureUrl: otherUser.picture,
+              name: otherUser.name.isNotEmpty ? otherUser.name : otherUser.username,
+              size: 50,
+              dark: dark,
+              index: i,
             ),
             if (statusIcon != null)
               Positioned(

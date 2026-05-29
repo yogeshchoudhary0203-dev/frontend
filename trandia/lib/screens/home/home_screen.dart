@@ -30,6 +30,11 @@ import '../comments_screen.dart';
 import '../liked_by_screen.dart';
 import '../../services/cryptography_service.dart';
 import '../../utils/share_helper.dart';
+import '../../utils/route_observer.dart';
+
+/// Notifier shared between HomeScreen and _VideoCardState (same file).
+/// false = home route is covered → all video players must pause.
+final ValueNotifier<bool> _homeFeedActive = ValueNotifier(true);
 
 extension _ColorOp on Color {
   Color op(double opacity) => withOpacity(opacity);
@@ -53,7 +58,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin
+    implements RouteAware {
   bool _navOpen   = false;
   bool _navHorizontal = false;
   int  _activeNav = 0;
@@ -134,7 +140,27 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    appRouteObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  // ── RouteAware — pause videos when another screen is pushed on top ──────
+  @override
+  void didPushNext() => _homeFeedActive.value = false;
+
+  @override
+  void didPopNext() => _homeFeedActive.value = true;
+
+  @override
+  void didPush() {}
+
+  @override
+  void didPop() {}
+
+  @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     _navCtrl.dispose();
     _islandCtrl.dispose();
     _scrollCtrl.dispose();
@@ -602,6 +628,7 @@ class _HomeScreenState extends State<HomeScreen>
               physics: const BouncingScrollPhysics(
                   parent: AlwaysScrollableScrollPhysics()),
               padding: EdgeInsets.only(top: topPad + 56),
+              cacheExtent: 1200,
               itemCount: _posts.isEmpty
                   ? 2
                   : _posts.length + 2 + (_showSuggestionsTab ? 1 : 0),
@@ -2395,6 +2422,21 @@ class PostCard extends StatefulWidget {
 
 class _PostCardState extends State<PostCard> {
   bool _expanded = false;
+  late int _commentsCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _commentsCount = widget.post.commentsCount;
+  }
+
+  @override
+  void didUpdateWidget(PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.commentsCount != widget.post.commentsCount) {
+      _commentsCount = widget.post.commentsCount;
+    }
+  }
 
   Color _avatarColor(String userId) {
     final colors = [
@@ -2416,6 +2458,8 @@ class _PostCardState extends State<PostCard> {
     HapticFeedback.selectionClick();
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => user_profile.ProfileScreen(
+        userId: p.userId,
+        username: p.userUsername.isNotEmpty ? p.userUsername : p.userName,
         displayName: p.userName,
         handle: p.userUsername,
         initialFollowing: false,
@@ -2549,7 +2593,7 @@ class _PostCardState extends State<PostCard> {
             const SizedBox(width: 12),
 
             _ActionStat(
-              count: '${p.commentsCount}',
+              count: '$_commentsCount',
               color: textPrimary,
               onTap: () {
                 HapticFeedback.selectionClick();
@@ -2560,6 +2604,10 @@ class _PostCardState extends State<PostCard> {
                     postDescription: p.caption,
                     postInitials: _initials(p.userName),
                     postUserColor: avatarBg,
+                    postId: p.id,
+                    onCommentPosted: (newCount) {
+                      if (mounted) setState(() => _commentsCount = newCount);
+                    },
                   ),
                   transitionDuration: const Duration(milliseconds: 380),
                   reverseTransitionDuration: const Duration(milliseconds: 300),
@@ -2667,7 +2715,15 @@ class _VideoCardState extends State<_VideoCard> {
   @override
   void initState() {
     super.initState();
+    _homeFeedActive.addListener(_onFeedActiveChanged);
     _checkConnectivity();
+  }
+
+  void _onFeedActiveChanged() {
+    if (!_homeFeedActive.value && _initialized) {
+      _ctrl?.pause();
+    }
+    // Resume is handled by VisibilityDetector when the screen comes back
   }
 
   Future<void> _checkConnectivity() async {
@@ -2760,6 +2816,7 @@ class _VideoCardState extends State<_VideoCard> {
 
   @override
   void dispose() {
+    _homeFeedActive.removeListener(_onFeedActiveChanged);
     _ctrl?.dispose();
     super.dispose();
   }

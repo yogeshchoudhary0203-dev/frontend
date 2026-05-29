@@ -1062,14 +1062,14 @@ class _AccountCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       child: Row(
         children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-                shape: BoxShape.circle, gradient: monoAvatar(dark, 2)),
-            alignment: Alignment.center,
-            child: profile == null
-                ? SizedBox(
+          profile == null
+              ? Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle, gradient: monoAvatar(dark, 2)),
+                  alignment: Alignment.center,
+                  child: SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
@@ -1077,13 +1077,15 @@ class _AccountCard extends StatelessWidget {
                       valueColor: AlwaysStoppedAnimation<Color>(
                           Colors.white.withOpacity(0.6)),
                     ),
-                  )
-                : Text(initial,
-                    style: manrope(
-                        size: 22,
-                        weight: FontWeight.w800,
-                        color: Colors.white)),
-          ),
+                  ),
+                )
+              : UserAvatar(
+                  pictureUrl: profile!.picture,
+                  name: name,
+                  size: 58,
+                  dark: dark,
+                  index: 2,
+                ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(

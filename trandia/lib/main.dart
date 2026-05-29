@@ -18,6 +18,7 @@ import 'services/deep_link_service.dart';
 import 'l10n/app_localizations.dart';
 import 'utils/web_utils.dart';
 import 'utils/navigator_key.dart';
+import 'utils/route_observer.dart';
 
 export 'utils/navigator_key.dart' show navigatorKey;
 
@@ -136,6 +137,7 @@ class _TrandiaAppState extends State<TrandiaApp> with WidgetsBindingObserver {
           debugShowCheckedModeBanner: false,
           title: 'Trandia',
           navigatorKey: navigatorKey,
+          navigatorObservers: [appRouteObserver],
           theme: ThemeData(
             brightness: Brightness.light,
             scaffoldBackgroundColor: const Color(0xFFFFFFFF),

@@ -14,7 +14,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/user_service.dart';
+import '../services/follow_state.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/post_service.dart';
@@ -27,16 +29,15 @@ class ProfileScreen extends StatefulWidget {
     super.key,
     this.userId = '',
     this.username = '',
-    this.displayName = 'Sarah Dietrich',
-    this.handle = 'sarah.d',
-    this.title = 'Designer · Studio Atelier',
-    this.bio =
-        'Designer & art director.\nCurrently leading visual identity at Studio Atelier — type, motion & quiet things.',
-    this.followers = '24.3K',
-    this.following = '482',
-    this.posts = '168',
-    this.postCount = 168,
-    this.verified = true,
+    this.displayName = '',
+    this.handle = '',
+    this.title = '',
+    this.bio = '',
+    this.followers = '—',
+    this.following = '—',
+    this.posts = '0',
+    this.postCount = 0,
+    this.verified = false,
     this.initialFollowing = false,
   });
 
@@ -61,6 +62,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late bool _isFollowing;
   bool _isFollowLoading = false;
   UserProfile? _profile;
+  bool _profileLoading = true;
   List<PostModel> _userPosts = [];
   bool _postsLoading = false;
 
@@ -72,8 +74,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _isFollowing = widget.initialFollowing;
+    _isFollowing = FollowState.get(widget.userId) ?? widget.initialFollowing;
     _scrollCtrl.addListener(_onScroll);
+    FollowState.notifier.addListener(_onGlobalFollowChanged);
     if (widget.userId.isNotEmpty) {
       _loadProfile();
       _loadPosts(widget.userId);
@@ -82,8 +85,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    FollowState.notifier.removeListener(_onGlobalFollowChanged);
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _onGlobalFollowChanged() {
+    final v = FollowState.get(widget.userId);
+    if (v != null && mounted && v != _isFollowing) setState(() => _isFollowing = v);
   }
 
   void _onScroll() {
@@ -93,12 +102,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
+    if (mounted) setState(() => _profileLoading = true);
     final p = await UserService.getUserProfile(widget.userId);
-    if (mounted && p != null) {
-      setState(() {
-        _profile = p;
-        _isFollowing = p.isFollowing;
-      });
+    developer.log('_loadProfile: picture=${p?.picture}, name=${p?.name}');
+    if (mounted) {
+      if (p != null) {
+        FollowState.set(widget.userId, p.isFollowing);
+        setState(() {
+          _profile = p;
+          _isFollowing = p.isFollowing;
+          _profileLoading = false;
+        });
+      } else {
+        setState(() => _profileLoading = false);
+      }
     }
   }
 
@@ -264,71 +281,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       t: t,
                       followers: _profile != null
                           ? _formatCount(_profile!.followersCount)
-                          : widget.followers,
+                          : (_profileLoading ? '—' : widget.followers),
                       following: _profile != null
                           ? _formatCount(_profile!.followingCount)
-                          : widget.following,
+                          : (_profileLoading ? '—' : widget.following),
                       posts: _formatCount(_userPosts.length),
                       initial: (_profile?.name ?? widget.displayName).isNotEmpty
                           ? (_profile?.name ?? widget.displayName)[0].toUpperCase()
-                          : 'U',
+                          : '?',
+                      pictureUrl: _profile?.picture,
                     ),
                     const SizedBox(height: 68),
-                    _NameRow(
-                      t: t,
-                      name: _profile?.name ?? widget.displayName,
-                      verified: widget.verified,
-                    ),
-                    const SizedBox(height: 10),
-                    Center(child: _TitleChip(t: t, label: '@${_profile?.username ?? widget.username}')),
-                    if ((_profile?.locationCity?.isNotEmpty == true)) ...[
-                      const SizedBox(height: 8),
-                      Center(
-                        child: _LocationBadge(
-                          t: t,
-                          city: _profile!.locationCity!,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 14),
-                    if ((_profile?.bio ?? widget.bio).isNotEmpty)
+                    if (_profileLoading)
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: Text(
-                          _profile?.bio ?? widget.bio,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            height: 1.55,
-                            fontWeight: FontWeight.w500,
-                            color: t.muted,
-                            letterSpacing: -0.05,
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Center(
+                          child: SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: t.muted,
+                            ),
                           ),
                         ),
+                      )
+                    else ...[
+                      _NameRow(
+                        t: t,
+                        name: _profile?.name ?? widget.displayName,
+                        verified: _profile != null ? false : widget.verified,
                       ),
-                    if ((_profile?.link ?? '').isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      _WebsiteChip(t: t, url: _profile!.link!),
-                    ],
-                    const SizedBox(height: 16),
-                    _SocialRow(t: t, profile: _profile),
-                    const SizedBox(height: 18),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(children: [
-                        Expanded(
-                          child: _FollowButton(
+                      const SizedBox(height: 10),
+                      Center(child: _TitleChip(t: t, label: '@${_profile?.username ?? widget.username}')),
+                      if ((_profile?.locationCity?.isNotEmpty == true)) ...[
+                        const SizedBox(height: 8),
+                        Center(
+                          child: _LocationBadge(
                             t: t,
-                            following: _isFollowing,
-                            onTap: _handleFollow,
+                            city: _profile!.locationCity!,
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _MessageButton(t: t, onTap: _handleMessage),
+                      ],
+                      const SizedBox(height: 14),
+                      if ((_profile?.bio ?? '').isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: Text(
+                            _profile!.bio!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.55,
+                              fontWeight: FontWeight.w500,
+                              color: t.muted,
+                              letterSpacing: -0.05,
+                            ),
+                          ),
                         ),
-                      ]),
-                    ),
+                      if ((_profile?.link ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _WebsiteChip(t: t, url: _profile!.link!),
+                      ],
+                      const SizedBox(height: 16),
+                      _SocialRow(t: t, profile: _profile),
+                      const SizedBox(height: 18),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(children: [
+                          if (widget.userId.isNotEmpty) ...[
+                            Expanded(
+                              child: _FollowButton(
+                                t: t,
+                                following: _isFollowing,
+                                onTap: _handleFollow,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _MessageButton(t: t, onTap: _handleMessage),
+                            ),
+                          ],
+                        ]),
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -401,9 +436,11 @@ class _StatsHeader extends StatelessWidget {
     required this.following,
     required this.posts,
     required this.initial,
+    this.pictureUrl,
   });
   final _GlassTheme t;
   final String followers, following, posts, initial;
+  final String? pictureUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -480,33 +517,50 @@ class _StatsHeader extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: t.dark
-                          ? const [Color(0xFF8E8E92), Color(0xFF3A3A3D)]
-                          : const [Color(0xFFEDEDEF), Color(0xFFA8A8AC)],
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      initial,
-                      style: const TextStyle(
-                        fontSize: 48,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -1.4,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
+                child: (pictureUrl != null && pictureUrl!.isNotEmpty)
+                    ? ClipOval(
+                        child: CachedNetworkImage(
+                          imageUrl: pictureUrl!,
+                          width: 114,
+                          height: 114,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 228,
+                          errorWidget: (_, __, ___) => _avatarFallback(),
+                          placeholder: (_, __) => _avatarFallback(),
+                        ),
+                      )
+                    : _avatarFallback(),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _avatarFallback() {
+    return Container(
+      width: 114,
+      height: 114,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: t.dark
+              ? const [Color(0xFF8E8E92), Color(0xFF3A3A3D)]
+              : const [Color(0xFFEDEDEF), Color(0xFFA8A8AC)],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: const TextStyle(
+          fontSize: 48,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -1.4,
+          color: Colors.white,
+        ),
       ),
     );
   }

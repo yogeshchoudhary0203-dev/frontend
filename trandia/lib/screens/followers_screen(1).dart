@@ -16,6 +16,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../l10n/app_localizations.dart';
+import 'glass_common.dart' show UserAvatar;
 
 // ───────────────────────────────────────────────────────────────
 // Public API
@@ -1015,31 +1016,12 @@ class _UserRowCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // avatar
-                  SizedBox(
-                    width: 46,
-                    height: 46,
-                    child: Stack(
-                      children: [
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: _Tk.monoAvatar(dark, i),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            u.name.isEmpty ? '•' : u.name[0].toUpperCase(),
-                            style: _Tk.manrope(
-                              size: 17,
-                              weight: FontWeight.w700,
-                              color: Colors.white,
-                              letterSpacing: -0.34,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  UserAvatar(
+                    pictureUrl: u.picture,
+                    name: u.name,
+                    size: 46,
+                    dark: dark,
+                    index: i,
                   ),
                   const SizedBox(width: 12),
 

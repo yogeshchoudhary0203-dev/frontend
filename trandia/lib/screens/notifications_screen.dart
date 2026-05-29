@@ -111,6 +111,8 @@ IconData _kindIcon(NfKind k) {
 const double _kCardHeight = 76;
 const double _kCardGap    = 10;
 const double _kListStartY = 112; // header(48) + 12 + chips(30) + 22 spacing
+const double _kIslandCollapseRange = 176;
+const double _kIslandPinLift = 64; // keeps the folded stack above the bottom safe area
 
 class NotificationsScreen extends StatefulWidget {
   final bool dark;
@@ -454,17 +456,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             );
           }
-          return RepaintBoundary(
-            key: ValueKey(items[i].id.isEmpty ? i.toString() : items[i].id),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: _kCardGap),
-              child: SizedBox(
-                height: _kCardHeight,
-                child: _NfCardInner(
-                  n: items[i],
-                  i: i,
-                  dark: dark,
-                  onDelete: () => _deleteNotification(items[i]),
+          return _DynamicIslandScrollCard(
+            controller: _scroll,
+            index: i,
+            listStartGlobalY: listStartGlobalY,
+            child: RepaintBoundary(
+              key: ValueKey(items[i].id.isEmpty ? i.toString() : items[i].id),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: _kCardGap),
+                child: SizedBox(
+                  height: _kCardHeight,
+                  child: _NfCardInner(
+                    n: items[i],
+                    i: i,
+                    dark: dark,
+                    onDelete: () => _deleteNotification(items[i]),
+                  ),
                 ),
               ),
             ),
@@ -584,6 +591,78 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
 }
 
+class _DynamicIslandScrollCard extends StatelessWidget {
+  final ScrollController controller;
+  final int index;
+  final double listStartGlobalY;
+  final Widget child;
+
+  const _DynamicIslandScrollCard({
+    required this.controller,
+    required this.index,
+    required this.listStartGlobalY,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      child: child,
+      builder: (context, child) {
+        final screenHeight = MediaQuery.sizeOf(context).height;
+        final bottomPad = MediaQuery.paddingOf(context).bottom;
+        final scrollY = controller.hasClients ? controller.offset : 0.0;
+        final itemY = listStartGlobalY +
+            (index * (_kCardHeight + _kCardGap)) -
+            scrollY;
+        final itemBottomY = itemY + _kCardHeight;
+        final bottomStackY = screenHeight - bottomPad - _kIslandPinLift;
+        final distanceToBottomStack = bottomStackY - itemBottomY;
+        final raw = (1.0 - (distanceToBottomStack / _kIslandCollapseRange))
+            .clamp(0.0, 1.0)
+            .toDouble();
+        final t = _islandCurve(raw);
+
+        if (t == 0) return child!;
+
+        final widthFactor = _lerp(1.0, 0.58, t);
+        final scaleY = _lerp(1.0, 0.70, t);
+        final drop = _lerp(0.0, 18.0, t);
+        final opacity = _lerp(1.0, 0.10, Curves.easeOut.transform(t));
+
+        return ClipRect(
+          child: Opacity(
+            opacity: opacity,
+            child: Transform.translate(
+              offset: Offset(0, drop),
+              child: Transform.scale(
+                alignment: Alignment.bottomCenter,
+                scaleY: scaleY,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: FractionallySizedBox(
+                    widthFactor: widthFactor,
+                    child: child,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+  static double _islandCurve(double t) {
+    final eased = Curves.easeOutCubic.transform(t);
+    final settle = Curves.easeOutBack.transform((t - 0.18).clamp(0.0, 1.0));
+    return _lerp(eased, settle, 0.22).clamp(0.0, 1.0);
+  }
+}
+
 /// Single notification card body.
 class _NfCardInner extends StatefulWidget {
   final NfItem n;
@@ -673,7 +752,7 @@ class _NfCardInnerState extends State<_NfCardInner> {
       onTap: _openProfile,
       child: GlassSurface(
       dark: dark, radius: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       blurSigma: 28,
       child: Row(children: [
         // ── Unread indicator dot ──────────────────────────────────────────
@@ -721,13 +800,13 @@ class _NfCardInnerState extends State<_NfCardInner> {
             maxLines: 2, overflow: TextOverflow.ellipsis,
             text: TextSpan(children: [
               TextSpan(text: n.name,
-                style: manrope(size: 13.5, weight: FontWeight.w700, color: fg, letterSpacing: -0.07)),
+                style: manrope(size: 13.5, weight: FontWeight.w700, color: fg, letterSpacing: -0.07, height: 1.18)),
               TextSpan(text: '  ${n.text}',
-                style: manrope(size: 13.5, weight: FontWeight.w500, color: GlassTokens.text78(dark), letterSpacing: -0.07, height: 1.35)),
+                style: manrope(size: 13.5, weight: FontWeight.w500, color: GlassTokens.text78(dark), letterSpacing: -0.07, height: 1.18)),
             ]),
           ),
-          const SizedBox(height: 2),
-          Text(n.time, style: manrope(size: 11, weight: FontWeight.w500, color: sub, letterSpacing: -0.05)),
+          const SizedBox(height: 1),
+          Text(n.time, style: manrope(size: 10.5, weight: FontWeight.w500, color: sub, letterSpacing: -0.05, height: 1.0)),
         ])),
 
         const SizedBox(width: 10),

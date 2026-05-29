@@ -14,6 +14,7 @@ class CommentsScreen extends StatefulWidget {
   final String postInitials;
   final Color postUserColor;
   final String? postId; // when provided, triggers real comment notification
+  final void Function(int newCount)? onCommentPosted;
 
   const CommentsScreen({
     super.key,
@@ -23,6 +24,7 @@ class CommentsScreen extends StatefulWidget {
     required this.postInitials,
     required this.postUserColor,
     this.postId,
+    this.onCommentPosted,
   });
 
   @override
@@ -206,9 +208,12 @@ class _CommentsScreenState extends State<CommentsScreen>
           myName,
           myInitials,
         );
-        // Notify post author via backend (fire-and-forget)
+        // Notify post author via backend and get updated count
         if (widget.postId != null && widget.postId!.isNotEmpty) {
-          UserService.notifyComment(widget.postId!, text);
+          final newCount = await UserService.notifyComment(widget.postId!, text);
+          if (newCount != null && widget.onCommentPosted != null) {
+            widget.onCommentPosted!(newCount);
+          }
         }
 
         // Optimistic locally added comment

@@ -218,11 +218,12 @@ class UserService {
     }
   }
 
-  static Future<void> notifyComment(String postId, String commentText) async {
+  /// Returns the updated comments_count from server, or null on error.
+  static Future<int?> notifyComment(String postId, String commentText) async {
     try {
       final token = await ApiService.getToken();
-      if (token == null) return;
-      await http.post(
+      if (token == null) return null;
+      final res = await http.post(
         Uri.parse('$baseUrl/posts/$postId/comment_notify'),
         headers: {
           'Content-Type': 'application/json',
@@ -230,8 +231,14 @@ class UserService {
         },
         body: jsonEncode({'comment_text': commentText}),
       ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        return body['new_count'] as int?;
+      }
+      return null;
     } catch (e) {
       developer.log('notifyComment error: $e');
+      return null;
     }
   }
 

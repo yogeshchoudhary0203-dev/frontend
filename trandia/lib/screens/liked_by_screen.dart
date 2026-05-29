@@ -400,23 +400,12 @@ class _UserRowCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Avatar
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: monoAvatar(dark, i),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      u.name.isEmpty ? '•' : u.name[0].toUpperCase(),
-                      style: manrope(
-                        size: 16,
-                        weight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: -0.34,
-                      ),
-                    ),
+                  UserAvatar(
+                    pictureUrl: u.picture,
+                    name: u.name,
+                    size: 44,
+                    dark: dark,
+                    index: i,
                   ),
                   const SizedBox(width: 12),
 

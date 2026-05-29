@@ -2395,6 +2395,21 @@ class PostCard extends StatefulWidget {
 
 class _PostCardState extends State<PostCard> {
   bool _expanded = false;
+  late int _commentsCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _commentsCount = widget.post.commentsCount;
+  }
+
+  @override
+  void didUpdateWidget(PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.commentsCount != widget.post.commentsCount) {
+      _commentsCount = widget.post.commentsCount;
+    }
+  }
 
   Color _avatarColor(String userId) {
     final colors = [
@@ -2551,7 +2566,7 @@ class _PostCardState extends State<PostCard> {
             const SizedBox(width: 12),
 
             _ActionStat(
-              count: '${p.commentsCount}',
+              count: '$_commentsCount',
               color: textPrimary,
               onTap: () {
                 HapticFeedback.selectionClick();
@@ -2563,6 +2578,9 @@ class _PostCardState extends State<PostCard> {
                     postInitials: _initials(p.userName),
                     postUserColor: avatarBg,
                     postId: p.id,
+                    onCommentPosted: (newCount) {
+                      if (mounted) setState(() => _commentsCount = newCount);
+                    },
                   ),
                   transitionDuration: const Duration(milliseconds: 380),
                   reverseTransitionDuration: const Duration(milliseconds: 300),

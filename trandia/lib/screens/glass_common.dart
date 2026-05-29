@@ -5,6 +5,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 /// Tokens — mirror exactly the values used in the design JSX.
 class GlassTokens {
@@ -210,6 +211,68 @@ class GlassCircleButton extends StatelessWidget {
 }
 
 /// Pill header (top bar) used by every screen.
+/// Reusable circle avatar: shows real photo if [pictureUrl] is available,
+/// otherwise falls back to monochrome gradient + first-letter initial.
+class UserAvatar extends StatelessWidget {
+  final String? pictureUrl;
+  final String name;
+  final double size;
+  final bool dark;
+  final int index; // used to vary gradient shade
+
+  const UserAvatar({
+    super.key,
+    this.pictureUrl,
+    required this.name,
+    required this.size,
+    required this.dark,
+    this.index = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhoto = pictureUrl != null && pictureUrl!.isNotEmpty;
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final fontSize = size * 0.36;
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipOval(
+        child: hasPhoto
+            ? CachedNetworkImage(
+                imageUrl: pictureUrl!,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                memCacheWidth: (size * 2).toInt(),
+                errorWidget: (_, __, ___) => _fallback(initial, fontSize),
+                placeholder: (_, __) => _fallback(initial, fontSize),
+              )
+            : _fallback(initial, fontSize),
+      ),
+    );
+  }
+
+  Widget _fallback(String initial, double fontSize) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(gradient: monoAvatar(dark, index)),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: manrope(
+          size: fontSize,
+          weight: FontWeight.w700,
+          color: Colors.white,
+          letterSpacing: -0.2,
+        ),
+      ),
+    );
+  }
+}
+
 class GlassHeader extends StatelessWidget {
   final bool dark;
   final double height;

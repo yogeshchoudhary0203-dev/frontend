@@ -31,6 +31,7 @@ class NfItem {
   final String text;
   final String time;
   final String fromUserId;
+  final String? fromPicture;
   final bool thumb;
   final bool unread;
 
@@ -41,6 +42,7 @@ class NfItem {
     required this.text,
     required this.time,
     this.fromUserId = '',
+    this.fromPicture,
     this.thumb = false,
     this.unread = false,
   });
@@ -54,6 +56,7 @@ class NfItem {
       text: json['text'] ?? '',
       time: _timeAgo(json['created_at']),
       fromUserId: json['from_user_id'] ?? '',
+      fromPicture: json['from_picture'] as String?,
       unread: !(json['read'] ?? false),
     );
   }
@@ -693,17 +696,12 @@ class _NfCardInnerState extends State<_NfCardInner> {
 
         // ── Avatar + kind chip ────────────────────────────────────────────
         SizedBox(width: 44, height: 44, child: Stack(clipBehavior: Clip.none, children: [
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: monoAvatar(dark, i),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              n.name.isEmpty ? '•' : n.name[0].toUpperCase(),
-              style: manrope(size: 16, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3),
-            ),
+          UserAvatar(
+            pictureUrl: n.fromPicture,
+            name: n.name,
+            size: 44,
+            dark: dark,
+            index: i,
           ),
           Positioned(right: -2, bottom: -2, child: Container(
             width: 20, height: 20,

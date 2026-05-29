@@ -811,17 +811,12 @@ class _ChatRow extends StatelessWidget {
         child: Row(children: [
           // Avatar with optional status overlay
           Stack(clipBehavior: Clip.none, children: [
-            Container(
-              width: 50, height: 50,
-              decoration: BoxDecoration(
-                  shape: BoxShape.circle, gradient: monoAvatar(dark, i)),
-              alignment: Alignment.center,
-              child: Text(avatarLetter,
-                  style: manrope(
-                      size: 18,
-                      weight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: -0.36)),
+            UserAvatar(
+              pictureUrl: otherUser.picture,
+              name: otherUser.name.isNotEmpty ? otherUser.name : otherUser.username,
+              size: 50,
+              dark: dark,
+              index: i,
             ),
             if (statusIcon != null)
               Positioned(

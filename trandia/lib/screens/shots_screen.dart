@@ -324,13 +324,10 @@ class _ShotsScreenState extends State<ShotsScreen>
     final pct = (ctrl.value.position.inMilliseconds / dur * 100).toInt();
     final fired = _firedThresholds.putIfAbsent(post.id, () => {});
 
-    if (pct >= 35 && !fired.contains(35)) {
-      fired.add(35);
-      _fireWatchEvent(post, 35);
-    }
-    if (pct >= 65 && !fired.contains(65)) {
-      fired.add(65);
-      _fireWatchEvent(post, 65);
+    // TEST thresholds: 5% (production: 35% and 65%)
+    if (pct >= 5 && !fired.contains(5)) {
+      fired.add(5);
+      _fireWatchEvent(post, 5);
     }
   }
 

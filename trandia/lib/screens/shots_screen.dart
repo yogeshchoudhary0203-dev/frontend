@@ -23,11 +23,14 @@ import 'package:image_picker/image_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../services/post_service.dart';
 import '../services/user_service.dart';
+import '../services/quiz_service.dart';
+import '../services/auth_service.dart';
 import 'glass_common.dart';
 import 'comments_screen.dart';
 import 'create_post_screens.dart';
 import 'user_profile_screen.dart' as user_profile;
 import '../utils/share_helper.dart';
+import 'quiz_screen.dart';
 
 // ───────────────────────────────────────────────────────────────
 // Models / helpers (kept compatible with existing UI widgets)
@@ -111,6 +114,10 @@ class _ShotsScreenState extends State<ShotsScreen>
   // ── Learn-feed nudge counter ──────────────────────────────────
   int  _funReelCount  = 0;   // reels watched in fun feed this session
   bool _nudgePending  = false; // debounce: don't stack multiple dialogs
+
+  // ── Quiz watch tracking ───────────────────────────────────────
+  final Map<int, DateTime> _videoStartTimes = {};
+  bool _quizNotifShown = false;
 
   // ── Spinning audio disc (purely decorative) ───────────────────
   late final AnimationController _spin = AnimationController(
@@ -282,6 +289,7 @@ class _ShotsScreenState extends State<ShotsScreen>
       // Only auto-play if this is still the active page
       if (idx == _curIdx) {
         ctrl.play();
+        if (_feed == ShotsFeed.learn) _videoStartTimes[idx] ??= DateTime.now();
         setState(() {});
       }
     } catch (_) {
@@ -299,8 +307,108 @@ class _ShotsScreenState extends State<ShotsScreen>
     }
   }
 
+  Future<void> _sendLearnWatchEvent(int idx) async {
+    if (_feed != ShotsFeed.learn) return;
+    if (idx < 0 || idx >= _posts.length) return;
+    final start = _videoStartTimes[idx];
+    if (start == null) return;
+    final durationSec = DateTime.now().difference(start).inMilliseconds / 1000.0;
+    if (durationSec < 1) return;
+
+    final post = _posts[idx];
+    final ctrl = _ctrls[idx];
+    double watchPct = 0;
+    if (ctrl != null && ctrl.value.duration.inMilliseconds > 0) {
+      watchPct = (ctrl.value.position.inMilliseconds / ctrl.value.duration.inMilliseconds * 100).clamp(0, 100);
+    }
+
+    try {
+      final userId = await AuthService.getUserId();
+      if (userId == null) return;
+      final result = await QuizService.sendWatchEvent(
+        userId: userId,
+        videoId: post.id,
+        watchPercentage: watchPct,
+        watchDurationSeconds: durationSec,
+        videoTopic: post.section ?? 'general',
+        videoUrl: post.mediaUrl,
+      );
+      if (result['quiz_triggered'] == true && !_quizNotifShown && mounted) {
+        _quizNotifShown = true;
+        final quizId = result['quiz_id'] as String?;
+        if (quizId != null) _showQuizReady(quizId);
+      }
+    } catch (_) {}
+  }
+
+  void _showQuizReady(String quizId) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.09),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.15)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🧠', style: TextStyle(fontSize: 48)),
+                  const SizedBox(height: 12),
+                  Text('Quiz Ready!', style: manrope(size: 20, weight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  Text(
+                    '50 videos dekh liye! Tumhara AI quiz ban raha hai.',
+                    textAlign: TextAlign.center,
+                    style: manrope(size: 14, color: Colors.white70, height: 1.5),
+                  ),
+                  const SizedBox(height: 20),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => QuizLoadingScreen(quizId: quizId),
+                      ));
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        gradient: const LinearGradient(colors: [Color(0xFF00E676), Color(0xFF00BCD4)]),
+                      ),
+                      child: Center(
+                        child: Text('Quiz Shuru Karo', style: manrope(size: 15, weight: FontWeight.w700, color: Colors.black)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Text('Baad mein', style: manrope(size: 13, color: Colors.white54)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _onPageChanged(int idx) {
     HapticFeedback.selectionClick();
+
+    // Send watch event for outgoing learn video
+    _sendLearnWatchEvent(_curIdx);
 
     // Pause outgoing video
     _ctrls[_curIdx]?.pause();
@@ -309,6 +417,11 @@ class _ShotsScreenState extends State<ShotsScreen>
       _curIdx   = idx;
       _expanded = false;
     });
+
+    // Track start time for quiz watch events (learn feed only)
+    if (_feed == ShotsFeed.learn) {
+      _videoStartTimes[idx] = DateTime.now();
+    }
 
     // Play or init incoming video
     if (_ctrls.containsKey(idx)) {

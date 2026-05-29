@@ -806,8 +806,16 @@ class _ChatRow extends StatelessWidget {
       },
       child: GlassSurface(
         dark: dark,
-        radius: 22,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        radius: 999,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        blurSigma: 44,
+        bgColors: dark
+            ? [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)]
+            : [Colors.white.withOpacity(0.65), Colors.white.withOpacity(0.40)],
+        borderColor: dark
+            ? Colors.white.withOpacity(0.08)
+            : Colors.white.withOpacity(0.85),
+        borderWidth: 0.5,
         child: Row(children: [
           // Avatar with optional status overlay
           Stack(clipBehavior: Clip.none, children: [

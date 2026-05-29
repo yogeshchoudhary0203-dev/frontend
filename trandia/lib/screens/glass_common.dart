@@ -119,6 +119,12 @@ class GlassSurface extends StatelessWidget {
   final Widget child;
   final double blurSigma;
   final BoxShadow? shadow;
+  /// Optional override for glass background gradient colors.
+  final List<Color>? bgColors;
+  /// Optional override for border color.
+  final Color? borderColor;
+  /// Border width (default 1).
+  final double borderWidth;
   const GlassSurface({
     super.key,
     required this.dark,
@@ -127,10 +133,15 @@ class GlassSurface extends StatelessWidget {
     this.padding = const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     this.blurSigma = 28,
     this.shadow,
+    this.bgColors,
+    this.borderColor,
+    this.borderWidth = 1,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bg = bgColors ?? GlassTokens.glassBg(dark);
+    final border = borderColor ?? GlassTokens.glassBorder(dark);
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
@@ -139,9 +150,9 @@ class GlassSurface extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
-              colors: GlassTokens.glassBg(dark),
+              colors: bg,
             ),
-            border: Border.all(color: GlassTokens.glassBorder(dark), width: 1),
+            border: Border.all(color: border, width: borderWidth),
             borderRadius: BorderRadius.circular(radius),
             boxShadow: [shadow ?? GlassTokens.cardShadow(dark)],
           ),

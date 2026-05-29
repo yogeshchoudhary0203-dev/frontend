@@ -493,8 +493,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           child: Container(
             height: _kCardHeight,
             decoration: BoxDecoration(
-              color: shimmerBase,
-              borderRadius: BorderRadius.circular(22),
+              color: dark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.50),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: dark ? Colors.white.withOpacity(0.07) : Colors.white.withOpacity(0.80),
+                width: 0.5,
+              ),
             ),
             child: Row(children: [
               const SizedBox(width: 14),
@@ -751,9 +755,16 @@ class _NfCardInnerState extends State<_NfCardInner> {
     return GestureDetector(
       onTap: _openProfile,
       child: GlassSurface(
-      dark: dark, radius: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      blurSigma: 28,
+      dark: dark, radius: 999,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      blurSigma: 44,
+      bgColors: dark
+          ? [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)]
+          : [Colors.white.withOpacity(0.65), Colors.white.withOpacity(0.40)],
+      borderColor: dark
+          ? Colors.white.withOpacity(0.08)
+          : Colors.white.withOpacity(0.85),
+      borderWidth: 0.5,
       child: Row(children: [
         // ── Unread indicator dot ──────────────────────────────────────────
         // Rendered as a simple circle INSIDE the Row (not Positioned).

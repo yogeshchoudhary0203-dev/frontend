@@ -20,6 +20,7 @@ import '../services/follow_state.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/post_service.dart';
+import '../services/block_service.dart';
 import '../models/chat_model.dart';
 import '../utils/error_dialog.dart';
 import 'chat_screen.dart';
@@ -61,6 +62,9 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late bool _isFollowing;
   bool _isFollowLoading = false;
+  bool _isBlocked = false;
+  bool _isBlockLoading = false;
+  bool _blockedByThem = false; // they blocked us — profile inaccessible
   UserProfile? _profile;
   bool _profileLoading = true;
   List<PostModel> _userPosts = [];
@@ -103,18 +107,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfile() async {
     if (mounted) setState(() => _profileLoading = true);
-    final p = await UserService.getUserProfile(widget.userId);
-    developer.log('_loadProfile: picture=${p?.picture}, name=${p?.name}');
-    if (mounted) {
-      if (p != null) {
+    try {
+      final p = await UserService.getUserProfile(widget.userId);
+      developer.log('_loadProfile: picture=${p?.picture}, name=${p?.name}');
+      if (mounted && p != null) {
         FollowState.set(widget.userId, p.isFollowing);
         setState(() {
           _profile = p;
           _isFollowing = p.isFollowing;
+          _isBlocked = BlockService.instance.isBlocked(widget.userId);
           _profileLoading = false;
         });
-      } else {
+      } else if (mounted) {
         setState(() => _profileLoading = false);
+      }
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('blocked_by_user') || msg.contains('403')) {
+        if (mounted) setState(() { _blockedByThem = true; _profileLoading = false; });
+      } else {
+        if (mounted) setState(() => _profileLoading = false);
       }
     }
   }
@@ -153,6 +165,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (_) {
       if (mounted) setState(() => _isLoadingMorePosts = false);
+    }
+  }
+
+  void _showMoreMenu() {
+    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = isDark ? Colors.white : Colors.black;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 8),
+          Container(
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+              color: fg.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: Icon(
+              _isBlocked ? Icons.check_circle_outline : Icons.block_rounded,
+              color: _isBlocked ? Colors.green : Colors.redAccent,
+            ),
+            title: Text(
+              _isBlocked ? 'Unblock User' : 'Block User',
+              style: TextStyle(
+                color: _isBlocked ? Colors.green : Colors.redAccent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            onTap: () {
+              Navigator.pop(ctx);
+              _handleBlock();
+            },
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _handleBlock() async {
+    if (widget.userId.isEmpty || _isBlockLoading) return;
+    final wasBlocked = _isBlocked;
+
+    // Confirm before blocking
+    if (!wasBlocked) {
+      final t = Theme.of(context);
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Block user?'),
+          content: Text('${widget.displayName.isNotEmpty ? widget.displayName : widget.username} '
+              'will not be able to see your profile, send you messages, or find you in search.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Block', style: TextStyle(color: t.colorScheme.error)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    setState(() { _isBlocked = !wasBlocked; _isBlockLoading = true; });
+    try {
+      if (wasBlocked) {
+        await BlockService.instance.unblockUser(widget.userId);
+      } else {
+        await BlockService.instance.blockUser(widget.userId);
+        if (mounted) Navigator.maybePop(context); // close profile after block
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isBlocked = wasBlocked);
+    } finally {
+      if (mounted) setState(() => _isBlockLoading = false);
     }
   }
 
@@ -256,6 +351,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
       systemNavigationBarIconBrightness:
           isDark ? Brightness.light : Brightness.dark,
     ));
+
+    // They blocked us — show minimal screen
+    if (_blockedByThem) {
+      return Scaffold(
+        backgroundColor: t.bgStops.last,
+        body: SafeArea(
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  icon: Icon(Icons.arrow_back_ios_new_rounded, color: t.fg),
+                  onPressed: () => Navigator.maybePop(context),
+                ),
+              ),
+            ),
+            const Spacer(),
+            Icon(Icons.block_rounded, size: 52, color: t.fg.withOpacity(0.4)),
+            const SizedBox(height: 16),
+            Text(
+              'User not available',
+              style: TextStyle(color: t.fg, fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This account is not available.',
+              style: TextStyle(color: t.fg.withOpacity(0.5), fontSize: 14),
+            ),
+            const Spacer(flex: 2),
+          ]),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: t.bgStops.last,
@@ -405,7 +534,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _CircleIconButton(
                           t: t,
                           icon: Icons.more_vert_rounded,
-                          onTap: () {},
+                          onTap: widget.userId.isNotEmpty ? () => _showMoreMenu() : () {},
                         ),
                       ],
                     ),

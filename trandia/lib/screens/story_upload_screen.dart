@@ -21,6 +21,8 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
   bool    _uploading     = false;
   double  _progress      = 0;
   String? _error;
+  // Tracks if a picker source was selected — prevents premature screen pop
+  bool    _pickerOpened  = false;
 
   bool get _isDark =>
       MediaQuery.platformBrightnessOf(context) == Brightness.dark;
@@ -35,7 +37,9 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
   Future<void> _showPhotoPickerOptions() async {
     HapticFeedback.lightImpact();
     final dark = _isDark;
-    showModalBottomSheet(
+    _pickerOpened = false;
+
+    await showModalBottomSheet<void>(
       context: context,
       backgroundColor: dark ? const Color(0xFF1C1C1F) : Colors.white,
       shape: const RoundedRectangleBorder(
@@ -48,8 +52,7 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 40,
-                height: 4,
+                width: 40, height: 4,
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
                   color: dark ? Colors.white24 : Colors.black12,
@@ -59,8 +62,7 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
               Text(
                 'Add to Story',
                 style: GoogleFonts.manrope(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 16, fontWeight: FontWeight.w800,
                   color: GlassTokens.fg(dark),
                 ),
               ),
@@ -70,6 +72,7 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
                 icon: Icons.camera_alt_rounded,
                 label: 'Take Photo (Camera)',
                 onTap: () {
+                  _pickerOpened = true;
                   Navigator.pop(ctx);
                   _pickImageFromSource(ImageSource.camera);
                 },
@@ -80,6 +83,7 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
                 icon: Icons.photo_library_rounded,
                 label: 'Choose from Gallery',
                 onTap: () {
+                  _pickerOpened = true;
                   Navigator.pop(ctx);
                   _pickImageFromSource(ImageSource.gallery);
                 },
@@ -89,11 +93,12 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
           ),
         ),
       ),
-    ).then((_) {
-      if (_image == null && mounted) {
-        Navigator.maybePop(context);
-      }
-    });
+    );
+
+    // Pop screen only if user dismissed the sheet WITHOUT selecting a source
+    if (!_pickerOpened && _image == null && mounted) {
+      Navigator.maybePop(context);
+    }
   }
 
   Widget _optionTile({
@@ -140,7 +145,8 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
         imageQuality: 92,
       );
       if (picked == null) {
-        if (_image == null && mounted) Navigator.pop(context);
+        // User cancelled the picker — pop only if no image was already selected
+        if (_image == null && mounted) Navigator.maybePop(context);
         return;
       }
       if (!mounted) return;
@@ -150,11 +156,7 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
       });
       await _showDurationPicker();
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'Failed to access camera/gallery.';
-        });
-      }
+      if (mounted) setState(() => _error = 'Could not access camera/gallery.');
     }
   }
 
@@ -260,7 +262,10 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
                         const Icon(Icons.access_time_rounded,
                             color: Colors.white, size: 14),
                         const SizedBox(width: 5),
-                        Text('${_durationHours}h',
+                        Text(
+                            _durationHours < 24
+                                ? '${_durationHours}h'
+                                : '24h',
                             style: GoogleFonts.manrope(
                               color: Colors.white, fontSize: 13,
                               fontWeight: FontWeight.w700)),
@@ -472,8 +477,25 @@ class _DurationSheet extends StatelessWidget {
     required this.onSelect,
   });
 
+  static const _options = [3, 6, 9, 12, 15, 18, 21, 24];
+
+  static String _label(int h) => '${h}h';
+  static String _sub(int h) {
+    if (h <= 3)  return 'Quick';
+    if (h <= 6)  return 'Short';
+    if (h <= 9)  return 'Half day';
+    if (h <= 12) return 'Half day';
+    if (h <= 15) return '⅔ day';
+    if (h <= 18) return '¾ day';
+    if (h <= 21) return 'Almost';
+    return 'Full day';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final fg  = GlassTokens.fg(isDark);
+    final sub = GlassTokens.sub(isDark);
+
     return Container(
       padding: EdgeInsets.fromLTRB(20, 0, 20,
           20 + MediaQuery.of(context).viewInsets.bottom),
@@ -483,7 +505,6 @@ class _DurationSheet extends StatelessWidget {
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         const SizedBox(height: 12),
-        // Handle
         Container(
           width: 36, height: 4,
           decoration: BoxDecoration(
@@ -491,28 +512,30 @@ class _DurationSheet extends StatelessWidget {
             color: (isDark ? Colors.white : Colors.black).withOpacity(0.15),
           ),
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: 24),
         Text('Story Duration',
             style: GoogleFonts.manrope(
-              color: GlassTokens.fg(isDark), fontSize: 18,
-              fontWeight: FontWeight.w800)),
-        const SizedBox(height: 6),
+              color: fg, fontSize: 18, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
         Text('How long should your story stay visible?',
             textAlign: TextAlign.center,
-            style: GoogleFonts.manrope(
-              color: GlassTokens.sub(isDark), fontSize: 13)),
-        const SizedBox(height: 28),
-        Row(
-          children: [6, 12, 24].map((h) => Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: _DurationTile(
-                hours:    h,
-                selected: selected == h,
-                isDark:   isDark,
-                onTap:    () => onSelect(h),
-              ),
-            ),
+            style: GoogleFonts.manrope(color: sub, fontSize: 13)),
+        const SizedBox(height: 24),
+        // 4 × 2 grid
+        GridView.count(
+          crossAxisCount: 4,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.1,
+          children: _options.map((h) => _DurationTile(
+            hours:    h,
+            label:    _label(h),
+            sub:      _sub(h),
+            selected: selected == h,
+            isDark:   isDark,
+            onTap:    () => onSelect(h),
           )).toList(),
         ),
         const SizedBox(height: 20),
@@ -523,50 +546,53 @@ class _DurationSheet extends StatelessWidget {
 
 class _DurationTile extends StatelessWidget {
   final int          hours;
+  final String       label;
+  final String       sub;
   final bool         selected;
   final bool         isDark;
   final VoidCallback onTap;
   const _DurationTile({
-    required this.hours, required this.selected,
+    required this.hours,  required this.label,
+    required this.sub,    required this.selected,
     required this.isDark, required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isActive   = selected;
-    final bgColor    = isActive
+    final bgColor = selected
         ? (isDark ? Colors.white : Colors.black)
         : (isDark ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.05));
-    final borderColor = isActive
+    final borderColor = selected
         ? Colors.transparent
         : (isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.09));
-    final mainColor  = isActive
+    final mainColor = selected
         ? (isDark ? Colors.black : Colors.white)
         : GlassTokens.fg(isDark);
-    final subColor   = isActive
+    final subColor = selected
         ? (isDark ? Colors.black54 : Colors.white70)
         : GlassTokens.sub(isDark);
-    final label = hours == 6 ? '6 Hours' : hours == 12 ? '12 Hours' : '24 Hours';
-    final sub   = hours == 6 ? 'Quick'   : hours == 12 ? 'Half day' : 'Full day';
 
     return GestureDetector(
       onTap: () { HapticFeedback.selectionClick(); onTap(); },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(14),
           color:  bgColor,
           border: Border.all(color: borderColor),
         ),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(label,
-              style: GoogleFonts.manrope(
-                color: mainColor, fontSize: 14, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          Text(sub,
-              style: GoogleFonts.manrope(color: subColor, fontSize: 11)),
-        ]),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label,
+                style: GoogleFonts.manrope(
+                  color: mainColor, fontSize: 15, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 3),
+            Text(sub,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.manrope(color: subColor, fontSize: 9.5)),
+          ],
+        ),
       ),
     );
   }

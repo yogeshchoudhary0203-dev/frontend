@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import '../services/api_service.dart';
+import '../services/fcm_service.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
   final bool dark;
@@ -45,6 +46,8 @@ class _NotificationSettingsScreenState
   Future<void> _save(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(key, value);
+    // Update FcmService in-memory flags immediately — no restart needed
+    await FcmService.reloadNotificationSettings();
     _syncToBackend();
   }
 

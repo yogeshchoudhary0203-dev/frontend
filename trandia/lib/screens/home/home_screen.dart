@@ -26,6 +26,7 @@ import '../create_post_screens.dart';
 import '../story_upload_screen.dart';
 import '../story_view_screen.dart';
 import '../../services/story_service.dart';
+import '../../services/block_service.dart';
 import '../comments_screen.dart';
 import '../liked_by_screen.dart';
 import '../../services/cryptography_service.dart';
@@ -103,16 +104,16 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _navCtrl = AnimationController(vsync: this,
-        duration: const Duration(milliseconds: 480));
+        duration: const Duration(milliseconds: 450));
     for (int i = 0; i < 5; i++) {
-      final double start = (4 - i) * 0.08;
-      final double end   = (start + 0.55).clamp(0.0, 1.0);
+      final double start = (4 - i) * 0.10;
+      final double end   = (start + 0.50).clamp(0.0, 1.0);
       _itemScales.add(Tween<double>(begin: 0.0, end: 1.0).animate(
           CurvedAnimation(parent: _navCtrl,
               curve: Interval(start, end, curve: Curves.easeOutBack))));
       _itemOpacities.add(Tween<double>(begin: 0.0, end: 1.0).animate(
           CurvedAnimation(parent: _navCtrl,
-              curve: Interval(start, (start + 0.30).clamp(0.0, 1.0),
+              curve: Interval(start, (start + 0.25).clamp(0.0, 1.0),
                   curve: Curves.easeOut))));
     }
 
@@ -128,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FcmService.setupForHomeScreen();
       CryptographyService().ensurePublicKeyRegistered();
+      BlockService.instance.load(); // load block list once on home screen open
       _loadUnreadCount();
       _loadUnreadNotifCount();
       ChatService().connectWebSocket();
@@ -405,8 +407,8 @@ class _HomeScreenState extends State<HomeScreen>
     await Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, animation, __) => CreatePostHubScreen(dark: isDark),
-        transitionDuration: const Duration(milliseconds: 380),
-        reverseTransitionDuration: const Duration(milliseconds: 300),
+        transitionDuration: const Duration(milliseconds: 280),
+        reverseTransitionDuration: const Duration(milliseconds: 240),
         transitionsBuilder: (_, animation, __, child) {
           final curved = CurvedAnimation(
             parent: animation,
@@ -415,10 +417,10 @@ class _HomeScreenState extends State<HomeScreen>
           );
           return SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(0, 0.06),
+              begin: const Offset(0.0, 1.0),
               end: Offset.zero,
             ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
+            child: child,
           );
         },
       ),
@@ -435,8 +437,8 @@ class _HomeScreenState extends State<HomeScreen>
     return Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, animation, __) => screen,
-        transitionDuration: const Duration(milliseconds: 380),
-        reverseTransitionDuration: const Duration(milliseconds: 300),
+        transitionDuration: const Duration(milliseconds: 280),
+        reverseTransitionDuration: const Duration(milliseconds: 240),
         transitionsBuilder: (_, animation, __, child) {
           final curved = CurvedAnimation(
             parent: animation,
@@ -445,10 +447,10 @@ class _HomeScreenState extends State<HomeScreen>
           );
           return SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(0, 0.06),
+              begin: const Offset(0.0, 1.0),
               end: Offset.zero,
             ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
+            child: child,
           );
         },
       ),
@@ -467,8 +469,8 @@ class _HomeScreenState extends State<HomeScreen>
       await Navigator.of(context).push(
         PageRouteBuilder(
           pageBuilder: (_, animation, __) => ShotsScreen(dark: isDark),
-          transitionDuration: const Duration(milliseconds: 320),
-          reverseTransitionDuration: const Duration(milliseconds: 260),
+          transitionDuration: const Duration(milliseconds: 280),
+          reverseTransitionDuration: const Duration(milliseconds: 240),
           transitionsBuilder: (_, animation, __, child) {
             final curved = CurvedAnimation(
               parent: animation,
@@ -477,10 +479,10 @@ class _HomeScreenState extends State<HomeScreen>
             );
             return SlideTransition(
               position: Tween<Offset>(
-                begin: const Offset(0, 0.04),
+                begin: const Offset(0.0, 1.0),
                 end: Offset.zero,
               ).animate(curved),
-              child: FadeTransition(opacity: curved, child: child),
+              child: child,
             );
           },
         ),
@@ -558,7 +560,7 @@ class _HomeScreenState extends State<HomeScreen>
   void _openIsland() {
     _captureIslandRect();
     HapticFeedback.mediumImpact();
-    // Reset badge when user opens notification screen
+    _homeFeedActive.value = false; // pause all background videos
     setState(() {
       _islandOpen = true;
       _unreadNotifs = 0;  // ← user is now viewing notifications
@@ -569,7 +571,10 @@ class _HomeScreenState extends State<HomeScreen>
   void _closeIsland() {
     HapticFeedback.lightImpact();
     _islandCtrl.reverse().then((_) {
-      if (mounted) setState(() => _islandOpen = false);
+      if (mounted) {
+        setState(() => _islandOpen = false);
+        _homeFeedActive.value = true; // resume videos after panel closes
+      }
     });
   }
 
@@ -642,7 +647,7 @@ class _HomeScreenState extends State<HomeScreen>
               controller: _scrollCtrl,
               physics: const BouncingScrollPhysics(
                   parent: AlwaysScrollableScrollPhysics()),
-              padding: EdgeInsets.only(top: topPad + 56),
+              padding: EdgeInsets.only(top: topPad + 56, bottom: _navOpen ? _kBtnSize + _kNavGap + 30 : 0),
               cacheExtent: 1200,
               itemCount: _posts.isEmpty
                   ? 2
@@ -828,6 +833,7 @@ class _HomeScreenState extends State<HomeScreen>
                 child: _StaggeredNavbar(
                   isDark: isDark, activeIndex: _activeNav,
                   isHorizontal: _navHorizontal,
+                  animation: _navCtrl,
                   itemScales: _itemScales, itemOpacities: _itemOpacities,
                   userPicture: _myProfilePic,
                   userName: _myProfileName,
@@ -2742,8 +2748,8 @@ class _VideoCardState extends State<_VideoCard> {
   VideoPlayerController? _ctrl;
   bool _initialized    = false;
   bool _muted          = false;
-  bool _manualPause    = false;   // long-press to pause; clears only on explicit tap-play
   bool _dataSaver      = false;
+  bool _manualPause    = false; // tracks manual pause state
   bool _showOverlay    = false;
   IconData _overlayIcon = Icons.pause_rounded;
 
@@ -2758,11 +2764,9 @@ class _VideoCardState extends State<_VideoCard> {
     if (!_homeFeedActive.value && _initialized) {
       _ctrl?.pause();
     }
-    // Resume is handled by VisibilityDetector when the screen comes back
   }
 
   Future<void> _checkConnectivity() async {
-    // Videos autoplay on all connections — no automatic data-saver
   }
 
   Future<void> _initAndPlay() async {
@@ -2809,7 +2813,16 @@ class _VideoCardState extends State<_VideoCard> {
       _initAndPlay();
       return;
     }
-    if (_manualPause || !(_ctrl?.value.isPlaying ?? false)) {
+    if (_ctrl?.value.isPlaying ?? false) {
+      // Pause video on tap
+      _ctrl?.pause();
+      _manualPause = true;
+      setState(() { _showOverlay = true; _overlayIcon = Icons.pause_rounded; });
+      Future.delayed(const Duration(milliseconds: 700), () {
+        if (mounted) setState(() => _showOverlay = false);
+      });
+    } else {
+      // Play video if paused or data-saver
       _manualPause = false;
       _ctrl?.play();
       setState(() { _showOverlay = true; _overlayIcon = Icons.play_arrow_rounded; });
@@ -3236,6 +3249,7 @@ class _StaggeredNavbar extends StatelessWidget {
   final bool isDark;
   final bool isHorizontal;
   final int  activeIndex;
+  final Animation<double> animation;
   final List<Animation<double>> itemScales, itemOpacities;
   final String? userPicture;
   final String? userName;
@@ -3243,6 +3257,7 @@ class _StaggeredNavbar extends StatelessWidget {
   const _StaggeredNavbar({
     required this.isDark, required this.activeIndex,
     required this.isHorizontal,
+    required this.animation,
     required this.itemScales, required this.itemOpacities,
     this.userPicture,
     this.userName,
@@ -3250,100 +3265,113 @@ class _StaggeredNavbar extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    final double navW   = isHorizontal ? 5 * _kItemH + 24.0 : _kNavWidth;
-    final double navH   = isHorizontal ? _kNavWidth : 5 * _kItemH + 24.0;
+    final double progress = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    ).value;
+
+    final double fullW   = isHorizontal ? 5 * _kItemH + 24.0 : _kNavWidth;
+    final double fullH   = isHorizontal ? _kNavWidth : 5 * _kItemH + 24.0;
+    
+    final double navW   = isHorizontal ? _kNavWidth + (fullW - _kNavWidth) * progress : _kNavWidth;
+    final double navH   = isHorizontal ? _kNavWidth : _kNavWidth + (fullH - _kNavWidth) * progress;
+
     final Color  glass  = (isDark ? Colors.white : Colors.black).op(0.09);
     final Color  border = (isDark ? Colors.white : Colors.black).op(0.16);
+
     return FadeTransition(
       opacity: itemOpacities.last,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(_kNavWidth / 2),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-          child: AnimatedContainer(
-            duration: Duration.zero,
-            curve: Curves.easeOutCubic,
-            width: navW, height: navH,
-            decoration: BoxDecoration(
-              color: glass,
-              borderRadius: BorderRadius.circular(_kNavWidth / 2),
-              border: Border.all(color: border, width: 0.8),
-              boxShadow: [BoxShadow(
-                  color: Colors.black.op(isDark ? 0.35 : 0.10),
-                  blurRadius: 20, offset: const Offset(0, 6))]),
-            child: Padding(
-              padding: isHorizontal
-                  ? const EdgeInsets.symmetric(horizontal: 12)
-                  : const EdgeInsets.symmetric(vertical: 6),
-              child: Flex(
-                direction: isHorizontal ? Axis.horizontal : Axis.vertical,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(5, (i) {
-                  final bool active = activeIndex == i;
-                  return ScaleTransition(scale: itemScales[i],
-                    child: FadeTransition(opacity: itemOpacities[i],
-                      child: GestureDetector(
-                        onTap: () { HapticFeedback.selectionClick(); onTap(i); },
-                        behavior: HitTestBehavior.opaque,
-                        child: SizedBox(
-                          width: isHorizontal ? _kItemH : _kNavWidth,
-                          height: isHorizontal ? _kNavWidth : _kItemH,
-                          child: Center(child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeOutCubic,
-                            width: 38, height: 38,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: active
-                                  ? (isDark ? Colors.white.op(0.18)
-                                            : Colors.black.op(0.12))
-                                  : Colors.transparent),
-                            child: Center(
-                              child: i == 4 && userPicture != null && userPicture!.isNotEmpty
-                                  ? Container(
-                                      width: 24,
-                                      height: 24,
+      child: Container(
+        width: navW, height: navH,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(_kNavWidth / 2),
+          border: Border.all(color: border, width: 0.8),
+          boxShadow: [BoxShadow(
+              color: Colors.black.op(isDark ? 0.35 : 0.10),
+              blurRadius: 20, offset: const Offset(0, 6))]),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(_kNavWidth / 2 - 0.8),
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              // Glass backdrop with constant size to avoid re-allocation lag
+              Positioned(
+                bottom: isHorizontal ? null : 0,
+                right: isHorizontal ? 0 : null,
+                left: isHorizontal ? null : 0,
+                top: isHorizontal ? 0 : null,
+                child: SizedBox(
+                  width: fullW,
+                  height: fullH,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(_kNavWidth / 2),
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: glass,
+                          borderRadius: BorderRadius.circular(_kNavWidth / 2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Staggered items positioned statically to prevent shifting jitter
+              Align(
+                alignment: isHorizontal ? Alignment.centerRight : Alignment.bottomCenter,
+                child: SizedBox(
+                  width: fullW,
+                  height: fullH,
+                  child: Padding(
+                    padding: isHorizontal
+                        ? const EdgeInsets.symmetric(horizontal: 12)
+                        : const EdgeInsets.symmetric(vertical: 6),
+                    child: Flex(
+                      direction: isHorizontal ? Axis.horizontal : Axis.vertical,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: List.generate(5, (i) {
+                        final bool active = activeIndex == i;
+                        final double scaleVal = itemScales[i].value;
+                        final double offsetValue = (1.0 - scaleVal) * 28.0;
+                        final Offset translateOffset = isHorizontal
+                            ? Offset(offsetValue, 0)
+                            : Offset(0, offsetValue);
+                        final double angle = (1.0 - scaleVal) * -0.35;
+                        return ScaleTransition(scale: itemScales[i],
+                          child: FadeTransition(opacity: itemOpacities[i],
+                            child: Transform.translate(
+                              offset: translateOffset,
+                              child: Transform.rotate(
+                                angle: angle,
+                                child: GestureDetector(
+                                  onTap: () { HapticFeedback.selectionClick(); onTap(i); },
+                                  behavior: HitTestBehavior.opaque,
+                                  child: SizedBox(
+                                    width: isHorizontal ? _kItemH : _kNavWidth,
+                                    height: isHorizontal ? _kNavWidth : _kItemH,
+                                    child: Center(child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 220),
+                                      curve: Curves.easeOutCubic,
+                                      width: 38, height: 38,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: active
-                                              ? (isDark ? Colors.white : Colors.black)
-                                              : (isDark ? Colors.white.withOpacity(0.5) : Colors.black.withOpacity(0.5)),
-                                          width: 1.2,
-                                        ),
-                                      ),
-                                      child: ClipOval(
-                                        child: CachedNetworkImage(
-                                          imageUrl: userPicture!,
-                                          fit: BoxFit.cover,
-                                          fadeInDuration: Duration.zero,
-                                          fadeOutDuration: Duration.zero,
-                                          placeholderFadeInDuration: Duration.zero,
-                                          errorWidget: (_, __, ___) => CustomPaint(
-                                            size: const Size(24.0, 24.0),
-                                            painter: _NavIconPainter(
-                                                index: 4, isDark: isDark,
-                                                active: active),
-                                          ),
-                                          placeholder: (_, __) => CustomPaint(
-                                            size: const Size(24.0, 24.0),
-                                            painter: _NavIconPainter(
-                                                index: 4, isDark: isDark,
-                                                active: active),
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : CustomPaint(
-                                      size: const Size(24.0, 24.0),
-                                      painter: _NavIconPainter(
-                                          index: i, isDark: isDark,
-                                          active: active),
-                                     ),
-                            )))))));
-                }),
+                                        color: active
+                                            ? (isDark ? Colors.white.op(0.18)
+                                                      : Colors.black.op(0.12))
+                                            : Colors.transparent),
+                                      child: Center(child: CustomPaint(
+                                        size: const Size(24.0, 24.0),
+                                        painter: _NavIconPainter(
+                                            index: i, isDark: isDark,
+                                            active: active)))))))))));
+                      }),
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

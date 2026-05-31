@@ -16,6 +16,7 @@ import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
 import '../services/follow_state.dart';
+import '../services/block_service.dart';
 import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
 import '../utils/error_dialog.dart';
@@ -354,7 +355,11 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(() { _isSearching = true; });
       try {
         final results = await UserService.searchUsers(query);
-        if (mounted) setState(() { _searchResults = results; _isSearching = false; });
+        // Filter out blocked users (server already filters, this is a local safety net)
+        final filtered = results
+            .where((u) => !BlockService.instance.isBlocked(u.id))
+            .toList();
+        if (mounted) setState(() { _searchResults = filtered; _isSearching = false; });
       } catch (e) {
         developer.log('Search error: $e');
         if (mounted) {

@@ -90,6 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   UserProfile? _profile;
   bool _isLoading = true;
   bool _isUpdatingLocation = false;
+  bool _isPrivateAccount = false;
   List<String> _platformOrder = ['snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'];
 
   // Post grid pagination
@@ -135,11 +136,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
         _platformOrder = loadedOrder;
       }
+      // Read account type to show private lock badge
+      final accountType = prefs.getString('settings_account_type') ?? '';
       final profile = await UserService.getMyProfile();
       if (mounted) {
         setState(() {
           _profile = profile;
           _isLoading = false;
+          _isPrivateAccount = accountType == 'Private';
         });
         if (profile != null) _loadPosts(profile.id);
       }
@@ -392,13 +396,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             child: Row(
                               children: [
-                                GlassCircleButton(
-                                  dark: dark,
-                                  icon: Icons.arrow_back_ios_new_rounded,
-                                  iconSize: 16,
-                                  onTap: () {
-                                    Navigator.of(context).pop();
-                                  },
+                                // Back arrow + private lock icon
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    GlassCircleButton(
+                                      dark: dark,
+                                      icon: Icons.arrow_back_ios_new_rounded,
+                                      iconSize: 16,
+                                      onTap: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                    ),
+                                    if (_isPrivateAccount) ...
+                                    [
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 30,
+                                        height: 30,
+                                        child: Center(
+                                          child: Icon(
+                                            Icons.lock_rounded,
+                                            size: 16,
+                                            color: (dark ? Colors.white : const Color(0xFF1A1A1A))
+                                                .withOpacity(0.55),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                                 const Spacer(),
                                 GlassCircleButton(

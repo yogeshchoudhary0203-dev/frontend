@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/app_lock_service.dart';
+import '../services/fcm_service.dart';
 import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
 import 'glass_common.dart';
@@ -64,6 +65,11 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
   Future<void> _initData() async {
     _myUserId = await AuthService.getCurrentUserId();
+    // Sync all notification prefs, then reflect messages flag in bell
+    await FcmService.reloadNotificationSettings();
+    if (mounted) {
+      setState(() => _notificationsOn = FcmService.chatNotificationsEnabled);
+    }
     await Future.wait([
       ChatService().connectWebSocket(),
       _loadConversations(),
@@ -299,7 +305,9 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                       iconSize: 18,
                       onTap: () {
                         HapticFeedback.heavyImpact();
-                        setState(() { _notificationsOn = !_notificationsOn; });
+                        final newValue = !_notificationsOn;
+                        setState(() => _notificationsOn = newValue);
+                        FcmService.setChatNotificationsEnabled(newValue);
                       },
                     ),
                   ]),

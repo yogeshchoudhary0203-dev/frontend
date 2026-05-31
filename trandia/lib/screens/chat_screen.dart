@@ -14,6 +14,7 @@ import '../models/chat_model.dart';
 import '../services/chat_service.dart';
 import '../services/fcm_service.dart';
 import '../services/agora_service.dart';
+import '../services/block_service.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/error_dialog.dart';
 import 'glass_common.dart';
@@ -345,6 +346,13 @@ class _ChatScreenState extends State<ChatScreen>
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
+    // Block check — show clean pop-up if other user is blocked
+    final otherUser = widget.conversation.getOtherParticipant(widget.myUserId);
+    if (BlockService.instance.isBlocked(otherUser.id)) {
+      _showBlockedDialog(otherUser.username);
+      return;
+    }
+
     final sentAt  = DateTime.now();
     final tempId  = 'temp_${sentAt.millisecondsSinceEpoch}';
     final replyTo = _replyingTo;
@@ -372,6 +380,41 @@ class _ChatScreenState extends State<ChatScreen>
     ChatService().sendMessage(
       widget.conversation.id, text, widget.conversation.participants,
       createdAt: sentAt, replyToId: replyTo?.id, replyToText: replyTo?.text,
+    );
+  }
+
+  void _showBlockedDialog(String username) {
+    final dark = widget.dark;
+    final fg   = GlassTokens.fg(dark);
+    final sub  = GlassTokens.sub(dark);
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: AlertDialog(
+          backgroundColor: dark ? const Color(0xFF1C1C1E) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          icon: Icon(Icons.block_rounded, color: Colors.redAccent, size: 36),
+          title: Text(
+            'Blocked',
+            textAlign: TextAlign.center,
+            style: manrope(size: 17, weight: FontWeight.w800, color: fg),
+          ),
+          content: Text(
+            'You have blocked @$username.\nUnblock them to send messages.',
+            textAlign: TextAlign.center,
+            style: manrope(size: 13, weight: FontWeight.w500, color: sub),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('OK', style: manrope(size: 14, weight: FontWeight.w700, color: fg)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -26,6 +26,7 @@ import '../create_post_screens.dart';
 import '../story_upload_screen.dart';
 import '../story_view_screen.dart';
 import '../../services/story_service.dart';
+import '../../services/block_service.dart';
 import '../comments_screen.dart';
 import '../liked_by_screen.dart';
 import '../../services/cryptography_service.dart';
@@ -126,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FcmService.setupForHomeScreen();
       CryptographyService().ensurePublicKeyRegistered();
+      BlockService.instance.load(); // load block list once on home screen open
       _loadUnreadCount();
       _loadUnreadNotifCount();
       ChatService().connectWebSocket();
@@ -543,7 +545,7 @@ class _HomeScreenState extends State<HomeScreen>
   void _openIsland() {
     _captureIslandRect();
     HapticFeedback.mediumImpact();
-    // Reset badge when user opens notification screen
+    _homeFeedActive.value = false; // pause all background videos
     setState(() {
       _islandOpen = true;
       _unreadNotifs = 0;  // ← user is now viewing notifications
@@ -554,7 +556,10 @@ class _HomeScreenState extends State<HomeScreen>
   void _closeIsland() {
     HapticFeedback.lightImpact();
     _islandCtrl.reverse().then((_) {
-      if (mounted) setState(() => _islandOpen = false);
+      if (mounted) {
+        setState(() => _islandOpen = false);
+        _homeFeedActive.value = true; // resume videos after panel closes
+      }
     });
   }
 

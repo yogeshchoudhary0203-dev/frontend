@@ -8,12 +8,20 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Constants ─────────────────────────────────────────────────
-const _kChannelId   = 'trandia_v4';
-const _kChannelName = 'Trandia';
-const _kChannelDesc = 'Trandia notifications';
-const _kTokenKey    = 'fcm_token';
-const _kJwtKey      = 'auth_token';
-const _kBackendUrl  = 'https://web-production-c105c.up.railway.app';
+const _kChannelId        = 'trandia_v4';
+const _kChannelName      = 'Trandia';
+const _kChannelDesc      = 'Trandia notifications';
+const _kTokenKey         = 'fcm_token';
+const _kJwtKey           = 'auth_token';
+const _kBackendUrl       = 'https://web-production-c105c.up.railway.app';
+// SharedPreferences keys — same keys used by NotificationSettingsScreen
+const _kMasterKey    = 'settings_notifications';
+const _kFollowsKey   = 'settings_notif_follows';
+const _kLikesKey     = 'settings_notif_likes';
+const _kCommentsKey  = 'settings_notif_comments';
+const _kMessagesKey  = 'settings_notif_messages';
+const _kStoriesKey   = 'settings_notif_stories';
+const _kMentionsKey  = 'settings_notif_mentions';
 
 // ── Module-level state ────────────────────────────────────────
 final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
@@ -27,6 +35,15 @@ String? _pendingBody;
 /// The conversation_id that the user currently has open.
 /// Notifications for this conversation are suppressed (user already sees it).
 String? _activeConversationId;
+
+// In-memory notification flags — loaded from SharedPreferences via reloadNotificationSettings()
+bool _masterEnabled   = true;
+bool _followsEnabled  = true;
+bool _likesEnabled    = true;
+bool _commentsEnabled = true;
+bool _chatNotifsEnabled = true;   // messages
+bool _storiesEnabled  = true;
+bool _mentionsEnabled = true;
 
 /// Callback fired when a user taps a message notification.
 typedef ConversationNavigator = void Function(String conversationId);
@@ -97,7 +114,10 @@ class FcmService {
       }
     }
 
-    // 3. Fetch + cache FCM token eagerly (no permission needed)
+    // 3. Load all notification preferences
+    await reloadNotificationSettings();
+
+    // 4. Fetch + cache FCM token eagerly (no permission needed)
     unawaited(_fetchAndCacheToken());
   }
 
@@ -114,6 +134,42 @@ class FcmService {
   static void setActiveConversation(String? conversationId) {
     _activeConversationId = conversationId;
     debugPrint('[FCM] active conversation: $conversationId');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Reload all notification flags from SharedPreferences (single source of truth)
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<void> reloadNotificationSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _masterEnabled    = prefs.getBool(_kMasterKey)   ?? true;
+      _followsEnabled   = prefs.getBool(_kFollowsKey)  ?? true;
+      _likesEnabled     = prefs.getBool(_kLikesKey)    ?? true;
+      _commentsEnabled  = prefs.getBool(_kCommentsKey) ?? true;
+      _chatNotifsEnabled = prefs.getBool(_kMessagesKey) ?? true;
+      _storiesEnabled   = prefs.getBool(_kStoriesKey)  ?? true;
+      _mentionsEnabled  = prefs.getBool(_kMentionsKey) ?? true;
+      debugPrint('[FCM] prefs reloaded — master=$_masterEnabled '
+          'msgs=$_chatNotifsEnabled follows=$_followsEnabled');
+    } catch (e) {
+      debugPrint('[FCM] reloadNotificationSettings error: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Chat bell toggle — saves to the same key as NotificationSettingsScreen
+  // ─────────────────────────────────────────────────────────────────────────
+  static bool get chatNotificationsEnabled => _chatNotifsEnabled;
+
+  static Future<void> setChatNotificationsEnabled(bool enabled) async {
+    _chatNotifsEnabled = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kMessagesKey, enabled);
+      debugPrint('[FCM] messages pref set to $enabled');
+    } catch (e) {
+      debugPrint('[FCM] setChatNotificationsEnabled error: $e');
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -136,6 +192,9 @@ class FcmService {
     debugPrint('[FCM] permission granted: $granted');
 
     if (granted) await showPendingIfAny();
+
+    // Always refresh in-memory flags from prefs on home screen open
+    await reloadNotificationSettings();
 
     // ── FIX: ALWAYS sync token to DB on every home screen open ──
     // Previously only synced if token changed — this caused FCM to break
@@ -234,35 +293,70 @@ class FcmService {
       final msgType = msg.data['type'] as String?;
       debugPrint('[FCM] onMessage type=$msgType title="${msg.notification?.title}"');
 
-      if (msgType == 'welcome') return; // shown locally — suppress duplicate
+      if (msgType == 'welcome') return; // shown locally — no duplicate
 
-      // Follow notification
+      // Master switch — all notifications off
+      if (!_masterEnabled) {
+        debugPrint('[FCM] suppressed — master notifications off');
+        return;
+      }
+
+      // Follow
       if (msgType == 'follow') {
+        if (!_followsEnabled) return;
         final title = msg.data['title'] as String? ?? msg.notification?.title ?? 'New follower';
         final body  = msg.data['body']  as String? ?? msg.notification?.body  ?? 'started following you';
         await show(title: title, body: body);
         return;
       }
 
-      // Like notification
+      // Like
       if (msgType == 'like') {
+        if (!_likesEnabled) return;
         final title = msg.data['title'] as String? ?? msg.notification?.title ?? 'Trandia';
         final body  = msg.data['body']  as String? ?? msg.notification?.body  ?? 'liked your post ❤️';
         await show(title: title, body: body);
         return;
       }
 
-      final title = msg.notification?.title
-          ?? (msg.data['title'] as String?)
-          ?? 'Trandia';
-      final body = msg.notification?.body
-          ?? (msg.data['body'] as String?)
-          ?? '';
-      final conversationId = msg.data['conversation_id'] as String?;
+      // Comment
+      if (msgType == 'comment') {
+        if (!_commentsEnabled) return;
+        final title = msg.data['title'] as String? ?? msg.notification?.title ?? 'New comment';
+        final body  = msg.data['body']  as String? ?? msg.notification?.body  ?? '';
+        await show(title: title, body: body);
+        return;
+      }
 
-      if (conversationId != null &&
-          conversationId == _activeConversationId) {
-        debugPrint('[FCM] suppressed notification — user is in conversation $conversationId');
+      // Story
+      if (msgType == 'story') {
+        if (!_storiesEnabled) return;
+        final title = msg.data['title'] as String? ?? msg.notification?.title ?? 'Story';
+        final body  = msg.data['body']  as String? ?? msg.notification?.body  ?? '';
+        await show(title: title, body: body);
+        return;
+      }
+
+      // Mention
+      if (msgType == 'mention') {
+        if (!_mentionsEnabled) return;
+        final title = msg.data['title'] as String? ?? msg.notification?.title ?? 'Mention';
+        final body  = msg.data['body']  as String? ?? msg.notification?.body  ?? '';
+        await show(title: title, body: body);
+        return;
+      }
+
+      // Message (chat) — default type when conversation_id is present
+      final conversationId = msg.data['conversation_id'] as String?;
+      final title = msg.notification?.title ?? (msg.data['title'] as String?) ?? 'Trandia';
+      final body  = msg.notification?.body  ?? (msg.data['body']  as String?) ?? '';
+
+      if (!_chatNotifsEnabled) {
+        debugPrint('[FCM] suppressed — message notifications off');
+        return;
+      }
+      if (conversationId != null && conversationId == _activeConversationId) {
+        debugPrint('[FCM] suppressed — user is viewing this conversation');
         return;
       }
 

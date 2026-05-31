@@ -8,14 +8,13 @@
 
 import 'dart:ui';
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_model.dart';
 import '../services/chat_service.dart';
 import '../services/fcm_service.dart';
 import '../services/agora_service.dart';
+import '../services/block_service.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/error_dialog.dart';
 import 'glass_common.dart';
@@ -69,7 +68,7 @@ class _ChatScreenState extends State<ChatScreen>
   final Set<String> _pendingIds = {};
   ChatMessage? _replyingTo;
 
-  // Older messages pagination
+  // Older messages pagination — cursor-based (before_id)
   bool _isLoadingOlderMessages = false;
   bool _hasOlderMessages = true;
 
@@ -148,19 +147,22 @@ class _ChatScreenState extends State<ChatScreen>
         setState(() {
           final existingIndex = _messages.indexWhere((m) => m.id == msg.id);
           if (existingIndex != -1) {
+            // Already confirmed — just remove from pending
             _pendingIds.remove(msg.id);
+            if (_isDisplayableMessage(msg)) {
+              _messages[existingIndex] = msg;
+            }
           } else {
+            // Check if a pending (optimistic) message matches by sender + time proximity
             final pendingIndex = _messages.indexWhere((m) =>
                 _pendingIds.contains(m.id) &&
                 m.senderId == msg.senderId &&
-                (msg.text.isEmpty || m.text == msg.text));
+                msg.createdAt.difference(m.createdAt).abs().inSeconds < 10);
 
             if (pendingIndex != -1) {
               final pending = _messages[pendingIndex];
               _pendingIds.remove(pending.id);
-              _messages[pendingIndex] = _isDisplayableMessage(msg)
-                  ? msg
-                  : _confirmedFromPending(pending, msg);
+              _messages[pendingIndex] = _confirmedFromPending(pending, msg);
             } else if (_isDisplayableMessage(msg)) {
               _messages.insert(0, msg);
             }
@@ -168,6 +170,15 @@ class _ChatScreenState extends State<ChatScreen>
           if (msg.senderId == _typingUserId) _typingUserId = null;
         });
         ChatService().markAsRead(widget.conversation.id);
+      }
+    });
+
+    // On WS reconnect, sync messages that arrived while disconnected
+    ChatService().presenceStream.listen((_) {
+      // presenceStream fires on any presence event — if WS just reconnected,
+      // sync to pick up any messages we missed during the disconnect gap
+      if (mounted && _messages.isNotEmpty) {
+        _syncMissedMessages();
       }
     });
 
@@ -211,71 +222,54 @@ class _ChatScreenState extends State<ChatScreen>
     super.dispose();
   }
 
-  // ── Cache helpers ──────────────────────────────────────────
-  static const _cachePrefix = 'chat_msgs_';
-
-  Future<void> _saveToCache(List<ChatMessage> msgs) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final data = msgs.map((m) => {
-        'id': m.id,
-        'conversation_id': m.conversationId,
-        'sender_id': m.senderId,
-        'text': m.text,
-        'created_at': m.createdAt.toUtc().toIso8601String(),
-        'read_by': m.readBy,
-        'encrypted_aes_keys': m.encryptedAesKeys,
-        'reactions': m.reactions.map((k, v) => MapEntry(k, v)),
-        if (m.replyToId != null) 'reply_to_id': m.replyToId,
-        if (m.replyToText != null) 'reply_to_text': m.replyToText,
-      }).toList();
-      await prefs.setString('$_cachePrefix${widget.conversation.id}', jsonEncode(data));
-    } catch (_) {}
-  }
-
-  Future<void> _loadFromCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('$_cachePrefix${widget.conversation.id}');
-      if (raw == null || !mounted) return;
-      final List decoded = jsonDecode(raw);
-      final cached = decoded
-          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
-          .where(_isDisplayableMessage)
-          .toList();
-      if (cached.isNotEmpty && mounted) {
-        setState(() {
-          _messages = cached;
-          _isLoading = false;
-        });
-      }
-    } catch (_) {}
-  }
-
   Future<void> _loadMessages() async {
-    // Step 1: Show cached messages instantly (no loading spinner if cache exists)
-    await _loadFromCache();
+    final convId = widget.conversation.id;
 
-    // Step 2: Fetch fresh from API in background (silent refresh)
-    try {
-      final msgs = await ChatService().getMessages(widget.conversation.id, limit: 30);
-      if (mounted) {
+    // Step 1: Show in-memory cache instantly (zero latency)
+    final cached = ChatService().getCachedMessages(convId);
+    if (cached.isNotEmpty && mounted) {
+      final displayable = cached.where(_isDisplayableMessage).toList();
+      if (displayable.isNotEmpty) {
         setState(() {
-          _messages = msgs.where(_isDisplayableMessage).toList();
+          _messages = displayable;
           _isLoading = false;
-          _hasError = false;
-          _hasOlderMessages = true;
         });
-        // Save fresh data to cache for next open
-        _saveToCache(msgs.where(_isDisplayableMessage).toList());
       }
-    } catch (e) {
-      // If API fails but we have cached data, don't show error
+    }
+
+    // Step 2: Fetch fresh from API (silent refresh if cache was shown)
+    try {
+      final msgs = await ChatService().getMessages(convId, limit: 30);
+      if (!mounted) return;
+      final displayable = msgs.where(_isDisplayableMessage).toList();
+      setState(() {
+        _messages = displayable;
+        _isLoading = false;
+        _hasError = false;
+        _hasOlderMessages = msgs.length >= 30;
+      });
+    } catch (_) {
       if (mounted && _messages.isEmpty) {
         setState(() { _isLoading = false; _hasError = true; });
       } else if (mounted) {
         setState(() { _isLoading = false; });
       }
+    }
+  }
+
+  /// Fetch messages that arrived while WS was disconnected.
+  Future<void> _syncMissedMessages() async {
+    if (_messages.isEmpty) return;
+    final newestId = _messages.first.id;
+    if (newestId.startsWith('temp_')) return;
+    final missed = await ChatService().syncMessagesAfter(widget.conversation.id, newestId);
+    if (!mounted || missed.isEmpty) return;
+    final newOnes = missed
+        .where(_isDisplayableMessage)
+        .where((m) => !_messages.any((e) => e.id == m.id))
+        .toList();
+    if (newOnes.isNotEmpty) {
+      setState(() => _messages.insertAll(0, newOnes));
     }
   }
 
@@ -288,18 +282,29 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _loadOlderMessages() async {
     if (_isLoadingOlderMessages || !_hasOlderMessages || _messages.isEmpty) return;
+
+    // Find oldest real (non-pending) message for cursor
+    final oldestReal = _messages.lastWhere(
+      (m) => !m.id.startsWith('temp_'),
+      orElse: () => _messages.last,
+    );
+    if (oldestReal.id.startsWith('temp_')) return;
+
     setState(() => _isLoadingOlderMessages = true);
     try {
       final older = await ChatService().getMessages(
         widget.conversation.id,
-        skip: _messages.length,
+        beforeId: oldestReal.id,  // cursor-based — no skip mismatch
         limit: 30,
       );
-      final displayable = older.where(_isDisplayableMessage).toList();
+      final displayable = older
+          .where(_isDisplayableMessage)
+          .where((m) => !_messages.any((e) => e.id == m.id))
+          .toList();
       if (mounted) {
         setState(() {
           _messages.addAll(displayable);
-          _hasOlderMessages = displayable.length >= 30;
+          _hasOlderMessages = older.length >= 30;
           _isLoadingOlderMessages = false;
         });
       }
@@ -341,6 +346,13 @@ class _ChatScreenState extends State<ChatScreen>
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
+    // Block check — show clean pop-up if other user is blocked
+    final otherUser = widget.conversation.getOtherParticipant(widget.myUserId);
+    if (BlockService.instance.isBlocked(otherUser.id)) {
+      _showBlockedDialog(otherUser.username);
+      return;
+    }
+
     final sentAt  = DateTime.now();
     final tempId  = 'temp_${sentAt.millisecondsSinceEpoch}';
     final replyTo = _replyingTo;
@@ -368,6 +380,41 @@ class _ChatScreenState extends State<ChatScreen>
     ChatService().sendMessage(
       widget.conversation.id, text, widget.conversation.participants,
       createdAt: sentAt, replyToId: replyTo?.id, replyToText: replyTo?.text,
+    );
+  }
+
+  void _showBlockedDialog(String username) {
+    final dark = widget.dark;
+    final fg   = GlassTokens.fg(dark);
+    final sub  = GlassTokens.sub(dark);
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: AlertDialog(
+          backgroundColor: dark ? const Color(0xFF1C1C1E) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          icon: Icon(Icons.block_rounded, color: Colors.redAccent, size: 36),
+          title: Text(
+            'Blocked',
+            textAlign: TextAlign.center,
+            style: manrope(size: 17, weight: FontWeight.w800, color: fg),
+          ),
+          content: Text(
+            'You have blocked @$username.\nUnblock them to send messages.',
+            textAlign: TextAlign.center,
+            style: manrope(size: 13, weight: FontWeight.w500, color: sub),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('OK', style: manrope(size: 14, weight: FontWeight.w700, color: fg)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -37,10 +37,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   List<String> _platformOrder = ['snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'];
 
   // Profile photo state
-  File? _pendingPhotoFile;       // locally picked, not yet saved
-  String? _pendingPhotoUrl;      // cloudinary URL after upload
-  bool _isUploadingPhoto = false;
-  double _uploadProgress = 0.0;
+  Uint8List? _pendingPhotoBytes;    // locally picked bytes (web-safe preview)
+  String?   _pendingPhotoName;     // original filename for upload
+  String?   _pendingPhotoUrl;      // cloudinary URL after upload
+  bool      _isUploadingPhoto = false;
+  double    _uploadProgress = 0.0;
 
   @override
   void initState() {
@@ -102,7 +103,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  // ── Pick photo from gallery or camera ──────────────────────────────────────
+  // ── Pick photo from gallery or camera ─────────────────────────────────────────────
   Future<void> _pickPhoto(ImageSource source) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
@@ -113,25 +114,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
     if (picked == null || !mounted) return;
 
-    final file = File(picked.path);
+    // Read as bytes — works on both web and mobile
+    final bytes    = await picked.readAsBytes();
+    final filename = picked.name.isNotEmpty ? picked.name : 'profile.jpg';
+
     setState(() {
-      _pendingPhotoFile = file;
-      _pendingPhotoUrl = null;
-      _isUploadingPhoto = true;
-      _uploadProgress = 0.0;
+      _pendingPhotoBytes  = bytes;
+      _pendingPhotoName   = filename;
+      _pendingPhotoUrl    = null;
+      _isUploadingPhoto   = true;
+      _uploadProgress     = 0.0;
     });
 
     try {
-      final result = await MediaUploadService.instance.uploadProfilePicture(
-        file,
+      final result = await MediaUploadService.instance.uploadProfilePictureBytes(
+        bytes,
+        filename,
         onProgress: (p) {
           if (mounted) setState(() => _uploadProgress = p);
         },
       );
       if (mounted) {
         setState(() {
-          _pendingPhotoUrl = result.url;
-          _isUploadingPhoto = false;
+          _pendingPhotoUrl    = result.url;
+          _isUploadingPhoto   = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -149,9 +155,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _pendingPhotoFile = null;
-          _pendingPhotoUrl = null;
-          _isUploadingPhoto = false;
+          _pendingPhotoBytes  = null;
+          _pendingPhotoName   = null;
+          _pendingPhotoUrl    = null;
+          _isUploadingPhoto   = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -218,7 +225,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   _pickPhoto(ImageSource.camera);
                 },
               ),
-              if (_pendingPhotoFile != null || _profile?.picture != null) ...
+              if (_pendingPhotoBytes != null || _profile?.picture != null) ...
                 [
                   const SizedBox(height: 10),
                   _PhotoOptionTile(
@@ -229,8 +236,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     onTap: () {
                       Navigator.pop(ctx);
                       setState(() {
-                        _pendingPhotoFile = null;
-                        _pendingPhotoUrl = 'REMOVE';
+                        _pendingPhotoBytes = null;
+                        _pendingPhotoName  = null;
+                        _pendingPhotoUrl   = 'REMOVE';
                       });
                     },
                   ),
@@ -374,7 +382,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               pictureUrl: _pendingPhotoUrl == 'REMOVE'
                                   ? null
                                   : (_pendingPhotoUrl ?? _profile?.picture),
-                              pendingFile: _pendingPhotoFile,
+                              pendingBytes: _pendingPhotoBytes,
                               isUploading: _isUploadingPhoto,
                               uploadProgress: _uploadProgress,
                               onTap: _isUploadingPhoto ? null : _showPhotoOptions,

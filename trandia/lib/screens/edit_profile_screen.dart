@@ -535,7 +535,7 @@ class _AvatarSection extends StatelessWidget {
   final Color sub;
   final String initial;
   final String? pictureUrl;
-  final File? pendingFile;
+  final Uint8List? pendingBytes;
   final bool isUploading;
   final double uploadProgress;
   final VoidCallback? onTap;
@@ -546,7 +546,7 @@ class _AvatarSection extends StatelessWidget {
     required this.sub,
     required this.initial,
     this.pictureUrl,
-    this.pendingFile,
+    this.pendingBytes,
     this.isUploading = false,
     this.uploadProgress = 0.0,
     this.onTap,
@@ -659,10 +659,10 @@ class _AvatarSection extends StatelessWidget {
   }
 
   Widget _buildAvatarContent() {
-    // Priority: local pending file > remote URL > initials
-    if (pendingFile != null) {
-      return Image.file(
-        pendingFile!,
+    // Priority: local bytes > remote URL > initials
+    if (pendingBytes != null) {
+      return Image.memory(
+        pendingBytes!,
         width: 94,
         height: 94,
         fit: BoxFit.cover,

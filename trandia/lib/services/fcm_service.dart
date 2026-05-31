@@ -37,13 +37,15 @@ String? _pendingBody;
 String? _activeConversationId;
 
 // In-memory notification flags — loaded from SharedPreferences via reloadNotificationSettings()
-bool _masterEnabled   = true;
-bool _followsEnabled  = true;
-bool _likesEnabled    = true;
-bool _commentsEnabled = true;
+bool _masterEnabled    = true;
+bool _followsEnabled   = true;
+bool _likesEnabled     = true;
+bool _commentsEnabled  = true;
 bool _chatNotifsEnabled = true;   // messages
-bool _storiesEnabled  = true;
-bool _mentionsEnabled = true;
+bool _storiesEnabled   = true;
+bool _mentionsEnabled  = true;
+
+// Module-level notifier (accessed as FcmService.chatNotifsNotifier via class below)
 
 /// Callback fired when a user taps a message notification.
 typedef ConversationNavigator = void Function(String conversationId);
@@ -58,6 +60,10 @@ const _kIosDetails = DarwinNotificationDetails(
 );
 
 class FcmService {
+
+  /// Reactive notifier — chat bell and notification settings screen both
+  /// listen to this so they stay in sync without manual coordination.
+  static final ValueNotifier<bool> chatNotifsNotifier = ValueNotifier(true);
 
   // ─────────────────────────────────────────────────────────────────────────
   // init()  — call from main() before runApp
@@ -142,13 +148,15 @@ class FcmService {
   static Future<void> reloadNotificationSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _masterEnabled    = prefs.getBool(_kMasterKey)   ?? true;
-      _followsEnabled   = prefs.getBool(_kFollowsKey)  ?? true;
-      _likesEnabled     = prefs.getBool(_kLikesKey)    ?? true;
-      _commentsEnabled  = prefs.getBool(_kCommentsKey) ?? true;
+      _masterEnabled     = prefs.getBool(_kMasterKey)   ?? true;
+      _followsEnabled    = prefs.getBool(_kFollowsKey)  ?? true;
+      _likesEnabled      = prefs.getBool(_kLikesKey)    ?? true;
+      _commentsEnabled   = prefs.getBool(_kCommentsKey) ?? true;
       _chatNotifsEnabled = prefs.getBool(_kMessagesKey) ?? true;
-      _storiesEnabled   = prefs.getBool(_kStoriesKey)  ?? true;
-      _mentionsEnabled  = prefs.getBool(_kMentionsKey) ?? true;
+      _storiesEnabled    = prefs.getBool(_kStoriesKey)  ?? true;
+      _mentionsEnabled   = prefs.getBool(_kMentionsKey) ?? true;
+      // Notify all listeners (bell icon, settings screen)
+      chatNotifsNotifier.value = _masterEnabled && _chatNotifsEnabled;
       debugPrint('[FCM] prefs reloaded — master=$_masterEnabled '
           'msgs=$_chatNotifsEnabled follows=$_followsEnabled');
     } catch (e) {
@@ -163,6 +171,7 @@ class FcmService {
 
   static Future<void> setChatNotificationsEnabled(bool enabled) async {
     _chatNotifsEnabled = enabled;
+    chatNotifsNotifier.value = _masterEnabled && enabled;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kMessagesKey, enabled);

@@ -27,6 +27,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   bool _isLoading = true;
   bool _hasError = false;
   String? _myUserId;
+  Set<String> _onlineUserIds = {};
   double? _swipeStartX;
   double? _swipeStartY;
   bool _notificationsOn = true;
@@ -68,6 +69,16 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
       _loadConversations(),
       _loadFilterState(),
     ]);
+
+    // Sync initial online state (WS may already be connected from before)
+    _onlineUserIds = Set.from(ChatService().onlineUserIds);
+
+    ChatService().presenceStream.listen((event) {
+      if (!mounted) return;
+      setState(() {
+        _onlineUserIds = Set.from(ChatService().onlineUserIds);
+      });
+    });
 
     ChatService().messageStream.listen((msg) {
       if (!mounted) return;
@@ -349,10 +360,19 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
     final recent = _conversations
         .where((c) => !_lockedIds.contains(c.id) && !_archivedIds.contains(c.id) && !_blockedIds.contains(c.id))
-        .take(6)
+        .take(8)
         .toList();
 
-    if (recent.isEmpty) return const SizedBox.shrink();
+    // Online users first
+    recent.sort((a, b) {
+      final aOnline = _onlineUserIds.contains(a.getOtherParticipant(myId).id);
+      final bOnline = _onlineUserIds.contains(b.getOtherParticipant(myId).id);
+      if (aOnline == bOnline) return 0;
+      return aOnline ? -1 : 1;
+    });
+
+    final display = recent.take(6).toList();
+    if (display.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,11 +389,12 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: recent.length,
+            itemCount: display.length,
             itemBuilder: (ctx, i) {
-              final conv = recent[i];
+              final conv = display[i];
               final other = conv.getOtherParticipant(myId);
               final unread = (conv.unreadCounts[myId] ?? 0) > 0;
+              final isOnline = _onlineUserIds.contains(other.id);
               return GestureDetector(
                 onTap: () {
                   HapticFeedback.selectionClick();
@@ -417,6 +438,23 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                                 height: 12,
                                 decoration: BoxDecoration(
                                   color: Colors.redAccent,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: widget.dark ? GlassTokens.bgDark : GlassTokens.bgLight,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (isOnline)
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF34C759),
                                   shape: BoxShape.circle,
                                   border: Border.all(
                                     color: widget.dark ? GlassTokens.bgDark : GlassTokens.bgLight,
@@ -597,6 +635,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
               isLocked: _lockedIds.contains(conv.id),
               isArchived: _archivedIds.contains(conv.id),
               isBlocked: _blockedIds.contains(conv.id),
+              isOnline: _onlineUserIds.contains(conv.getOtherParticipant(_myUserId ?? '').id),
               onLock: () => _toggleLock(conv.id),
               onArchive: () => _toggleArchive(conv.id),
               onBlock: () => _toggleBlock(conv.id),
@@ -726,6 +765,7 @@ class _ChatRow extends StatelessWidget {
   final bool isLocked;
   final bool isArchived;
   final bool isBlocked;
+  final bool isOnline;
   final VoidCallback onLock;
   final VoidCallback onArchive;
   final VoidCallback onBlock;
@@ -739,6 +779,7 @@ class _ChatRow extends StatelessWidget {
     required this.isLocked,
     required this.isArchived,
     required this.isBlocked,
+    this.isOnline = false,
     required this.onLock,
     required this.onArchive,
     required this.onBlock,
@@ -825,7 +866,7 @@ class _ChatRow extends StatelessWidget {
             : Colors.white.withOpacity(0.85),
         borderWidth: 0.5,
         child: Row(children: [
-          // Avatar with optional status overlay
+          // Avatar with optional status/online overlay
           Stack(clipBehavior: Clip.none, children: [
             UserAvatar(
               pictureUrl: otherUser.picture,
@@ -850,6 +891,21 @@ class _ChatRow extends StatelessWidget {
                   alignment: Alignment.center,
                   child: Icon(statusIcon, size: 10,
                       color: isBlocked ? Colors.redAccent : sub),
+                ),
+              )
+            else if (isOnline)
+              Positioned(
+                right: -2, bottom: -2,
+                child: Container(
+                  width: 14, height: 14,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF34C759),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: dark ? const Color(0xFF0A0A0C) : const Color(0xFFFAFAFA),
+                      width: 2,
+                    ),
+                  ),
                 ),
               ),
           ]),

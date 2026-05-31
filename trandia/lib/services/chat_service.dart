@@ -23,8 +23,14 @@ class ChatService {
   final _typingCtrl       = StreamController<Map<String, dynamic>>.broadcast();
   final _reactionCtrl     = StreamController<Map<String, dynamic>>.broadcast();
   final _notificationCtrl = StreamController<Map<String, dynamic>>.broadcast();
-  // Call signaling stream — emits call_invite / call_accept / call_reject / call_end
   final _callCtrl         = StreamController<Map<String, dynamic>>.broadcast();
+  final _presenceCtrl     = StreamController<Map<String, dynamic>>.broadcast();
+
+  // Tracks which user IDs are currently online (updated via WS presence events)
+  final Set<String> _onlineUserIds = {};
+
+  // In-memory messages cache: convId → list (most-recent first)
+  final Map<String, List<ChatMessage>> _msgCache = {};
 
   // Typing throttle — only send 1 event per 2 seconds
   DateTime? _lastTypingSent;
@@ -37,8 +43,9 @@ class ChatService {
   Stream<Map<String, dynamic>>   get typingStream       => _typingCtrl.stream;
   Stream<Map<String, dynamic>>   get reactionStream     => _reactionCtrl.stream;
   Stream<Map<String, dynamic>>   get notificationStream => _notificationCtrl.stream;
-  /// Emits: call_invite | call_accept | call_reject | call_end payloads
   Stream<Map<String, dynamic>>   get callStream         => _callCtrl.stream;
+  Stream<Map<String, dynamic>>   get presenceStream     => _presenceCtrl.stream;
+  Set<String> get onlineUserIds => Set.unmodifiable(_onlineUserIds);
   bool get isConnected => _channel != null;
 
   // ── WebSocket ────────────────────────────────────────────────
@@ -93,6 +100,14 @@ class ChatService {
         case 'message':
           var msg = ChatMessage.fromJson(data['message'] as Map<String, dynamic>);
           msg = decryptMessage(msg);
+          // Keep in-memory cache in sync with incoming messages
+          final cached = _msgCache[msg.conversationId];
+          if (cached != null) {
+            final exists = cached.any((m) => m.id == msg.id);
+            if (!exists && msg.text.isNotEmpty) {
+              cached.insert(0, msg);
+            }
+          }
           _messageCtrl.add(msg);
 
         case 'typing':
@@ -122,6 +137,24 @@ class ChatService {
         case 'call_reject':
         case 'call_end':
           _callCtrl.add(Map<String, dynamic>.from(data));
+
+        // ── Presence ────────────────────────────────────────
+        case 'presence':
+          final uid = data['user_id'] as String? ?? '';
+          final isOnline = data['online'] as bool? ?? false;
+          if (uid.isNotEmpty) {
+            if (isOnline) {
+              _onlineUserIds.add(uid);
+            } else {
+              _onlineUserIds.remove(uid);
+            }
+            _presenceCtrl.add({'user_id': uid, 'online': isOnline});
+          }
+
+        case 'presence_init':
+          final ids = List<String>.from(data['online_user_ids'] as List? ?? []);
+          _onlineUserIds.addAll(ids);
+          _presenceCtrl.add({'type': 'presence_init', 'online_user_ids': ids});
       }
     } catch (e) {
       developer.log('[ChatService] WS parse error: $e');
@@ -318,30 +351,73 @@ class ChatService {
     }
   }
 
+  /// Returns in-memory cached messages immediately (empty list if not cached yet).
+  List<ChatMessage> getCachedMessages(String conversationId) {
+    return List.unmodifiable(_msgCache[conversationId] ?? []);
+  }
+
   Future<List<ChatMessage>> getMessages(
     String conversationId, {
     int skip = 0,
     int limit = 50,
+    String? beforeId,
   }) async {
     final token = await ApiService.getToken();
+    final query = StringBuffer('skip=$skip&limit=$limit');
+    if (beforeId != null) query.write('&before_id=$beforeId');
+
     final res = await http.get(
-      Uri.parse('$baseUrl/chat/$conversationId/messages?skip=$skip&limit=$limit'),
+      Uri.parse('$baseUrl/chat/$conversationId/messages?$query'),
       headers: {
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       },
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(const Duration(seconds: 10));
 
     if (res.statusCode == 200) {
       final List data = jsonDecode(res.body) as List;
       await _ensureKeysLoaded();
-      return _decryptMessagesInBatches(data);
+      final msgs = await _decryptMessagesInBatches(data);
+      // Update in-memory cache only for first page
+      if (skip == 0 && beforeId == null && msgs.isNotEmpty) {
+        _msgCache[conversationId] = msgs;
+      }
+      return msgs;
     } else if (res.statusCode == 401) {
       await ApiService.clearToken();
       throw const ApiException('Session expired. Please sign in again.');
     } else {
       throw ApiException('Failed to load messages (${res.statusCode})');
     }
+  }
+
+  /// Fetch only messages newer than [afterId] — used to sync missed messages.
+  Future<List<ChatMessage>> syncMessagesAfter(
+    String conversationId,
+    String afterId,
+  ) async {
+    // We fetch a fresh first page and return only messages newer than afterId
+    try {
+      final fresh = await getMessages(conversationId, limit: 50);
+      final idx = fresh.indexWhere((m) => m.id == afterId);
+      if (idx <= 0) return [];          // already up to date or afterId not found
+      return fresh.sublist(0, idx);     // messages newer than afterId
+    } catch (_) {
+      return [];
+    }
+  }
+
+  void updateCachedMessage(ChatMessage msg) {
+    final cached = _msgCache[msg.conversationId];
+    if (cached == null) return;
+    final idx = cached.indexWhere((m) => m.id == msg.id);
+    if (idx != -1) {
+      cached[idx] = msg;
+    }
+  }
+
+  void evictConversationCache(String conversationId) {
+    _msgCache.remove(conversationId);
   }
 
   // ── Cryptography helpers ─────────────────────────────────────

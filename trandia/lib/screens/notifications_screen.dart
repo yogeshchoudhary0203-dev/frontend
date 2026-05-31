@@ -111,7 +111,7 @@ IconData _kindIcon(NfKind k) {
 const double _kCardHeight = 76;
 const double _kCardGap    = 10;
 const double _kListStartY = 112; // header(48) + 12 + chips(30) + 22 spacing
-const double _kIslandCollapseRange = 176;
+const double _kIslandCollapseRange = 80;
 const double _kIslandPinLift = 64; // keeps the folded stack above the bottom safe area
 
 class NotificationsScreen extends StatefulWidget {
@@ -493,8 +493,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           child: Container(
             height: _kCardHeight,
             decoration: BoxDecoration(
-              color: shimmerBase,
-              borderRadius: BorderRadius.circular(22),
+              color: dark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.50),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: dark ? Colors.white.withOpacity(0.07) : Colors.white.withOpacity(0.80),
+                width: 0.5,
+              ),
             ),
             child: Row(children: [
               const SizedBox(width: 14),
@@ -657,9 +661,7 @@ class _DynamicIslandScrollCard extends StatelessWidget {
   static double _lerp(double a, double b, double t) => a + (b - a) * t;
 
   static double _islandCurve(double t) {
-    final eased = Curves.easeOutCubic.transform(t);
-    final settle = Curves.easeOutBack.transform((t - 0.18).clamp(0.0, 1.0));
-    return _lerp(eased, settle, 0.22).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(t);
   }
 }
 
@@ -751,9 +753,16 @@ class _NfCardInnerState extends State<_NfCardInner> {
     return GestureDetector(
       onTap: _openProfile,
       child: GlassSurface(
-      dark: dark, radius: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      blurSigma: 28,
+      dark: dark, radius: 999,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      blurSigma: 44,
+      bgColors: dark
+          ? [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)]
+          : [Colors.white.withOpacity(0.65), Colors.white.withOpacity(0.40)],
+      borderColor: dark
+          ? Colors.white.withOpacity(0.08)
+          : Colors.white.withOpacity(0.85),
+      borderWidth: 0.5,
       child: Row(children: [
         // ── Unread indicator dot ──────────────────────────────────────────
         // Rendered as a simple circle INSIDE the Row (not Positioned).

@@ -30,6 +30,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   double? _swipeStartX;
   double? _swipeStartY;
   bool _notificationsOn = true;
+  final _chatScroll = ScrollController();
 
   // Filter state — persisted in SharedPreferences
   Set<String> _lockedIds = {};
@@ -47,6 +48,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
   @override
   void dispose() {
+    _chatScroll.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -546,6 +548,8 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
     final list = _filteredConversations;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return ListView.builder(
+      controller: _chatScroll,
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.fromLTRB(0, 0, 0, 84 + bottomInset),
       itemCount: 1 + (list.isEmpty ? 1 : list.length),
       itemBuilder: (context, index) {
@@ -579,20 +583,24 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
         }
         final i = index - 1;
         final conv = list[i];
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-          child: _ChatRow(
-            c: conv,
-            i: i + 1,
-            dark: widget.dark,
-            myUserId: _myUserId ?? '',
-            onReload: _loadConversations,
-            isLocked: _lockedIds.contains(conv.id),
-            isArchived: _archivedIds.contains(conv.id),
-            isBlocked: _blockedIds.contains(conv.id),
-            onLock: () => _toggleLock(conv.id),
-            onArchive: () => _toggleArchive(conv.id),
-            onBlock: () => _toggleBlock(conv.id),
+        return _ChatIslandScrollCard(
+          controller: _chatScroll,
+          index: i,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+            child: _ChatRow(
+              c: conv,
+              i: i + 1,
+              dark: widget.dark,
+              myUserId: _myUserId ?? '',
+              onReload: _loadConversations,
+              isLocked: _lockedIds.contains(conv.id),
+              isArchived: _archivedIds.contains(conv.id),
+              isBlocked: _blockedIds.contains(conv.id),
+              onLock: () => _toggleLock(conv.id),
+              onArchive: () => _toggleArchive(conv.id),
+              onBlock: () => _toggleBlock(conv.id),
+            ),
           ),
         );
       },
@@ -806,8 +814,16 @@ class _ChatRow extends StatelessWidget {
       },
       child: GlassSurface(
         dark: dark,
-        radius: 22,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        radius: 999,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        blurSigma: 44,
+        bgColors: dark
+            ? [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)]
+            : [Colors.white.withOpacity(0.65), Colors.white.withOpacity(0.40)],
+        borderColor: dark
+            ? Colors.white.withOpacity(0.08)
+            : Colors.white.withOpacity(0.85),
+        borderWidth: 0.5,
         child: Row(children: [
           // Avatar with optional status overlay
           Stack(clipBehavior: Clip.none, children: [
@@ -1226,6 +1242,78 @@ class _ChatRow extends StatelessWidget {
     if (diff.inHours > 0) return '${diff.inHours}h';
     if (diff.inMinutes > 0) return '${diff.inMinutes}m';
     return 'now'.tr(context);
+  }
+}
+
+/// Smooth island-collapse animation for chat rows near the bottom.
+/// Stops well above the floating search bar so they never overlap.
+class _ChatIslandScrollCard extends StatelessWidget {
+  final ScrollController controller;
+  final int index;
+  final Widget child;
+
+  /// How many px from the bottom edge the collapse starts.
+  static const double _collapseRange = 80;
+  /// Extra lift so cards collapse above the search bar (~56 bar + 16 gap).
+  static const double _pinLift = 80;
+
+  const _ChatIslandScrollCard({
+    required this.controller,
+    required this.index,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      child: child,
+      builder: (context, child) {
+        if (!controller.hasClients) return child!;
+
+        final box = context.findRenderObject() as RenderBox?;
+        if (box == null || !box.hasSize) return child!;
+
+        final screenHeight = MediaQuery.sizeOf(context).height;
+        final bottomPad = MediaQuery.paddingOf(context).bottom;
+        final globalY = box.localToGlobal(Offset.zero).dy;
+        final itemBottomY = globalY + box.size.height;
+        final bottomStackY = screenHeight - bottomPad - _pinLift;
+        final distanceToBottom = bottomStackY - itemBottomY;
+
+        final raw = (1.0 - (distanceToBottom / _collapseRange))
+            .clamp(0.0, 1.0)
+            .toDouble();
+        final t = Curves.easeOutCubic.transform(raw);
+
+        if (t == 0) return child!;
+
+        final widthFactor = 1.0 + (0.58 - 1.0) * t;
+        final scaleY = 1.0 + (0.70 - 1.0) * t;
+        final drop = 18.0 * t;
+        final opacity = (1.0 + (0.10 - 1.0) * Curves.easeOut.transform(t)).clamp(0.0, 1.0);
+
+        return ClipRect(
+          child: Opacity(
+            opacity: opacity,
+            child: Transform.translate(
+              offset: Offset(0, drop),
+              child: Transform.scale(
+                alignment: Alignment.bottomCenter,
+                scaleY: scaleY,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: FractionallySizedBox(
+                    widthFactor: widthFactor,
+                    child: child,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

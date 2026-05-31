@@ -257,6 +257,9 @@ class UserAvatar extends StatelessWidget {
                 height: size,
                 fit: BoxFit.cover,
                 memCacheWidth: (size * 2).toInt(),
+                fadeInDuration: Duration.zero,
+                fadeOutDuration: Duration.zero,
+                placeholderFadeInDuration: Duration.zero,
                 errorWidget: (_, __, ___) => _fallback(initial, fontSize),
                 placeholder: (_, __) => _fallback(initial, fontSize),
               )

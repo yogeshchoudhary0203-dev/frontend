@@ -486,30 +486,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           ),
                                         ],
                                       ),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          gradient: monoAvatar(dark, 0),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.white.withOpacity(0.22),
-                                              blurRadius: 0,
-                                              offset: const Offset(0, 1),
-                                              spreadRadius: -1,
-                                            ),
-                                          ],
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          _profile?.name.isNotEmpty == true
-                                              ? _profile!.name[0].toUpperCase()
-                                              : '?',
-                                          style: manrope(
-                                            size: 42,
-                                            weight: FontWeight.w700,
-                                            color: Colors.white,
-                                            letterSpacing: -1.26,
-                                          ),
+                                      child: ClipOval(
+                                        child: UserAvatar(
+                                          pictureUrl: _profile?.picture,
+                                          name: _profile?.name ?? '?',
+                                          size: 108,
+                                          dark: dark,
+                                          index: 0,
                                         ),
                                       ),
                                     ),

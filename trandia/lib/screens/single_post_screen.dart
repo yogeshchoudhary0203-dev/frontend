@@ -210,23 +210,32 @@ class _PostContent extends StatelessWidget {
         ),
 
         // ── Media ──────────────────────────────────────────────────
-        post.isVideo
-            ? _VideoView(post: post)
-            : AspectRatio(
-                aspectRatio: post.aspectRatio,
-                child: CachedNetworkImage(
-                  imageUrl: post.mediaUrl, fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                      color: (dark ? Colors.white : Colors.black)
-                          .withOpacity(0.05)),
-                  errorWidget: (_, __, ___) => Container(
-                    color: (dark ? Colors.white : Colors.black)
-                        .withOpacity(0.05),
-                    child: Icon(Icons.broken_image_outlined,
-                        color: sub.withOpacity(0.4)),
-                  ),
-                ),
-              ),
+        // ── Media ──────────────────────────────────────────────────
+post.isVideo
+    ? _VideoView(post: post)
+    : InteractiveViewer(
+        clipBehavior: Clip.none,
+        panEnabled: true,
+        scaleEnabled: true,
+        minScale: 1.0,
+        maxScale: 4.0,
+        child: AspectRatio(
+          aspectRatio: post.aspectRatio,
+          child: CachedNetworkImage(
+            imageUrl: post.mediaUrl,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => Container(
+                color: (dark ? Colors.white : Colors.black)
+                    .withOpacity(0.05)),
+            errorWidget: (_, __, ___) => Container(
+              color: (dark ? Colors.white : Colors.black)
+                  .withOpacity(0.05),
+              child: Icon(Icons.broken_image_outlined,
+                  color: sub.withOpacity(0.4)),
+            ),
+          ),
+        ),
+      ),
 
         // ── Actions ────────────────────────────────────────────────
         Padding(
@@ -344,7 +353,24 @@ class _VideoViewState extends State<_VideoView> {
               imageUrl: widget.post.thumbnailUrl!, fit: BoxFit.cover),
 
         // Video
-        if (_initialized && _ctrl != null) VideoPlayer(_ctrl!),
+        if (_initialized && _ctrl != null)
+          InteractiveViewer(
+            clipBehavior: Clip.none,
+            panEnabled: true,
+            scaleEnabled: true,
+            minScale: 1.0,
+            maxScale: 4.0,
+            child: GestureDetector(
+              onTap: () {
+                if (_ctrl!.value.isPlaying) {
+                  _ctrl!.pause();
+                } else {
+                  _ctrl!.play();
+                }
+              },
+              child: VideoPlayer(_ctrl!),
+            ),
+          ),
 
         // Loading
         if (!_initialized)

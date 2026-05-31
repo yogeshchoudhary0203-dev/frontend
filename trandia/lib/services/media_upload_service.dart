@@ -11,6 +11,7 @@
 
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'api_service.dart';
@@ -116,6 +117,34 @@ class MediaUploadService {
   }) =>
       uploadImage(file, folder: MediaFolder.profiles, onProgress: onProgress);
 
+  /// Upload profile picture from raw bytes — works on web + mobile.
+  Future<MediaUploadResult> uploadProfilePictureBytes(
+    Uint8List bytes,
+    String filename, {
+    void Function(double progress)? onProgress,
+  }) =>
+      uploadImageBytes(
+        bytes,
+        filename: filename,
+        folder: MediaFolder.profiles,
+        onProgress: onProgress,
+      );
+
+  /// Upload image from raw bytes (web-safe, no dart:io required).
+  Future<MediaUploadResult> uploadImageBytes(
+    Uint8List bytes, {
+    required String filename,
+    required MediaFolder folder,
+    void Function(double progress)? onProgress,
+  }) =>
+      _uploadBytes(
+        bytes,
+        filename: filename,
+        folder: folder,
+        resourceType: 'image',
+        onProgress: onProgress,
+      );
+
   /// Delete media from CDN. publicId comes from MediaUploadResult.publicId.
   Future<bool> deleteMedia(String publicId, {String resourceType = 'image'}) async {
     try {
@@ -165,6 +194,28 @@ class MediaUploadService {
     );
   }
 
+  // Bytes-based upload (web + mobile safe)
+  Future<MediaUploadResult> _uploadBytes(
+    Uint8List bytes, {
+    required String filename,
+    required MediaFolder folder,
+    required String resourceType,
+    void Function(double progress)? onProgress,
+  }) async {
+    onProgress?.call(0.05);
+    final sigParams = await _fetchSignature(folder.value, resourceType);
+    onProgress?.call(0.10);
+    final result = await _uploadBytesToCloudinary(
+      bytes:        bytes,
+      filename:     filename,
+      sigParams:    sigParams,
+      resourceType: resourceType,
+      onProgress:   onProgress,
+    );
+    onProgress?.call(1.0);
+    return result;
+  }
+
   Future<MediaUploadResult> _uploadToCloudinary({
     required File file,
     required Map<String, dynamic> sigParams,
@@ -196,6 +247,49 @@ class MediaUploadService {
         'file',
         bytes,
         filename: _filename(file.path),
+        contentType: MediaType.parse(mimeType),
+      ),
+    );
+
+    final streamed = await request.send().timeout(const Duration(minutes: 5));
+    final body = await streamed.stream.bytesToString();
+
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      throw Exception('Cloudinary upload failed (${streamed.statusCode}): $body');
+    }
+
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    return MediaUploadResult.fromJson(json);
+  }
+
+  Future<MediaUploadResult> _uploadBytesToCloudinary({
+    required Uint8List bytes,
+    required String filename,
+    required Map<String, dynamic> sigParams,
+    required String resourceType,
+    void Function(double progress)? onProgress,
+  }) async {
+    final uploadUrl = sigParams['upload_url'] as String;
+    final mimeType  = _mimeType(filename, resourceType);
+
+    final request = http.MultipartRequest('POST', Uri.parse(uploadUrl));
+    request.fields['api_key']   = sigParams['api_key'].toString();
+    request.fields['timestamp'] = sigParams['timestamp'].toString();
+    request.fields['signature'] = sigParams['signature'].toString();
+    request.fields['folder']    = sigParams['folder'].toString();
+
+    if (resourceType == 'image') {
+      request.fields['quality']      = 'auto';
+      request.fields['fetch_format'] = 'auto';
+    } else {
+      request.fields['quality'] = 'auto';
+    }
+
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: filename,
         contentType: MediaType.parse(mimeType),
       ),
     );

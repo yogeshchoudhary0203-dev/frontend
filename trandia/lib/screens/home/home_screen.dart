@@ -86,6 +86,8 @@ class _HomeScreenState extends State<HomeScreen>
   StreamSubscription? _callSub;
   String? _myUserId;
   bool _incomingCallOpen = false;
+  String? _myProfilePic;
+  String? _myProfileName;
 
   // ── Feed state ────────────────────────────────────
   final List<PostModel> _posts       = [];
@@ -136,6 +138,7 @@ class _HomeScreenState extends State<HomeScreen>
         if (!mounted) return;
         _listenForIncomingCalls();
         _loadFollowerSuggestions();
+        _loadMyProfile();
       });
       _loadFeed();
     });
@@ -175,6 +178,18 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Incoming call listener ─────────────────────────
   Future<void> _loadMyUserId() async {
     _myUserId = await AuthService.getCurrentUserId();
+  }
+
+  Future<void> _loadMyProfile() async {
+    try {
+      final profile = await UserService.getMyProfile();
+      if (profile != null && mounted) {
+        setState(() {
+          _myProfilePic = profile.picture;
+          _myProfileName = profile.name;
+        });
+      }
+    } catch (_) {}
   }
 
   bool get _showSuggestionsTab =>
@@ -413,13 +428,13 @@ class _HomeScreenState extends State<HomeScreen>
     _loadFeed(refresh: true);
   }
 
-  void _openScreen(BuildContext context, Widget screen) {
+  Future<dynamic> _openScreen(BuildContext context, Widget screen) {
     HapticFeedback.selectionClick();
     if (_navOpen) {
       setState(() => _navOpen = false);
       _navCtrl.reverse();
     }
-    Navigator.of(context).push(
+    return Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, animation, __) => screen,
         transitionDuration: const Duration(milliseconds: 280),
@@ -638,7 +653,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ? 2
                   : _posts.length + 2 + (_showSuggestionsTab ? 1 : 0),
               itemBuilder: (ctx, i) {
-                if (i == 0) return _StorySection(isDark: isDark);
+                if (i == 0) return _StorySection(isDark: isDark, myProfilePic: _myProfilePic, myName: _myProfileName);
                 if (i == 1 && _posts.isEmpty) {
                   if (_loadingFeed) {
                     return SizedBox(
@@ -820,12 +835,18 @@ class _HomeScreenState extends State<HomeScreen>
                   isHorizontal: _navHorizontal,
                   animation: _navCtrl,
                   itemScales: _itemScales, itemOpacities: _itemOpacities,
+                  userPicture: _myProfilePic,
+                  userName: _myProfileName,
                   onTap: (i) {
                     setState(() => _activeNav = i);
                     if (i == 1) _openScreen(context, ShotsScreen(dark: isDark));
                     if (i == 2) _openCreatePost(context, isDark);
                     if (i == 3) _openScreen(context, SearchScreen(dark: isDark));
-                    if (i == 4) _openScreen(context, ProfileScreen(dark: isDark));
+                    if (i == 4) {
+                      _openScreen(context, ProfileScreen(dark: isDark)).then((_) {
+                        _loadMyProfile();
+                      });
+                    }
                   })))),
 
           // Infinity button
@@ -1691,7 +1712,9 @@ class _BreakdownSection extends StatelessWidget {
 
 class _StorySection extends StatefulWidget {
   final bool isDark;
-  const _StorySection({required this.isDark});
+  final String? myProfilePic;
+  final String? myName;
+  const _StorySection({required this.isDark, this.myProfilePic, this.myName});
   @override
   State<_StorySection> createState() => _StorySectionState();
 }
@@ -1789,15 +1812,18 @@ class _StorySectionState extends State<_StorySection> {
             );
           }
           if (i == 0) {
-            // "Your Story" bubble
+            // "Your Story" bubble — prefer story picture, fallback to cached profile pic
+            final ownPicture = ownGroup.userPicture ?? widget.myProfilePic;
+            final ownInitial = ownGroup.userName.isNotEmpty
+                ? ownGroup.userName[0].toUpperCase()
+                : (widget.myName?.isNotEmpty == true ? widget.myName![0].toUpperCase() : 'Y');
             return Padding(
               padding: const EdgeInsets.only(right: 14),
               child: hasOwn
                   ? _StoryBubble(
                       name:     'Your Story',
-                      picture:  ownGroup.userPicture,
-                      initials: ownGroup.userName.isNotEmpty
-                          ? ownGroup.userName[0].toUpperCase() : 'Y',
+                      picture:  ownPicture,
+                      initials: ownInitial,
                       isOwn:    true,
                       hasStory: true,
                       seen:     false,
@@ -1808,8 +1834,8 @@ class _StorySectionState extends State<_StorySection> {
                     )
                   : _StoryBubble(
                       name:     'Your Story',
-                      picture:  null,
-                      initials: '+',
+                      picture:  widget.myProfilePic,
+                      initials: ownInitial,
                       isOwn:    true,
                       hasStory: false,
                       seen:     false,
@@ -1993,6 +2019,9 @@ class _StoryBubble extends StatelessWidget {
                             ? CachedNetworkImage(
                                 imageUrl:    picture!,
                                 fit:         BoxFit.cover,
+                                fadeInDuration: Duration.zero,
+                                fadeOutDuration: Duration.zero,
+                                placeholderFadeInDuration: Duration.zero,
                                 errorWidget: (_, __, ___) =>
                                     _AvatarContent(initials: initials,
                                         isOwnNoStory: isOwn && !hasStory, isDark: isDark),
@@ -2319,6 +2348,9 @@ class _FollowerSuggestionsTabState extends State<_FollowerSuggestionsTab> {
                             ? CachedNetworkImage(
                                 imageUrl: user.picture!,
                                 fit: BoxFit.cover,
+                                fadeInDuration: Duration.zero,
+                                fadeOutDuration: Duration.zero,
+                                placeholderFadeInDuration: Duration.zero,
                                 errorWidget: (_, __, ___) => Center(
                                   child: Text(
                                     _initial(user),
@@ -2506,6 +2538,9 @@ class _PostCardState extends State<PostCard> {
                     ? CachedNetworkImage(
                         imageUrl: p.userPicture!,
                         fit: BoxFit.cover,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        placeholderFadeInDuration: Duration.zero,
                         placeholder: (_, __) => Center(
                           child: Text(_initials(p.userName),
                             style: const TextStyle(color: Colors.white,
@@ -3216,12 +3251,16 @@ class _StaggeredNavbar extends StatelessWidget {
   final int  activeIndex;
   final Animation<double> animation;
   final List<Animation<double>> itemScales, itemOpacities;
+  final String? userPicture;
+  final String? userName;
   final ValueChanged<int> onTap;
   const _StaggeredNavbar({
     required this.isDark, required this.activeIndex,
     required this.isHorizontal,
     required this.animation,
     required this.itemScales, required this.itemOpacities,
+    this.userPicture,
+    this.userName,
     required this.onTap,
   });
   @override

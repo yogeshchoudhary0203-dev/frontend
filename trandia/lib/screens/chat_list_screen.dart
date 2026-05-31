@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/fcm_service.dart';
+import '../services/block_service.dart';
 import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
 import 'glass_common.dart';
@@ -31,7 +32,6 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   Set<String> _onlineUserIds = {};
   double? _swipeStartX;
   double? _swipeStartY;
-  bool _notificationsOn = true;
   final _chatScroll = ScrollController();
 
   // Filter state — persisted in SharedPreferences
@@ -65,16 +65,16 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
   Future<void> _initData() async {
     _myUserId = await AuthService.getCurrentUserId();
-    // Sync all notification prefs, then reflect messages flag in bell
+    // Sync all notification prefs (bell state is driven by ValueNotifier — no manual setState needed)
     await FcmService.reloadNotificationSettings();
-    if (mounted) {
-      setState(() => _notificationsOn = FcmService.chatNotificationsEnabled);
-    }
+    // Load server blocks BEFORE filter state so merge logic works correctly
+    await BlockService.instance.load();
     await Future.wait([
       ChatService().connectWebSocket(),
       _loadConversations(),
-      _loadFilterState(),
     ]);
+    // Filter state loaded after conversations so server blocks can be merged
+    await _loadFilterState();
 
     // Sync initial online state (WS may already be connected from before)
     _onlineUserIds = Set.from(ChatService().onlineUserIds);
@@ -121,11 +121,33 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   Future<void> _loadFilterState() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+
+    final lockedIds   = Set<String>.from(prefs.getStringList('chat_locked')   ?? []);
+    final archivedIds = Set<String>.from(prefs.getStringList('chat_archived') ?? []);
+    var   blockedIds  = Set<String>.from(prefs.getStringList('chat_blocked')  ?? []);
+
+    // Merge with server blocks — if a conversation's other participant is
+    // server-blocked, mark that conversation as blocked locally too.
+    final serverBlockedUserIds = BlockService.instance.blockedIds;
+    final myId = _myUserId ?? '';
+    if (serverBlockedUserIds.isNotEmpty && myId.isNotEmpty) {
+      for (final conv in _conversations) {
+        final other = conv.getOtherParticipant(myId);
+        if (serverBlockedUserIds.contains(other.id)) {
+          blockedIds.add(conv.id);
+        }
+      }
+    }
+
+    if (!mounted) return;
     setState(() {
-      _lockedIds = Set.from(prefs.getStringList('chat_locked') ?? []);
-      _archivedIds = Set.from(prefs.getStringList('chat_archived') ?? []);
-      _blockedIds = Set.from(prefs.getStringList('chat_blocked') ?? []);
+      _lockedIds   = lockedIds;
+      _archivedIds = archivedIds;
+      _blockedIds  = blockedIds;
     });
+
+    // Persist merged state
+    await prefs.setStringList('chat_blocked', blockedIds.toList());
   }
 
   Future<void> _saveFilterState() async {
@@ -163,9 +185,10 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
     _saveFilterState();
   }
 
-  void _toggleBlock(String convId) {
+  void _toggleBlock(String convId, String otherUserId) {
+    final isCurrentlyBlocked = _blockedIds.contains(convId);
     setState(() {
-      if (_blockedIds.contains(convId)) {
+      if (isCurrentlyBlocked) {
         _blockedIds.remove(convId);
       } else {
         _blockedIds.add(convId);
@@ -174,6 +197,19 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
       }
     });
     _saveFilterState();
+    // Server-side block/unblock
+    if (isCurrentlyBlocked) {
+      BlockService.instance.unblockUser(otherUserId).catchError((_) {
+        // rollback on failure
+        if (mounted) setState(() => _blockedIds.add(convId));
+        _saveFilterState();
+      });
+    } else {
+      BlockService.instance.blockUser(otherUserId).catchError((_) {
+        if (mounted) setState(() => _blockedIds.remove(convId));
+        _saveFilterState();
+      });
+    }
   }
 
   // ── Filtered list ─────────────────────────────────────────────
@@ -297,18 +333,20 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                             color: fg,
                             letterSpacing: -0.34)),
                     const Spacer(),
-                    GlassCircleButton(
-                      dark: widget.dark,
-                      icon: _notificationsOn
-                          ? Icons.notifications_outlined
-                          : Icons.notifications_off_outlined,
-                      iconSize: 18,
-                      onTap: () {
-                        HapticFeedback.heavyImpact();
-                        final newValue = !_notificationsOn;
-                        setState(() => _notificationsOn = newValue);
-                        FcmService.setChatNotificationsEnabled(newValue);
-                      },
+                    ValueListenableBuilder<bool>(
+                      valueListenable: FcmService.chatNotifsNotifier,
+                      builder: (_, notifsOn, __) => GlassCircleButton(
+                        dark: widget.dark,
+                        icon: notifsOn
+                            ? Icons.notifications_outlined
+                            : Icons.notifications_off_outlined,
+                        iconSize: 18,
+                        onTap: () {
+                          HapticFeedback.heavyImpact();
+                          // Toggle only the messages flag (not master)
+                          FcmService.setChatNotificationsEnabled(!FcmService.chatNotificationsEnabled);
+                        },
+                      ),
                     ),
                   ]),
                 ),
@@ -646,7 +684,10 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
               isOnline: _onlineUserIds.contains(conv.getOtherParticipant(_myUserId ?? '').id),
               onLock: () => _toggleLock(conv.id),
               onArchive: () => _toggleArchive(conv.id),
-              onBlock: () => _toggleBlock(conv.id),
+              onBlock: () => _toggleBlock(
+                conv.id,
+                conv.getOtherParticipant(_myUserId ?? '').id,
+              ),
             ),
           ),
         );

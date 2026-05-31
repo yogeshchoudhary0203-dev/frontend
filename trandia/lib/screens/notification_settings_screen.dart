@@ -27,19 +27,33 @@ class _NotificationSettingsScreenState
   void initState() {
     super.initState();
     _load();
+    // Keep messages toggle in sync if bell was changed from chat screen
+    FcmService.chatNotifsNotifier.addListener(_onChatNotifsChanged);
+  }
+
+  @override
+  void dispose() {
+    FcmService.chatNotifsNotifier.removeListener(_onChatNotifsChanged);
+    super.dispose();
+  }
+
+  void _onChatNotifsChanged() {
+    if (!mounted) return;
+    // chatNotifsNotifier = master && messages; reflect only messages toggle
+    setState(() => notifMessages = FcmService.chatNotificationsEnabled);
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      master = prefs.getBool('settings_notifications') ?? true;
-      notifFollows = prefs.getBool('settings_notif_follows') ?? true;
-      notifLikes = prefs.getBool('settings_notif_likes') ?? true;
-      notifComments = prefs.getBool('settings_notif_comments') ?? true;
-      notifMessages = prefs.getBool('settings_notif_messages') ?? true;
-      notifStories = prefs.getBool('settings_notif_stories') ?? true;
-      notifMentions = prefs.getBool('settings_notif_mentions') ?? true;
+      master        = prefs.getBool('settings_notifications')   ?? true;
+      notifFollows  = prefs.getBool('settings_notif_follows')   ?? true;
+      notifLikes    = prefs.getBool('settings_notif_likes')     ?? true;
+      notifComments = prefs.getBool('settings_notif_comments')  ?? true;
+      notifMessages = prefs.getBool('settings_notif_messages')  ?? true;
+      notifStories  = prefs.getBool('settings_notif_stories')   ?? true;
+      notifMentions = prefs.getBool('settings_notif_mentions')  ?? true;
     });
   }
 

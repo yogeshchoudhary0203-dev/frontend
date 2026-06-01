@@ -390,7 +390,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
           Positioned(
             left: 16,
             right: 16,
-            bottom: MediaQuery.paddingOf(context).bottom + 16,
+            bottom: MediaQuery.paddingOf(context).bottom + 8,
             child: _AnimatedFloatingSearchBar(dark: widget.dark),
           ),
         ]),
@@ -634,7 +634,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
     return ListView.builder(
       controller: _chatScroll,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(0, 0, 0, 84 + bottomInset),
+      padding: EdgeInsets.fromLTRB(0, 0, 0, 76 + bottomInset),
       itemCount: 1 + (list.isEmpty ? 1 : list.length),
       itemBuilder: (context, index) {
         if (index == 0) {
@@ -671,7 +671,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
           controller: _chatScroll,
           index: i,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
             child: _ChatRow(
               c: conv,
               i: i + 1,
@@ -1372,8 +1372,8 @@ class _ChatIslandScrollCard extends StatefulWidget {
 class _ChatIslandScrollCardState extends State<_ChatIslandScrollCard> {
   /// How many px from the bottom edge the collapse starts.
   static const double _collapseRange = 100;
-  /// Extra lift so cards collapse above the search bar (~56 bar + 16 gap).
-  static const double _pinLift = 90;
+  /// Extra lift so cards collapse above the search bar (~56 bar + 8 gap).
+  static const double _pinLift = 82;
 
   double _globalY = 0;
   double _itemHeight = 82;

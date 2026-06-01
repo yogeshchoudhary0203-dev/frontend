@@ -595,6 +595,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
 }
 
+/// How many px from the bottom the entry slide starts.
+const double _kEntryRange = 160;
+
 class _DynamicIslandScrollCard extends StatelessWidget {
   final ScrollController controller;
   final int index;
@@ -622,31 +625,48 @@ class _DynamicIslandScrollCard extends StatelessWidget {
             scrollY;
         final itemBottomY = itemY + _kCardHeight;
         final bottomStackY = screenHeight - bottomPad - _kIslandPinLift;
+
+        // ── Bottom-collapse: item approaching the bottom edge ──
         final distanceToBottomStack = bottomStackY - itemBottomY;
-        final raw = (1.0 - (distanceToBottomStack / _kIslandCollapseRange))
+        final collapseRaw = (1.0 - (distanceToBottomStack / _kIslandCollapseRange))
             .clamp(0.0, 1.0)
             .toDouble();
-        final t = _islandCurve(raw);
+        final collapseT = Curves.easeInCubic.transform(collapseRaw);
 
-        if (t == 0) return child!;
+        // ── Bottom-entry: item entering from below screen ──
+        final distanceFromBottom = screenHeight - itemY;
+        final entryRaw = (distanceFromBottom / _kEntryRange)
+            .clamp(0.0, 1.0)
+            .toDouble();
+        // entryRaw == 0 → fully off-screen below, 1 → fully entered
+        final entryT = Curves.easeOutCubic.transform(entryRaw);
 
-        final widthFactor = _lerp(1.0, 0.58, t);
-        final scaleY = _lerp(1.0, 0.70, t);
-        final drop = _lerp(0.0, 18.0, t);
-        final opacity = _lerp(1.0, 0.10, Curves.easeOut.transform(t));
+        // Combine both effects
+        final slideUp     = _lerp(28.0, 0.0, entryT);   // slides up from below
+        final entryOpacity = _lerp(0.0, 1.0, entryT);
+
+        final collapseWidthFactor = _lerp(1.0, 0.58, collapseT);
+        final collapseScaleY      = _lerp(1.0, 0.70, collapseT);
+        final collapseDrop        = _lerp(0.0, 18.0, collapseT);
+        final collapseOpacity     = _lerp(1.0, 0.10, Curves.easeOut.transform(collapseT));
+
+        final finalOpacity = (entryOpacity * collapseOpacity).clamp(0.0, 1.0);
+        final finalSlide   = slideUp + collapseDrop;
+
+        if (collapseT == 0 && entryT == 1.0) return child!;
 
         return ClipRect(
           child: Opacity(
-            opacity: opacity,
+            opacity: finalOpacity,
             child: Transform.translate(
-              offset: Offset(0, drop),
+              offset: Offset(0, finalSlide),
               child: Transform.scale(
                 alignment: Alignment.bottomCenter,
-                scaleY: scaleY,
+                scaleY: collapseScaleY,
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: FractionallySizedBox(
-                    widthFactor: widthFactor,
+                    widthFactor: collapseWidthFactor,
                     child: child,
                   ),
                 ),
@@ -659,10 +679,6 @@ class _DynamicIslandScrollCard extends StatelessWidget {
   }
 
   static double _lerp(double a, double b, double t) => a + (b - a) * t;
-
-  static double _islandCurve(double t) {
-    return Curves.easeOutCubic.transform(t);
-  }
 }
 
 /// Single notification card body.

@@ -12,6 +12,11 @@ const Duration _kTimeout    = Duration(seconds: 15);
 const Duration _kCacheTtl   = Duration(seconds: 90);
 const int      _kCacheMaxSz = 40;   // max entries before LRU eviction
 
+// ── In-memory token cache ────────────────────────────────────────────────────
+// Avoids hitting SharedPreferences (disk I/O) on every single API request.
+// Updated on every saveToken / clearToken call so it always stays in sync.
+String? _cachedToken;
+
 // ── In-memory GET response cache ────────────────────────────────────────────
 // Prevents re-fetching identical requests within 90 s (tab switches,
 // orientation changes, returning from sub-screens) without hitting the server.
@@ -43,19 +48,65 @@ void invalidateGetCache(String pathPrefix) {
 }
 
 class ApiService {
+  /// Returns the auth token — memory-first, falls back to SharedPreferences.
+  /// This avoids disk I/O on every single API call.
   static Future<String?> getToken() async {
+    if (_cachedToken != null) return _cachedToken;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token');
+    _cachedToken = prefs.getString('auth_token');
+    return _cachedToken;
   }
 
   static Future<void> saveToken(String token) async {
+    _cachedToken = token;                          // update memory immediately
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
   }
 
   static Future<void> clearToken() async {
+    _cachedToken = null;                           // clear memory immediately
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
+  }
+
+  /// Check token validity in memory — no disk I/O, no network call.
+  /// Returns the valid token string, or null if missing/expired.
+  static String? _validTokenSync() {
+    final t = _cachedToken;
+    if (t == null) return null;
+    try {
+      final parts = t.split('.');
+      if (parts.length != 3) return null;
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      ) as Map;
+      final exp = payload['exp'] as int?;
+      if (exp == null) return null;
+      // 30-second buffer — treat as expired slightly early to avoid edge cases
+      if (DateTime.now().millisecondsSinceEpoch ~/ 1000 >= exp - 30) return null;
+      return t;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Build auth headers for a request that requires authentication.
+  /// Throws [ApiException] immediately (no network round-trip) if the token
+  /// is missing or already expired — prevents 401 errors at the server.
+  static Future<Map<String, String>> _authHeaders() async {
+    // Warm the in-memory cache if this is the first call after a cold start
+    if (_cachedToken == null) await getToken();
+
+    final token = _validTokenSync();
+    if (token == null) {
+      // Token is missing or expired — clear it so isLoggedIn() returns false
+      await clearToken();
+      throw const ApiException('Session expired. Please sign in again.');
+    }
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
   }
 
   static Future<Map<String, dynamic>> post(
@@ -63,11 +114,9 @@ class ApiService {
     Map<String, dynamic> body, {
     bool requiresAuth = false,
   }) async {
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    if (requiresAuth) {
-      final token = await getToken();
-      if (token != null) headers['Authorization'] = 'Bearer $token';
-    }
+    final headers = requiresAuth
+        ? await _authHeaders()
+        : <String, String>{'Content-Type': 'application/json'};
     final http.Response response;
     try {
       response = await http
@@ -122,11 +171,9 @@ class ApiService {
       }
     }
 
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    if (requiresAuth) {
-      final token = await getToken();
-      if (token != null) headers['Authorization'] = 'Bearer $token';
-    }
+    final headers = requiresAuth
+        ? await _authHeaders()
+        : <String, String>{'Content-Type': 'application/json'};
     final http.Response response;
     try {
       response = await http
@@ -175,11 +222,9 @@ class ApiService {
     Map<String, dynamic> body, {
     bool requiresAuth = false,
   }) async {
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    if (requiresAuth) {
-      final token = await getToken();
-      if (token != null) headers['Authorization'] = 'Bearer $token';
-    }
+    final headers = requiresAuth
+        ? await _authHeaders()
+        : <String, String>{'Content-Type': 'application/json'};
     final http.Response response;
     try {
       response = await http
@@ -221,11 +266,9 @@ class ApiService {
     Map<String, dynamic>? body,
     bool requiresAuth = false,
   }) async {
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    if (requiresAuth) {
-      final token = await getToken();
-      if (token != null) headers['Authorization'] = 'Bearer $token';
-    }
+    final headers = requiresAuth
+        ? await _authHeaders()
+        : <String, String>{'Content-Type': 'application/json'};
     final http.Response response;
     try {
       response = await http
@@ -267,11 +310,9 @@ class ApiService {
     String path, {
     bool requiresAuth = false,
   }) async {
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    if (requiresAuth) {
-      final token = await getToken();
-      if (token != null) headers['Authorization'] = 'Bearer $token';
-    }
+    final headers = requiresAuth
+        ? await _authHeaders()
+        : <String, String>{'Content-Type': 'application/json'};
     final http.Response response;
     try {
       response = await http

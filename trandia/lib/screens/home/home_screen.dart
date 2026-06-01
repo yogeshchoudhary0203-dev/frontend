@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../../services/fcm_service.dart';
 import '../../services/chat_service.dart';
@@ -20,38 +17,24 @@ import '../notifications_screen.dart';
 import '../search_screen.dart';
 import '../shots_screen.dart';
 import '../profile_screen.dart';
-import '../user_profile_screen.dart' as user_profile;
 import '../chat_list_screen.dart';
 import '../create_post_screens.dart';
-import '../story_upload_screen.dart';
-import '../story_view_screen.dart';
-import '../../services/story_service.dart';
 import '../../services/block_service.dart';
-import '../comments_screen.dart';
-import '../liked_by_screen.dart';
 import '../../services/cryptography_service.dart';
-import '../../utils/share_helper.dart';
 import '../../utils/route_observer.dart';
+import '../../widgets/shared/home_shared.dart';
+import '../../widgets/feed/feed_post_card.dart';
+import '../../widgets/stories/story_bar.dart';
+import '../../widgets/home/home_nav_bar.dart';
+import '../../widgets/home/suggested_users.dart';
 
-/// Notifier shared between HomeScreen and _VideoCardState (same file).
-/// false = home route is covered → all video players must pause.
-final ValueNotifier<bool> _homeFeedActive = ValueNotifier(true);
+part 'skill_score.dart';
+part 'infinity_btn.dart';
+part 'trandia_island.dart';
 
-extension _ColorOp on Color {
-  Color op(double opacity) => withOpacity(opacity);
-}
-
-const double _kBtnSize  = 64.0;
-const double _kNavWidth = _kBtnSize;
-const double _kItemH    = 54.0;
-const double _kNavGap   = 6.0;
-const double _kIconSize = 20.0; // message icon — minor size reduction
-
-
-
-// ═════════════════════════════════════════════════════
+// -----------------------------------------------------
 //  HOME SCREEN
-// ═════════════════════════════════════════════════════
+// -----------------------------------------------------
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -72,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen>
   final List<Animation<double>> _itemScales    = [];
   final List<Animation<double>> _itemOpacities = [];
 
-  // ── Island expand / collapse ──────────────────────
+  // -- Island expand / collapse ----------------------
   late AnimationController _islandCtrl;
   bool _islandOpen = false;
 
@@ -80,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen>
   Rect   _islandRect   = Rect.zero;
   final  GlobalKey _islandKey = GlobalKey();
 
-  // ── Real-time notification listeners ─────────────
+  // -- Real-time notification listeners -------------
   StreamSubscription? _fcmNotifSub;
   StreamSubscription? _wsNotifSub;
   StreamSubscription? _callSub;
@@ -89,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen>
   String? _myProfilePic;
   String? _myProfileName;
 
-  // ── Feed state ────────────────────────────────────
+  // -- Feed state ------------------------------------
   final List<PostModel> _posts       = [];
   String?               _nextCursor;
   bool                  _loadingFeed    = false;
@@ -129,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FcmService.setupForHomeScreen();
       CryptographyService().ensurePublicKeyRegistered();
-      BlockService.instance.load(); // load block list once on home screen open
+      BlockService.instance.load();
       _loadUnreadCount();
       _loadUnreadNotifCount();
       ChatService().connectWebSocket();
@@ -150,12 +133,11 @@ class _HomeScreenState extends State<HomeScreen>
     appRouteObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
-  // ── RouteAware — pause videos when another screen is pushed on top ──────
   @override
-  void didPushNext() => _homeFeedActive.value = false;
+  void didPushNext() => homeFeedActive.value = false;
 
   @override
-  void didPopNext() => _homeFeedActive.value = true;
+  void didPopNext() => homeFeedActive.value = true;
 
   @override
   void didPush() {}
@@ -175,7 +157,6 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
-  // ── Incoming call listener ─────────────────────────
   Future<void> _loadMyUserId() async {
     _myUserId = await AuthService.getCurrentUserId();
   }
@@ -232,7 +213,6 @@ class _HomeScreenState extends State<HomeScreen>
           ..addAll(byId.values.take(10));
       });
     } catch (_) {
-      // Suggestions are optional; keep the feed unchanged if this fails.
     } finally {
       if (mounted) setState(() => _loadingSuggestions = false);
     }
@@ -271,7 +251,6 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
-  // ── Feed loading ──────────────────────────────────
   Future<void> _loadFeed({bool refresh = false}) async {
     if (_loadingFeed) return;
     if (!refresh && _nextCursor == null && _posts.isNotEmpty) return;
@@ -327,31 +306,18 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  // 🔔 Load unread follow notification count from backend
-  Future<void> _loadUnreadNotifCount() async {
-    // We count unread items from the already-loaded API response, but since
-    // we don't want a full fetch here we rely on real-time updates + island open.
-    // When the island opens, NotificationsScreen fetches and resets state.
-    // This method is a no-op placeholder kept for future REST polling.
-  }
+  Future<void> _loadUnreadNotifCount() async {}
 
-  // ── FIX: Listen for new notifications in real-time so the island badge updates ──
-  // Two channels:
-  //  1. Firebase foreground message (type=follow) → increment badge
-  //  2. WebSocket notification event               → increment badge
   void _listenForNewNotifications() {
-    // Channel 1: FCM foreground
     _fcmNotifSub = FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
       final msgType = msg.data['type'] as String?;
       if (msgType == 'follow') {
         if (mounted && !_islandOpen) {
-          // Island is closed — user hasn't seen this yet → bump badge
           setState(() => _unreadNotifs++);
         }
       }
     });
 
-    // Channel 2: WebSocket notification stream
     _wsNotifSub = ChatService().notificationStream.listen((data) {
       final type = data['type'] as String?;
       if (type == 'follow' || type == 'notification') {
@@ -362,7 +328,6 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
-  // 🔴 Load unread conversation count
   Future<void> _loadUnreadCount() async {
     try {
       final myUserId = await AuthService.getCurrentUserId();
@@ -560,10 +525,10 @@ class _HomeScreenState extends State<HomeScreen>
   void _openIsland() {
     _captureIslandRect();
     HapticFeedback.mediumImpact();
-    _homeFeedActive.value = false; // pause all background videos
+    homeFeedActive.value = false;
     setState(() {
       _islandOpen = true;
-      _unreadNotifs = 0;  // ← user is now viewing notifications
+      _unreadNotifs = 0;
     });
     _islandCtrl.forward(from: 0);
   }
@@ -573,7 +538,7 @@ class _HomeScreenState extends State<HomeScreen>
     _islandCtrl.reverse().then((_) {
       if (mounted) {
         setState(() => _islandOpen = false);
-        _homeFeedActive.value = true; // resume videos after panel closes
+        homeFeedActive.value = true;
       }
     });
   }
@@ -635,7 +600,7 @@ class _HomeScreenState extends State<HomeScreen>
         Positioned.fill(child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
           child: Container(
-              color: (isDark ? Colors.black : Colors.white).op(0.1)),
+              color: (isDark ? Colors.black : Colors.white).withOpacity(0.1)),
         )),
 
         Positioned.fill(
@@ -647,13 +612,13 @@ class _HomeScreenState extends State<HomeScreen>
               controller: _scrollCtrl,
               physics: const BouncingScrollPhysics(
                   parent: AlwaysScrollableScrollPhysics()),
-              padding: EdgeInsets.only(top: topPad + 56, bottom: _navOpen ? _kBtnSize + _kNavGap + 30 : 0),
+              padding: EdgeInsets.only(top: topPad + 56, bottom: _navOpen ? kNavBtnSize + kNavGap + 30 : 0),
               cacheExtent: 1200,
               itemCount: _posts.isEmpty
                   ? 2
                   : _posts.length + 2 + (_showSuggestionsTab ? 1 : 0),
               itemBuilder: (ctx, i) {
-                if (i == 0) return _StorySection(isDark: isDark, myProfilePic: _myProfilePic, myName: _myProfileName);
+                if (i == 0) return StorySection(isDark: isDark, myProfilePic: _myProfilePic, myName: _myProfileName);
                 if (i == 1 && _posts.isEmpty) {
                   if (_loadingFeed) {
                     return SizedBox(
@@ -689,7 +654,7 @@ class _HomeScreenState extends State<HomeScreen>
                   );
                 }
                 if (_showSuggestionsTab && i == 4) {
-                  return _FollowerSuggestionsTab(
+                  return FollowerSuggestionsTab(
                     isDark: isDark,
                     users: _suggestedUsers,
                   );
@@ -737,7 +702,6 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ))),
 
-          // ── Island pill — now with unread notification badge ──
           Align(alignment: Alignment.topCenter,
             child: Padding(padding: const EdgeInsets.only(top: 8),
               child: GestureDetector(
@@ -746,7 +710,6 @@ class _HomeScreenState extends State<HomeScreen>
                   clipBehavior: Clip.none,
                   children: [
                     _TrandiaIsland(key: _islandKey, isDark: isDark),
-                    // ── NEW: Unread notification dot on island ──
                     if (_unreadNotifs > 0)
                       Positioned(
                         top: -4, right: -4,
@@ -789,8 +752,8 @@ class _HomeScreenState extends State<HomeScreen>
                   children: [
                     SizedBox(width: 30, height: 30,
                       child: Center(child: CustomPaint(
-                        size: const Size(_kIconSize, _kIconSize),
-                        painter: _EnvelopeIconPainter(isDark: isDark)))),
+                        size: const Size(kIconSize, kIconSize),
+                        painter: EnvelopeIconPainter(isDark: isDark)))),
                     if (_totalUnread > 0)
                       Positioned(
                         right: -5, top: -5,
@@ -826,11 +789,11 @@ class _HomeScreenState extends State<HomeScreen>
 
           // Navbar
           Positioned(
-            bottom: _navHorizontal ? 30 : 30 + _kBtnSize + _kNavGap,
-            right: _navHorizontal ? 20 + _kBtnSize + _kNavGap : 20,
+            bottom: _navHorizontal ? 30 : 30 + kNavBtnSize + kNavGap,
+            right: _navHorizontal ? 20 + kNavBtnSize + kNavGap : 20,
             child: AnimatedBuilder(animation: _navCtrl,
               builder: (_, __) => IgnorePointer(ignoring: !_navOpen,
-                child: _StaggeredNavbar(
+                child: StaggeredNavbar(
                   isDark: isDark, activeIndex: _activeNav,
                   isHorizontal: _navHorizontal,
                   animation: _navCtrl,
@@ -860,7 +823,7 @@ class _HomeScreenState extends State<HomeScreen>
             )),
         ])),
 
-        // ── Dynamic Island expand overlay ──────────────────
+        // -- Dynamic Island expand overlay ------------------
         if (_islandOpen)
           Positioned.fill(
             child: _IslandNotificationOverlay(

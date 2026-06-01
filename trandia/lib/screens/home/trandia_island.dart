@@ -1,12 +1,11 @@
-part of 'home_screen.dart';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import '../notifications_screen.dart';
+import '../../widgets/shared/home_shared.dart';
 
-// ═════════════════════════════════════════════════════
-//  TRANDIA ISLAND + NOTIFICATION OVERLAY
-// ═════════════════════════════════════════════════════
-
-class _TrandiaIsland extends StatelessWidget {
+class TrandiaIsland extends StatelessWidget {
   final bool isDark;
-  const _TrandiaIsland({super.key, required this.isDark});
+  const TrandiaIsland({super.key, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -28,19 +27,20 @@ class _TrandiaIsland extends StatelessWidget {
   }
 }
 
-class _IslandNotificationOverlay extends StatefulWidget {
+class IslandNotificationOverlay extends StatefulWidget {
   final Rect islandRect;
   final AnimationController controller;
   final bool isDark;
   final VoidCallback onClose;
-  const _IslandNotificationOverlay({
+  const IslandNotificationOverlay({
+    super.key,
     required this.islandRect, required this.controller, required this.isDark, required this.onClose,
   });
   @override
-  State<_IslandNotificationOverlay> createState() => _IslandNotificationOverlayState();
+  State<IslandNotificationOverlay> createState() => _IslandNotificationOverlayState();
 }
 
-class _IslandNotificationOverlayState extends State<_IslandNotificationOverlay> {
+class _IslandNotificationOverlayState extends State<IslandNotificationOverlay> {
   double _dragY    = 0;
   bool   _dragging = false;
 
@@ -124,16 +124,13 @@ class _IslandNotificationOverlayState extends State<_IslandNotificationOverlay> 
   }
 
   static double _expandCurve(double t) => Curves.fastEaseInToSlowEaseOut.transform(t);
-
   static double _fillCurve(double t) {
     final v = ((t - 0.08) / 0.58).clamp(0.0, 1.0);
     return Curves.easeOutCubic.transform(v.toDouble());
   }
-
   static double _contentCurve(double t) {
     final v = ((t - 0.16) / 0.46).clamp(0.0, 1.0);
     return Curves.easeOutCubic.transform(v.toDouble());
   }
-
   static double _blurCurve(double t) => Curves.easeOutCubic.transform(t);
 }

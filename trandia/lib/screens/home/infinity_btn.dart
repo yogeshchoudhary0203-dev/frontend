@@ -1,21 +1,21 @@
-part of 'home_screen.dart';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../widgets/shared/home_shared.dart';
 
-// ═════════════════════════════════════════════════════
-//  INFINITY BUTTON + ORB + PLUS PAINTER
-// ═════════════════════════════════════════════════════
-
-class _InfinityBtn extends StatefulWidget {
+class InfinityBtn extends StatefulWidget {
   final bool isDark, isOpen;
   final VoidCallback onTap, onLongPress, onDoubleTap;
-  const _InfinityBtn({
+  const InfinityBtn({
+    super.key,
     required this.isDark, required this.isOpen,
     required this.onTap, required this.onLongPress, required this.onDoubleTap,
   });
   @override
-  State<_InfinityBtn> createState() => _InfinityBtnState();
+  State<InfinityBtn> createState() => _InfinityBtnState();
 }
 
-class _InfinityBtnState extends State<_InfinityBtn> with SingleTickerProviderStateMixin {
+class _InfinityBtnState extends State<InfinityBtn> with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _scale;
 
@@ -51,19 +51,4 @@ class _InfinityBtnState extends State<_InfinityBtn> with SingleTickerProviderSta
                 boxShadow: [BoxShadow(color: Colors.black.op(0.22), blurRadius: 12, offset: const Offset(0, 4))]),
               child: ClipOval(child: Image.asset('assets/icons/app_icon.png', fit: BoxFit.cover, alignment: Alignment.center))))))));
   }
-}
-
-class _Orb extends StatelessWidget {
-  final Color color;
-  final double size;
-  final double? top, bottom, left, right;
-  const _Orb({required this.color, required this.size, this.top, this.bottom, this.left, this.right});
-
-  @override
-  Widget build(BuildContext context) => Positioned(
-    top: top, bottom: bottom, left: left, right: right,
-    child: Container(width: size, height: size,
-      decoration: BoxDecoration(shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [color, color.op(0.0)]))),
-  );
 }

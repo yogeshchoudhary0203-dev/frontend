@@ -1,8 +1,18 @@
-part of 'home_screen.dart';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
+import '../../services/post_service.dart';
+import '../../widgets/shared/home_shared.dart';
 
-// ═════════════════════════════════════════════════════
-//  SKILL SCORE
-// ═════════════════════════════════════════════════════
+class SkillScoreScreen extends StatefulWidget {
+  final bool isDark;
+  final List<PostModel> posts;
+  const SkillScoreScreen({super.key, required this.isDark, required this.posts});
+
+  @override
+  State<SkillScoreScreen> createState() => _SkillScoreScreenState();
+}
 
 class _SkillScoreData {
   final int learnContentsWatched;
@@ -43,16 +53,7 @@ class _SkillScoreData {
   }
 }
 
-class _SkillScoreScreen extends StatefulWidget {
-  final bool isDark;
-  final List<PostModel> posts;
-  const _SkillScoreScreen({required this.isDark, required this.posts});
-
-  @override
-  State<_SkillScoreScreen> createState() => _SkillScoreScreenState();
-}
-
-class _SkillScoreScreenState extends State<_SkillScoreScreen> {
+class _SkillScoreScreenState extends State<SkillScoreScreen> {
   late _SkillScoreData _data = _scoreFromPosts(widget.posts);
   bool _loading = true;
 
@@ -184,8 +185,8 @@ class _SkillScoreScreenState extends State<_SkillScoreScreen> {
             ),
           ),
         )),
-        _Orb(color: (widget.isDark ? Colors.white : Colors.black).op(0.05), size: 300, top: 90, left: -70),
-        _Orb(color: (widget.isDark ? Colors.white : Colors.black).op(0.035), size: 260, bottom: 110, right: -55),
+        HomeOrb(color: (widget.isDark ? Colors.white : Colors.black).op(0.05), size: 300, top: 90, left: -70),
+        HomeOrb(color: (widget.isDark ? Colors.white : Colors.black).op(0.035), size: 260, bottom: 110, right: -55),
         Positioned.fill(child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
           child: Container(color: (widget.isDark ? Colors.black : Colors.white).op(0.10)),

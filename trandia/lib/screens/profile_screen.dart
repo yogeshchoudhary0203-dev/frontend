@@ -1981,7 +1981,8 @@ class _PostCardModalState extends State<_PostCardModal> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => BackdropFilter(
+      useRootNavigator: false,
+      builder: (sheetCtx) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           margin: const EdgeInsets.all(12),
@@ -2011,7 +2012,7 @@ class _PostCardModalState extends State<_PostCardModal> {
                   label: 'Delete Post',
                   color: Colors.redAccent,
                   onTap: () {
-                    Navigator.pop(context); // close sheet
+                    Navigator.of(sheetCtx).pop(); // close only the sheet
                     _confirmDelete();
                   },
                 ),
@@ -2020,7 +2021,7 @@ class _PostCardModalState extends State<_PostCardModal> {
                 label: 'Copy Link',
                 color: dark ? Colors.white : Colors.black87,
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.of(sheetCtx).pop();
                   HapticFeedback.selectionClick();
                 },
               ),
@@ -2075,14 +2076,14 @@ class _PostCardModalState extends State<_PostCardModal> {
     try {
       await PostService.instance.deletePost(widget.post.id);
       if (mounted) {
-        Navigator.of(context).pop(); // close card modal
+        Navigator.of(context).pop();
         widget.onDeleted?.call();
         HapticFeedback.mediumImpact();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not delete post. Try again.')),
+          SnackBar(content: Text('Delete failed: $e')),
         );
       }
     }

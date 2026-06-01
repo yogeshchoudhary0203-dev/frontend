@@ -196,6 +196,21 @@ class ChatService {
     _channel = null;
   }
 
+  /// Call on logout — closes every StreamController so listeners are released
+  /// and the Dart GC can collect the backing memory.
+  void dispose() {
+    disconnectWebSocket();
+    _messageCtrl.close();
+    _typingCtrl.close();
+    _reactionCtrl.close();
+    _notificationCtrl.close();
+    _callCtrl.close();
+    _presenceCtrl.close();
+    _deletedCtrl.close();
+    _onlineUserIds.clear();
+    _msgCache.clear();
+  }
+
   // ── Call Signaling ───────────────────────────────────────────
 
   /// Caller sends this to invite callee.

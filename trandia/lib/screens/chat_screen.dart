@@ -64,6 +64,8 @@ class _ChatScreenState extends State<ChatScreen>
   late StreamSubscription<ChatMessage> _messageSub;
   late StreamSubscription<Map<String, dynamic>> _typingSub;
   late StreamSubscription<Map<String, dynamic>> _reactionSub;
+  late StreamSubscription<Map<String, dynamic>> _deletedSub;
+  final Set<String> _animatingIds = {};
 
   final Set<String> _pendingIds = {};
   ChatMessage? _replyingTo;
@@ -165,6 +167,11 @@ class _ChatScreenState extends State<ChatScreen>
               _messages[pendingIndex] = _confirmedFromPending(pending, msg);
             } else if (_isDisplayableMessage(msg)) {
               _messages.insert(0, msg);
+              _animatingIds.add(msg.id);
+              // Clear animation flag after it plays
+              Future.delayed(const Duration(milliseconds: 400), () {
+                if (mounted) setState(() => _animatingIds.remove(msg.id));
+              });
             }
           }
           if (msg.senderId == _typingUserId) _typingUserId = null;
@@ -206,6 +213,16 @@ class _ChatScreenState extends State<ChatScreen>
         }
       });
     });
+
+    _deletedSub = ChatService().deletedStream.listen((event) {
+      if (!mounted) return;
+      if (event['conversation_id'] != widget.conversation.id) return;
+      final msgId = event['message_id'] as String;
+      setState(() {
+        _messages.removeWhere((m) => m.id == msgId);
+        _pendingIds.remove(msgId);
+      });
+    });
   }
 
   @override
@@ -218,6 +235,7 @@ class _ChatScreenState extends State<ChatScreen>
     _messageSub.cancel();
     _typingSub.cancel();
     _reactionSub.cancel();
+    _deletedSub.cancel();
     _typingTimer?.cancel();
     super.dispose();
   }
@@ -241,9 +259,14 @@ class _ChatScreenState extends State<ChatScreen>
     try {
       final msgs = await ChatService().getMessages(convId, limit: 30);
       if (!mounted) return;
-      final displayable = msgs.where(_isDisplayableMessage).toList();
+      final freshDisplayable = msgs.where(_isDisplayableMessage).toList();
+      final freshIds = freshDisplayable.map((m) => m.id).toSet();
+      // Preserve any optimistic (pending) messages not yet confirmed by server
+      final pendingMsgs = _messages
+          .where((m) => _pendingIds.contains(m.id) && !freshIds.contains(m.id))
+          .toList();
       setState(() {
-        _messages = displayable;
+        _messages = [...pendingMsgs, ...freshDisplayable];
         _isLoading = false;
         _hasError = false;
         _hasOlderMessages = msgs.length >= 30;
@@ -856,7 +879,8 @@ class _ChatScreenState extends State<ChatScreen>
 
                   // ValueKey stabilises element identity when messages are
                   // inserted at index 0 — prevents full list rebuild on each send.
-                  return Padding(
+                  final isAnimating = _animatingIds.contains(msg.id);
+                  Widget bubble = Padding(
                     key: ValueKey(msg.id),
                     padding: const EdgeInsets.only(bottom: 3),
                     child: SwipeToReply(
@@ -873,6 +897,21 @@ class _ChatScreenState extends State<ChatScreen>
                       ),
                     ),
                   );
+                  // Slide + fade in for newly received messages
+                  if (isAnimating) {
+                    bubble = TweenAnimationBuilder<double>(
+                      key: ValueKey('anim_${msg.id}'),
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, v, child) => Transform.translate(
+                        offset: Offset(isMe ? (1 - v) * 24 : (v - 1) * 24, 0),
+                        child: Opacity(opacity: v, child: child),
+                      ),
+                      child: bubble,
+                    );
+                  }
+                  return bubble;
                 },
               );
 

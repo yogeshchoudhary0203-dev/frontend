@@ -3364,9 +3364,9 @@ class _StaggeredNavbar extends StatelessWidget {
     
     final double navW   = isHorizontal ? _kNavWidth + (fullW - _kNavWidth) * progress : _kNavWidth;
     final double navH   = isHorizontal ? _kNavWidth : _kNavWidth + (fullH - _kNavWidth) * progress;
-
-    final Color  glass  = (isDark ? Colors.white : Colors.black).op(0.09);
-    final Color  border = (isDark ? Colors.white : Colors.black).op(0.16);
+    // Always use a dark/high-contrast background so white icons are clearly visible
+    final Color  glass  = isDark ? Colors.white.op(0.09) : Colors.black.op(0.85);
+    final Color  border = isDark ? Colors.white.op(0.16) : Colors.white.op(0.12);
 
     return FadeTransition(
       opacity: itemOpacities.last,
@@ -3446,8 +3446,7 @@ class _StaggeredNavbar extends StatelessWidget {
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         color: active
-                                            ? (isDark ? Colors.white.op(0.18)
-                                                      : Colors.black.op(0.12))
+                                            ? Colors.white.op(0.18)
                                             : Colors.transparent),
                                       child: Center(child: CustomPaint(
                                         size: const Size(24.0, 24.0),
@@ -3530,7 +3529,7 @@ class _NavIconPainter extends CustomPainter {
       {required this.index, required this.isDark, required this.active});
   @override
   void paint(Canvas canvas, Size size) {
-    final Color  base   = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final Color  base   = Colors.white; // Always white in both themes
     final Color  col    = active ? base : base.op(0.50);
     final double sw     = active ? 1.6 : 1.4;
     final Paint  stroke = Paint()..color = col..style = PaintingStyle.stroke

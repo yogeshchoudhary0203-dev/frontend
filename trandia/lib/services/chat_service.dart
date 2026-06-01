@@ -25,6 +25,7 @@ class ChatService {
   final _notificationCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callCtrl         = StreamController<Map<String, dynamic>>.broadcast();
   final _presenceCtrl     = StreamController<Map<String, dynamic>>.broadcast();
+  final _deletedCtrl      = StreamController<Map<String, dynamic>>.broadcast();
 
   // Tracks which user IDs are currently online (updated via WS presence events)
   final Set<String> _onlineUserIds = {};
@@ -45,6 +46,7 @@ class ChatService {
   Stream<Map<String, dynamic>>   get notificationStream => _notificationCtrl.stream;
   Stream<Map<String, dynamic>>   get callStream         => _callCtrl.stream;
   Stream<Map<String, dynamic>>   get presenceStream     => _presenceCtrl.stream;
+  Stream<Map<String, dynamic>>   get deletedStream      => _deletedCtrl.stream;
   Set<String> get onlineUserIds => Set.unmodifiable(_onlineUserIds);
   bool get isConnected => _channel != null;
 
@@ -100,15 +102,20 @@ class ChatService {
         case 'message':
           var msg = ChatMessage.fromJson(data['message'] as Map<String, dynamic>);
           msg = decryptMessage(msg);
-          // Keep in-memory cache in sync with incoming messages
           final cached = _msgCache[msg.conversationId];
           if (cached != null) {
             final exists = cached.any((m) => m.id == msg.id);
-            if (!exists && msg.text.isNotEmpty) {
-              cached.insert(0, msg);
-            }
+            if (!exists) cached.insert(0, msg);
           }
           _messageCtrl.add(msg);
+
+        case 'message_deleted':
+          final msgId = data['message_id'] as String? ?? '';
+          final convId = data['conversation_id'] as String? ?? '';
+          if (msgId.isNotEmpty) {
+            _msgCache[convId]?.removeWhere((m) => m.id == msgId);
+            _deletedCtrl.add({'message_id': msgId, 'conversation_id': convId});
+          }
 
         case 'typing':
           _typingCtrl.add({
@@ -469,7 +476,8 @@ class ChatService {
     for (var i = 0; i < data.length; i++) {
       final msg = ChatMessage.fromJson(data[i] as Map<String, dynamic>);
       messages.add(decryptMessage(msg));
-      if (i % 10 == 9) await Future<void>.delayed(Duration.zero);
+      // Yield every 5 items — keeps UI responsive during heavy RSA decryption
+      if (i % 5 == 4) await Future<void>.delayed(Duration.zero);
     }
     return messages;
   }

@@ -1351,16 +1351,13 @@ class _ChatRow extends StatelessWidget {
 }
 
 /// Smooth island-collapse animation for chat rows near the bottom.
+/// Cards gracefully shrink, fade, and stack as they approach the bottom edge,
+/// matching the notification screen's cascade-stack scroll effect.
 /// Stops well above the floating search bar so they never overlap.
-class _ChatIslandScrollCard extends StatelessWidget {
+class _ChatIslandScrollCard extends StatefulWidget {
   final ScrollController controller;
   final int index;
   final Widget child;
-
-  /// How many px from the bottom edge the collapse starts.
-  static const double _collapseRange = 80;
-  /// Extra lift so cards collapse above the search bar (~56 bar + 16 gap).
-  static const double _pinLift = 80;
 
   const _ChatIslandScrollCard({
     required this.controller,
@@ -1369,20 +1366,65 @@ class _ChatIslandScrollCard extends StatelessWidget {
   });
 
   @override
+  State<_ChatIslandScrollCard> createState() => _ChatIslandScrollCardState();
+}
+
+class _ChatIslandScrollCardState extends State<_ChatIslandScrollCard> {
+  /// How many px from the bottom edge the collapse starts.
+  static const double _collapseRange = 100;
+  /// Extra lift so cards collapse above the search bar (~56 bar + 16 gap).
+  static const double _pinLift = 90;
+
+  double _globalY = 0;
+  double _itemHeight = 82;
+  bool _measured = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Schedule a post-frame callback to get the correct position after layout
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measurePosition();
+    });
+  }
+
+  void _measurePosition() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && mounted) {
+      final newY = box.localToGlobal(Offset.zero).dy;
+      final newH = box.size.height;
+      if (newY != _globalY || newH != _itemHeight || !_measured) {
+        setState(() {
+          _globalY = newY;
+          _itemHeight = newH;
+          _measured = true;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
-      child: child,
+      animation: widget.controller,
+      child: widget.child,
       builder: (context, child) {
-        if (!controller.hasClients) return child!;
+        if (!widget.controller.hasClients) return child!;
 
+        // Re-measure position on every scroll frame for accuracy
         final box = context.findRenderObject() as RenderBox?;
-        if (box == null || !box.hasSize) return child!;
+        if (box != null && box.hasSize) {
+          _globalY = box.localToGlobal(Offset.zero).dy;
+          _itemHeight = box.size.height;
+          _measured = true;
+        }
+
+        // If not yet measured, render without animation
+        if (!_measured) return child!;
 
         final screenHeight = MediaQuery.sizeOf(context).height;
         final bottomPad = MediaQuery.paddingOf(context).bottom;
-        final globalY = box.localToGlobal(Offset.zero).dy;
-        final itemBottomY = globalY + box.size.height;
+        final itemBottomY = _globalY + _itemHeight;
         final bottomStackY = screenHeight - bottomPad - _pinLift;
         final distanceToBottom = bottomStackY - itemBottomY;
 
@@ -1393,14 +1435,14 @@ class _ChatIslandScrollCard extends StatelessWidget {
 
         if (t == 0) return child!;
 
-        final widthFactor = 1.0 + (0.58 - 1.0) * t;
-        final scaleY = 1.0 + (0.70 - 1.0) * t;
-        final drop = 18.0 * t;
-        final opacity = (1.0 + (0.10 - 1.0) * Curves.easeOut.transform(t)).clamp(0.0, 1.0);
+        final widthFactor = _lerp(1.0, 0.58, t);
+        final scaleY = _lerp(1.0, 0.70, t);
+        final drop = _lerp(0.0, 18.0, t);
+        final opacity = _lerp(1.0, 0.10, Curves.easeOut.transform(t));
 
         return ClipRect(
           child: Opacity(
-            opacity: opacity,
+            opacity: opacity.clamp(0.0, 1.0),
             child: Transform.translate(
               offset: Offset(0, drop),
               child: Transform.scale(
@@ -1420,6 +1462,8 @@ class _ChatIslandScrollCard extends StatelessWidget {
       },
     );
   }
+
+  static double _lerp(double a, double b, double t) => a + (b - a) * t;
 }
 
 class _AnimatedFloatingSearchBar extends StatefulWidget {

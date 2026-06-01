@@ -108,7 +108,7 @@ IconData _kindIcon(NfKind k) {
 }
 
 /// Fixed item height so card sizing stays consistent.
-const double _kCardHeight = 76;
+const double _kCardHeight = 66;
 const double _kCardGap    = 10;
 const double _kListStartY = 112; // header(48) + 12 + chips(30) + 22 spacing
 const double _kIslandCollapseRange = 80;
@@ -754,7 +754,7 @@ class _NfCardInnerState extends State<_NfCardInner> {
       onTap: _openProfile,
       child: GlassSurface(
       dark: dark, radius: 999,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       blurSigma: 44,
       bgColors: dark
           ? [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)]
@@ -764,24 +764,6 @@ class _NfCardInnerState extends State<_NfCardInner> {
           : Colors.white.withOpacity(0.85),
       borderWidth: 0.5,
       child: Row(children: [
-        // ── Unread indicator dot ──────────────────────────────────────────
-        // Rendered as a simple circle INSIDE the Row (not Positioned).
-        // We use a tiny animated dot on the very left.
-        if (n.unread) ...[
-          Container(
-            width: 6,
-            height: 6,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: dark ? Colors.white : const Color(0xFF0A0A0A),
-            ),
-          ),
-        ] else ...[
-          // Spacer so layout stays consistent when there's no dot
-          const SizedBox(width: 14),
-        ],
-
         // ── Avatar + kind chip ────────────────────────────────────────────
         SizedBox(width: 44, height: 44, child: Stack(clipBehavior: Clip.none, children: [
           UserAvatar(

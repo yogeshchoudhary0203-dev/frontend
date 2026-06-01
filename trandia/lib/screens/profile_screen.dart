@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import 'followers_screen(1).dart';
 import 'setting_screen.dart';
+import 'creator_profile_screen.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../services/location_service.dart';
@@ -93,6 +94,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   bool _isUpdatingLocation = false;
   bool _isPrivateAccount = false;
+  String _accountType = '';
   List<String> _platformOrder = ['snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'];
 
   // Post grid pagination
@@ -146,6 +148,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _profile = profile;
           _isLoading = false;
           _isPrivateAccount = accountType == 'Private';
+          _accountType = accountType;
         });
         if (profile != null) _loadPosts(profile.id);
       }
@@ -323,6 +326,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_profile != null && ['Business', 'Creator', 'Professional'].contains(_accountType)) {
+      return CreatorProfileScreen(
+        dark: widget.dark,
+        displayName: _profile!.name,
+        handle: _profile!.username,
+        title: '$_accountType Account',
+        bio: _profile!.bio ?? '',
+        followers: _profile!.followersCount.toString(),
+        following: _profile!.followingCount.toString(),
+        posts: _userPosts.length.toString(),
+        postCount: _userPosts.length,
+        avatarUrl: _profile!.picture ?? '',
+        owner: true,
+      );
+    }
+
     final dark = widget.dark;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);

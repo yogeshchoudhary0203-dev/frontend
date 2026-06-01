@@ -2467,6 +2467,19 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
     duration: const Duration(milliseconds: 250),
   );
   Animation<Matrix4>? _anim;
+  bool _showHeart = false;
+
+  void _handleDoubleTap() {
+    setState(() => _showHeart = true);
+    if (!widget.post.isLiked) {
+      widget.onLike();
+    }
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        setState(() => _showHeart = false);
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -2597,40 +2610,73 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
           ])),
 
         // ── Media ────────────────────────────────────
-        p.isVideo
-            ? _VideoCard(
-                post: p,
-                isDark: dark,
-                onLearnWatched: widget.onLearnWatched,
-              )
-            : AspectRatio(aspectRatio: p.aspectRatio,
-                child: InteractiveViewer(
-                  transformationController: _transformCtrl,
-                  onInteractionStart: _onInteractionStart,
-                  onInteractionEnd: _onInteractionEnd,
-                  clipBehavior: Clip.none,
-                  panEnabled: false,
-                  boundaryMargin: const EdgeInsets.all(double.infinity),
-                  minScale: 1.0,
-                  maxScale: 4.0,
-                  child: Stack(fit: StackFit.expand, children: [
-                    CachedNetworkImage(
-                      imageUrl: p.mediaUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        color: (dark ? Colors.white : Colors.black).withOpacity(0.05)),
-                      errorWidget: (_, __, ___) => Container(
-                        color: (dark ? Colors.white : Colors.black).withOpacity(0.05),
-                        child: Icon(Icons.broken_image_outlined,
-                          color: (dark ? Colors.white : Colors.black).withOpacity(0.25))),
+        GestureDetector(
+          onDoubleTap: _handleDoubleTap,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              p.isVideo
+                  ? _VideoCard(
+                      post: p,
+                      isDark: dark,
+                      onLearnWatched: widget.onLearnWatched,
+                    )
+                  : AspectRatio(aspectRatio: p.aspectRatio,
+                      child: InteractiveViewer(
+                        transformationController: _transformCtrl,
+                        onInteractionStart: _onInteractionStart,
+                        onInteractionEnd: _onInteractionEnd,
+                        clipBehavior: Clip.none,
+                        panEnabled: false,
+                        boundaryMargin: const EdgeInsets.all(double.infinity),
+                        minScale: 1.0,
+                        maxScale: 4.0,
+                        child: Stack(fit: StackFit.expand, children: [
+                          CachedNetworkImage(
+                            imageUrl: p.mediaUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              color: (dark ? Colors.white : Colors.black).withOpacity(0.05)),
+                            errorWidget: (_, __, ___) => Container(
+                              color: (dark ? Colors.white : Colors.black).withOpacity(0.05),
+                              child: Icon(Icons.broken_image_outlined,
+                                color: (dark ? Colors.white : Colors.black).withOpacity(0.25))),
+                          ),
+                          Container(decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Colors.black.op(0.18)]))),
+                        ]),
+                      )),
+              // Heart Animation Overlay
+              IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _showHeart ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  child: AnimatedScale(
+                    scale: _showHeart ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: _showHeart ? Curves.elasticOut : Curves.easeIn,
+                    child: const Icon(
+                      Icons.favorite,
+                      color: Colors.white,
+                      size: 100,
+                      shadows: [
+                        Shadow(
+                          blurRadius: 20.0,
+                          color: Colors.black45,
+                          offset: Offset(0, 5),
+                        )
+                      ],
                     ),
-                    Container(decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, Colors.black.op(0.18)]))),
-                  ]),
-                )),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
 
         // ── Actions ──────────────────────────────────
         Padding(padding: const EdgeInsets.fromLTRB(8, 8, 10, 0),

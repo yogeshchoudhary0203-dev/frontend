@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'api_service.dart';
+import 'chat_service.dart';
 import 'fcm_service.dart';
 import '../utils/web_utils.dart';
 
@@ -324,6 +325,7 @@ class AuthService {
 
   static Future<void> logout() async {
     try { await ApiService.clearToken(); } catch (_) {}
+    try { ChatService().dispose(); } catch (_) {}
     try { await FirebaseAuth.instance.signOut(); } catch (_) {}
     if (!kIsWeb) {
       try { await _googleSignIn.signOut(); } catch (_) {}

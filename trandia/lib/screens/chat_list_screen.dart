@@ -1350,9 +1350,9 @@ class _ChatRow extends StatelessWidget {
   }
 }
 
-/// Smooth island-collapse animation for chat rows near the bottom.
-/// Cards gracefully shrink, fade, and stack as they approach the bottom edge,
-/// matching the notification screen's cascade-stack scroll effect.
+/// Smooth bottom-entry animation for chat rows.
+/// Cards slide in from the bottom and collapse/stack as they reach the bottom edge,
+/// giving a natural feel when scrolling down.
 /// Stops well above the floating search bar so they never overlap.
 class _ChatIslandScrollCard extends StatefulWidget {
   final ScrollController controller;
@@ -1371,9 +1371,11 @@ class _ChatIslandScrollCard extends StatefulWidget {
 
 class _ChatIslandScrollCardState extends State<_ChatIslandScrollCard> {
   /// How many px from the bottom edge the collapse starts.
-  static const double _collapseRange = 100;
-  /// Extra lift so cards collapse above the search bar (~56 bar + 8 gap).
-  static const double _pinLift = 82;
+  static const double _collapseRange = 120;
+  /// How many px from the bottom edge the entry animation starts.
+  static const double _entryRange = 160;
+  /// Extra lift so cards collapse above the search bar (~56 bar + 8 gap + safe area).
+  static const double _pinLift = 88;
 
   double _globalY = 0;
   double _itemHeight = 82;
@@ -1382,7 +1384,6 @@ class _ChatIslandScrollCardState extends State<_ChatIslandScrollCard> {
   @override
   void initState() {
     super.initState();
-    // Schedule a post-frame callback to get the correct position after layout
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _measurePosition();
     });
@@ -1419,39 +1420,55 @@ class _ChatIslandScrollCardState extends State<_ChatIslandScrollCard> {
           _measured = true;
         }
 
-        // If not yet measured, render without animation
         if (!_measured) return child!;
 
         final screenHeight = MediaQuery.sizeOf(context).height;
         final bottomPad = MediaQuery.paddingOf(context).bottom;
+        final itemTopY = _globalY;
         final itemBottomY = _globalY + _itemHeight;
         final bottomStackY = screenHeight - bottomPad - _pinLift;
-        final distanceToBottom = bottomStackY - itemBottomY;
 
-        final raw = (1.0 - (distanceToBottom / _collapseRange))
+        // ── Bottom-collapse: item approaching the bottom edge ──
+        final distanceToBottom = bottomStackY - itemBottomY;
+        final collapseRaw = (1.0 - (distanceToBottom / _collapseRange))
             .clamp(0.0, 1.0)
             .toDouble();
-        final t = Curves.easeOutCubic.transform(raw);
+        final collapseT = Curves.easeInCubic.transform(collapseRaw);
 
-        if (t == 0) return child!;
+        // ── Bottom-entry: item entering from below screen ──
+        final distanceFromBottom = screenHeight - itemTopY;
+        final entryRaw = (distanceFromBottom / _entryRange)
+            .clamp(0.0, 1.0)
+            .toDouble();
+        // entryRaw == 0 → fully off-screen below, 1 → fully entered
+        final entryT = Curves.easeOutCubic.transform(entryRaw);
 
-        final widthFactor = _lerp(1.0, 0.58, t);
-        final scaleY = _lerp(1.0, 0.70, t);
-        final drop = _lerp(0.0, 18.0, t);
-        final opacity = _lerp(1.0, 0.10, Curves.easeOut.transform(t));
+        // Combine: entry wins when item is below screen, collapse wins near bottom edge
+        final slideUp = _lerp(28.0, 0.0, entryT);   // slides up from below
+        final entryOpacity = _lerp(0.0, 1.0, entryT);
+
+        final collapseWidthFactor = _lerp(1.0, 0.56, collapseT);
+        final collapseScaleY     = _lerp(1.0, 0.68, collapseT);
+        final collapseDrop       = _lerp(0.0, 16.0, collapseT);
+        final collapseOpacity    = _lerp(1.0, 0.08, Curves.easeOut.transform(collapseT));
+
+        final finalOpacity = (entryOpacity * collapseOpacity).clamp(0.0, 1.0);
+        final finalSlide   = slideUp + collapseDrop;
+
+        if (collapseT == 0 && entryT == 1.0) return child!;
 
         return ClipRect(
           child: Opacity(
-            opacity: opacity.clamp(0.0, 1.0),
+            opacity: finalOpacity,
             child: Transform.translate(
-              offset: Offset(0, drop),
+              offset: Offset(0, finalSlide),
               child: Transform.scale(
                 alignment: Alignment.bottomCenter,
-                scaleY: scaleY,
+                scaleY: collapseScaleY,
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: FractionallySizedBox(
-                    widthFactor: widthFactor,
+                    widthFactor: collapseWidthFactor,
                     child: child,
                   ),
                 ),

@@ -2458,14 +2458,25 @@ class PostCard extends StatefulWidget {
   State<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<PostCard> {
+class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin {
   bool _expanded = false;
   late int _commentsCount;
+  late final TransformationController _transformCtrl = TransformationController();
+  late final AnimationController _animCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 250),
+  );
+  Animation<Matrix4>? _anim;
 
   @override
   void initState() {
     super.initState();
     _commentsCount = widget.post.commentsCount;
+    _animCtrl.addListener(() {
+      if (_anim != null) {
+        _transformCtrl.value = _anim!.value;
+      }
+    });
   }
 
   @override
@@ -2474,6 +2485,27 @@ class _PostCardState extends State<PostCard> {
     if (oldWidget.post.commentsCount != widget.post.commentsCount) {
       _commentsCount = widget.post.commentsCount;
     }
+  }
+
+  @override
+  void dispose() {
+    _transformCtrl.dispose();
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onInteractionStart(ScaleStartDetails details) {
+    if (_animCtrl.isAnimating) {
+      _animCtrl.stop();
+    }
+  }
+
+  void _onInteractionEnd(ScaleEndDetails details) {
+    _anim = Matrix4Tween(
+      begin: _transformCtrl.value,
+      end: Matrix4.identity(),
+    ).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutBack));
+    _animCtrl.forward(from: 0);
   }
 
   Color _avatarColor(String userId) {
@@ -2573,7 +2605,12 @@ class _PostCardState extends State<PostCard> {
               )
             : AspectRatio(aspectRatio: p.aspectRatio,
                 child: InteractiveViewer(
+                  transformationController: _transformCtrl,
+                  onInteractionStart: _onInteractionStart,
+                  onInteractionEnd: _onInteractionEnd,
                   clipBehavior: Clip.none,
+                  panEnabled: false,
+                  boundaryMargin: const EdgeInsets.all(double.infinity),
                   minScale: 1.0,
                   maxScale: 4.0,
                   child: Stack(fit: StackFit.expand, children: [

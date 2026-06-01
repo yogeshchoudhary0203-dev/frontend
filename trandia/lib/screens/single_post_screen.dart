@@ -213,28 +213,11 @@ class _PostContent extends StatelessWidget {
         // ── Media ──────────────────────────────────────────────────
 post.isVideo
     ? _VideoView(post: post)
-    : InteractiveViewer(
-        clipBehavior: Clip.none,
-        panEnabled: true,
-        scaleEnabled: true,
-        minScale: 1.0,
-        maxScale: 4.0,
-        child: AspectRatio(
-          aspectRatio: post.aspectRatio,
-          child: CachedNetworkImage(
-            imageUrl: post.mediaUrl,
-            fit: BoxFit.cover,
-            placeholder: (_, __) => Container(
-                color: (dark ? Colors.white : Colors.black)
-                    .withOpacity(0.05)),
-            errorWidget: (_, __, ___) => Container(
-              color: (dark ? Colors.white : Colors.black)
-                  .withOpacity(0.05),
-              child: Icon(Icons.broken_image_outlined,
-                  color: sub.withOpacity(0.4)),
-            ),
-          ),
-        ),
+    : _ZoomableImage(
+        imageUrl: post.mediaUrl,
+        aspectRatio: post.aspectRatio,
+        dark: dark,
+        sub: sub,
       ),
 
         // ── Actions ────────────────────────────────────────────────
@@ -471,6 +454,97 @@ class _ErrorState extends StatelessWidget {
             ),
           ),
         ]),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Zoomable Image
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ZoomableImage extends StatefulWidget {
+  final String imageUrl;
+  final double aspectRatio;
+  final bool dark;
+  final Color sub;
+
+  const _ZoomableImage({
+    required this.imageUrl,
+    required this.aspectRatio,
+    required this.dark,
+    required this.sub,
+  });
+
+  @override
+  State<_ZoomableImage> createState() => _ZoomableImageState();
+}
+
+class _ZoomableImageState extends State<_ZoomableImage> with SingleTickerProviderStateMixin {
+  late final TransformationController _transformCtrl = TransformationController();
+  late final AnimationController _animCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 250),
+  );
+  Animation<Matrix4>? _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl.addListener(() {
+      if (_anim != null) {
+        _transformCtrl.value = _anim!.value;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _transformCtrl.dispose();
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onInteractionStart(ScaleStartDetails details) {
+    if (_animCtrl.isAnimating) {
+      _animCtrl.stop();
+    }
+  }
+
+  void _onInteractionEnd(ScaleEndDetails details) {
+    _anim = Matrix4Tween(
+      begin: _transformCtrl.value,
+      end: Matrix4.identity(),
+    ).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutBack));
+    _animCtrl.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InteractiveViewer(
+      transformationController: _transformCtrl,
+      onInteractionStart: _onInteractionStart,
+      onInteractionEnd: _onInteractionEnd,
+      clipBehavior: Clip.none,
+      panEnabled: false,
+      boundaryMargin: const EdgeInsets.all(double.infinity),
+      minScale: 1.0,
+      maxScale: 4.0,
+      child: AspectRatio(
+        aspectRatio: widget.aspectRatio,
+        child: CachedNetworkImage(
+          imageUrl: widget.imageUrl,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => Container(
+              color: (widget.dark ? Colors.white : Colors.black)
+                  .withOpacity(0.05)),
+          errorWidget: (_, __, ___) => Container(
+            color: (widget.dark ? Colors.white : Colors.black)
+                .withOpacity(0.05),
+            child: Icon(Icons.broken_image_outlined,
+                color: widget.sub.withOpacity(0.4)),
+          ),
+        ),
       ),
     );
   }

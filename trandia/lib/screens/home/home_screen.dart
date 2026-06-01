@@ -1,5 +1,4 @@
 ﻿import 'dart:async';
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -12,8 +11,6 @@ import '../../services/user_service.dart';
 import '../../models/chat_model.dart';
 import '../call_screens.dart';
 import '../../services/post_service.dart';
-import '../../services/api_service.dart';
-import '../notifications_screen.dart';
 import '../search_screen.dart';
 import '../shots_screen.dart';
 import '../profile_screen.dart';
@@ -27,10 +24,9 @@ import '../../widgets/feed/feed_post_card.dart';
 import '../../widgets/stories/story_bar.dart';
 import '../../widgets/home/home_nav_bar.dart';
 import '../../widgets/home/suggested_users.dart';
-
-part 'skill_score.dart';
-part 'infinity_btn.dart';
-part 'trandia_island.dart';
+import 'skill_score.dart';
+import 'infinity_btn.dart';
+import 'trandia_island.dart';
 
 // -----------------------------------------------------
 //  HOME SCREEN
@@ -502,7 +498,7 @@ class _HomeScreenState extends State<HomeScreen>
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            _SkillScoreScreen(
+            SkillScoreScreen(
           isDark: isDark,
           posts: _posts
               .where((post) => _watchedLearnPostIds.contains(post.id))
@@ -593,9 +589,9 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
         )),
-        _Orb(color: (isDark ? Colors.white : Colors.black).op(0.05),
+        HomeOrb(color: (isDark ? Colors.white : Colors.black).op(0.05),
             size: 300, top: 100, left: -50),
-        _Orb(color: (isDark ? Colors.white : Colors.black).op(0.03),
+        HomeOrb(color: (isDark ? Colors.white : Colors.black).op(0.03),
             size: 250, bottom: 150, right: -30),
         Positioned.fill(child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
@@ -709,7 +705,7 @@ class _HomeScreenState extends State<HomeScreen>
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    _TrandiaIsland(key: _islandKey, isDark: isDark),
+                    TrandiaIsland(key: _islandKey, isDark: isDark),
                     if (_unreadNotifs > 0)
                       Positioned(
                         top: -4, right: -4,
@@ -814,7 +810,7 @@ class _HomeScreenState extends State<HomeScreen>
 
           // Infinity button
           Positioned(bottom: 30, right: 20,
-            child: _InfinityBtn(
+            child: InfinityBtn(
               isDark: isDark,
               isOpen: _navOpen,
               onTap: _toggleNav,
@@ -826,7 +822,7 @@ class _HomeScreenState extends State<HomeScreen>
         // -- Dynamic Island expand overlay ------------------
         if (_islandOpen)
           Positioned.fill(
-            child: _IslandNotificationOverlay(
+            child: IslandNotificationOverlay(
               islandRect : _islandRect,
               controller : _islandCtrl,
               isDark     : isDark,

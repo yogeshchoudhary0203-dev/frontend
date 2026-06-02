@@ -191,6 +191,10 @@ class AuthService {
 
     final data = await ApiService.post('/auth/signup', body);
     await ApiService.saveToken(data['access_token'] as String);
+    final signupRefresh = data['refresh_token'] as String?;
+    if (signupRefresh != null && signupRefresh.isNotEmpty) {
+      await ApiService.saveRefreshToken(signupRefresh);
+    }
 
     // Clean up Firebase user (no longer needed after backend account creation)
     try { await FirebaseAuth.instance.currentUser?.delete(); } catch (_) {}
@@ -229,6 +233,10 @@ class AuthService {
 
     final data = await ApiService.post('/auth/login', body);
     await ApiService.saveToken(data['access_token'] as String);
+    final loginRefresh = data['refresh_token'] as String?;
+    if (loginRefresh != null && loginRefresh.isNotEmpty) {
+      await ApiService.saveRefreshToken(loginRefresh);
+    }
 
     final user = data['user'] as Map<String, dynamic>?;
     final firstName = user?['name']?.toString().split(' ').first ?? 'there';
@@ -263,6 +271,10 @@ class AuthService {
 
     final data = await ApiService.post('/auth/google/verify', body);
     await ApiService.saveToken(data['access_token'] as String);
+    final googleRefresh = data['refresh_token'] as String?;
+    if (googleRefresh != null && googleRefresh.isNotEmpty) {
+      await ApiService.saveRefreshToken(googleRefresh);
+    }
 
     final user = data['user'] as Map<String, dynamic>?;
     final firstName = user?['name']?.toString().split(' ').first ?? 'there';
@@ -275,16 +287,24 @@ class AuthService {
 
   // ── Session ────────────────────────────────────────────────────────────────
 
+  /// Returns true if the user has a valid session.
+  ///
+  /// Logic:
+  ///   • Valid access token  → true (fast path).
+  ///   • Expired access token but refresh token exists → true (will refresh on
+  ///     next API call — silentRefresh handles it transparently).
+  ///   • No tokens at all → false.
   static Future<bool> isLoggedIn() async {
     try {
       final token = await ApiService.getToken();
-      if (token == null) return false;
-      if (_isTokenExpired(token)) {
-        await ApiService.clearToken();
-        return false;
-      }
-      return true;
-    } catch (_) { return false; }
+      if (token != null && !_isTokenExpired(token)) return true;
+
+      // Access token missing or expired — check for a refresh token.
+      final refreshToken = await ApiService.getRefreshToken();
+      return refreshToken != null && refreshToken.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<String?> getUserId() async {
@@ -324,7 +344,19 @@ class AuthService {
   }
 
   static Future<void> logout() async {
-    try { await ApiService.clearToken(); } catch (_) {}
+    // Revoke the refresh token on the server so it cannot be reused.
+    try {
+      final refreshToken = await ApiService.getRefreshToken();
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await ApiService.post(
+          '/auth/logout',
+          {'refresh_token': refreshToken},
+        );
+      }
+    } catch (_) {
+      // Fire-and-forget — local cleanup always happens below.
+    }
+    try { await ApiService.clearAllTokens(); } catch (_) {}
     try { ChatService().dispose(); } catch (_) {}
     try { await FirebaseAuth.instance.signOut(); } catch (_) {}
     if (!kIsWeb) {

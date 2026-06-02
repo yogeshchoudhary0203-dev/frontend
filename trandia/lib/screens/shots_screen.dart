@@ -8,7 +8,7 @@
 //   • Hardcoded ShotData → real PostModel from API (getShotsFeed)
 //   • PageView.builder vertical swipe between shots
 //   • Volume HIGH (1.0) by default — user wants sound on by default
-//   • Battery: max 2 controllers alive (current + next preload only)
+//   • Battery: VideoControllerPool — exactly 3 controllers alive (prev/cur/next)
 //   • Data: on mobile data controller init deferred until visible
 //   • Switching Fun ↔ Learn disposes all controllers, loads fresh feed
 
@@ -24,6 +24,7 @@ import 'package:image_picker/image_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../services/post_service.dart';
 import '../services/user_service.dart';
+import '../services/video_controller_pool.dart';
 import '../models/quiz_model.dart';
 import '../services/quiz_service.dart';
 import '../services/auth_service.dart';
@@ -99,8 +100,10 @@ class _ShotsScreenState extends State<ShotsScreen>
   bool _error = false;
 
   // ── Video controller pool ─────────────────────────────────────
-  // Key = post index.  We keep ONLY current ± 1 alive (battery safe).
-  final Map<int, VideoPlayerController> _ctrls = {};
+  // Exactly 3 controllers alive at once (prev / cur / next).
+  // The pool is the sole owner of every VideoPlayerController.
+  late VideoControllerPool _pool;
+  bool _poolInitialized = false;
   int _curIdx = 0;
   bool _muted = false; // HIGH volume by default
 
@@ -129,6 +132,10 @@ class _ShotsScreenState extends State<ShotsScreen>
   String? _pendingQuizId;
   bool _quizBannerShown = false;
 
+  // ── Per-index progress listeners attached to pool controllers ─
+  // We store them so we can remove them before the pool recycles.
+  final Map<int, VoidCallback> _progressListeners = {};
+
   // ── Spinning audio disc (purely decorative) ───────────────────
   late final AnimationController _spin = AnimationController(
     vsync: this,
@@ -139,6 +146,25 @@ class _ShotsScreenState extends State<ShotsScreen>
   @override
   void initState() {
     super.initState();
+    _pool = VideoControllerPool(
+      urlResolver: (i) => _posts[i].mediaUrl,
+      itemCount: 0,
+      muted: _muted,
+      looping: true,
+      onReady: (idx, ctrl) {
+        if (!mounted) return;
+        // Attach quiz progress listener for learn feed.
+        if (_feed == ShotsFeed.learn && idx < _posts.length) {
+          _attachProgressListener(idx, ctrl);
+        }
+        // Auto-play if this is the current index.
+        if (idx == _curIdx) {
+          ctrl.setVolume(_muted ? 0.0 : 1.0);
+          ctrl.play();
+          setState(() {});
+        }
+      },
+    );
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _loadFeed(refresh: true),
     );
@@ -153,13 +179,13 @@ class _ShotsScreenState extends State<ShotsScreen>
 
   // ── RouteAware — pause current video when another screen covers this one ──
   @override
-  void didPushNext() => _ctrls[_curIdx]?.pause();
+  void didPushNext() => _pool.pauseAll();
 
   @override
   void didPopNext() {
     // Resume current video when returning from comments/profile etc.
-    if (!_muted) _ctrls[_curIdx]?.setVolume(1.0);
-    _ctrls[_curIdx]?.play();
+    _pool.setMuted(_muted);
+    _pool.resumeCurrent();
   }
 
   @override
@@ -174,7 +200,8 @@ class _ShotsScreenState extends State<ShotsScreen>
     _quizPollTimer?.cancel();
     _spin.dispose();
     _pageCtrl.dispose();
-    _disposeAll();
+    _pool.disposeAll();
+    _progressListeners.clear();
     super.dispose();
   }
 
@@ -197,7 +224,10 @@ class _ShotsScreenState extends State<ShotsScreen>
       if (!mounted) return;
 
       if (refresh) {
-        _disposeAll();
+        // Remove all progress listeners before pool disposes controllers.
+        _detachAllProgressListeners();
+        _pool.disposeAll();
+        _poolInitialized = false;
         _posts.clear();
         _liked.clear();
         _saved.clear();
@@ -205,7 +235,7 @@ class _ShotsScreenState extends State<ShotsScreen>
         _commentsCount.clear();
         _curIdx = 0;
         _expanded = false;
-        // Jump page controller back to top without animation
+        // Jump page controller back to top without animation.
         if (_pageCtrl.hasClients) {
           _pageCtrl.jumpToPage(0);
         }
@@ -215,16 +245,21 @@ class _ShotsScreenState extends State<ShotsScreen>
       _posts.addAll(result.posts);
       _nextCursor = result.nextCursor;
 
-      // Initialise liked state from real API data
+      // Update pool item count (must happen before warmUp).
+      _pool.updateItemCount(_posts.length);
+
+      // Initialise liked state from real API data.
       for (int i = startIdx; i < _posts.length; i++) {
         _liked[i] = _posts[i].isLiked;
       }
 
       setState(() {});
 
-      // Initialise first video immediately after a refresh
-      if (refresh && _posts.isNotEmpty) {
-        await _initCtrl(0);
+      // Warm up first video immediately after a refresh.
+      if (refresh && _posts.isNotEmpty && !_poolInitialized) {
+        _poolInitialized = true;
+        await _pool.warmUp(0);
+        if (mounted) setState(() {});
       }
     } catch (_) {
       if (mounted) setState(() => _error = true);
@@ -241,7 +276,7 @@ class _ShotsScreenState extends State<ShotsScreen>
     final wasLiked = _liked[idx] ?? post.isLiked;
     final nowLiked = !wasLiked;
 
-    // Optimistic update — show result immediately
+    // Optimistic update — show result immediately.
     setState(() {
       _liked[idx] = nowLiked;
       _likesDelta[idx] = (_likesDelta[idx] ?? 0) + (nowLiked ? 1 : -1);
@@ -254,7 +289,7 @@ class _ShotsScreenState extends State<ShotsScreen>
         await PostService.instance.unlikePost(post.id);
       }
     } catch (_) {
-      // API failed — revert optimistic update
+      // API failed — revert optimistic update.
       if (mounted) {
         setState(() {
           _liked[idx] = wasLiked;
@@ -275,7 +310,7 @@ class _ShotsScreenState extends State<ShotsScreen>
 
     HapticFeedback.mediumImpact();
 
-    // Optimistically update
+    // Optimistically update.
     setState(() {
       _followedUsers[targetId] = nowFollowing;
     });
@@ -288,7 +323,6 @@ class _ShotsScreenState extends State<ShotsScreen>
         success = await UserService.unfollowUser(targetId);
       }
       if (!success) {
-        // Revert on failure
         if (mounted) {
           setState(() {
             _followedUsers[targetId] = wasFollowing;
@@ -296,7 +330,6 @@ class _ShotsScreenState extends State<ShotsScreen>
         }
       }
     } catch (_) {
-      // Revert on exception
       if (mounted) {
         setState(() {
           _followedUsers[targetId] = wasFollowing;
@@ -305,57 +338,39 @@ class _ShotsScreenState extends State<ShotsScreen>
     }
   }
 
-  // ── Controller lifecycle ──────────────────────────────────────
+  // ── Quiz watch-progress tracking ─────────────────────────────
 
-  void _disposeAll() {
-    for (final c in _ctrls.values) {
-      c.dispose();
-    }
-    _ctrls.clear();
+  /// Attach a per-frame listener to [ctrl] for quiz threshold detection.
+  /// Only called in learn feed. Stored in [_progressListeners] so it can
+  /// be removed before the pool recycles the controller.
+  void _attachProgressListener(int idx, VideoPlayerController ctrl) {
+    // Remove any stale listener for this slot first.
+    _detachProgressListener(idx);
+
+    void listener() => _onVideoProgress(idx, ctrl, _posts[idx]);
+    _progressListeners[idx] = listener;
+    ctrl.addListener(listener);
   }
 
-  Future<void> _initCtrl(int idx) async {
-    if (_ctrls.containsKey(idx)) return;
-    if (idx < 0 || idx >= _posts.length) return;
-
-    final post = _posts[idx];
-    final ctrl = VideoPlayerController.networkUrl(
-      Uri.parse(post.mediaUrl),
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
-    );
-    _ctrls[idx] = ctrl;
-
-    try {
-      await ctrl.initialize();
-      if (!mounted) {
-        ctrl.dispose();
-        _ctrls.remove(idx);
-        return;
-      }
-      ctrl.setLooping(true);
-      ctrl.setVolume(_muted ? 0.0 : 1.0);
-
-      // Attach threshold listener for quiz watch tracking (learn feed only)
-      if (_feed == ShotsFeed.learn) {
-        ctrl.addListener(() => _onVideoProgress(idx, ctrl, post));
-      }
-
-      if (idx == _curIdx) {
-        ctrl.play();
-        _recordWatchStart(post.id);
-        setState(() {});
-      }
-    } catch (_) {
-      _ctrls.remove(idx);
-      if (mounted) setState(() {});
+  void _detachProgressListener(int idx) {
+    final listener = _progressListeners.remove(idx);
+    if (listener != null) {
+      _pool.controllerAt(idx)?.removeListener(listener);
     }
+  }
+
+  void _detachAllProgressListeners() {
+    for (final entry in _progressListeners.entries) {
+      _pool.controllerAt(entry.key)?.removeListener(entry.value);
+    }
+    _progressListeners.clear();
   }
 
   void _recordWatchStart(String videoId) {
     _watchStartTimes.putIfAbsent(videoId, () => DateTime.now());
   }
 
-  // Called ~every frame by VideoPlayerController listener
+  // Called ~every frame by VideoPlayerController listener.
   void _onVideoProgress(int idx, VideoPlayerController ctrl, PostModel post) {
     if (_feed != ShotsFeed.learn) return;
     if (!ctrl.value.isPlaying) return;
@@ -382,15 +397,8 @@ class _ShotsScreenState extends State<ShotsScreen>
         DateTime.now().difference(startTime).inMilliseconds / 1000.0;
 
     // Use actual elapsed time, but ensure it's at least 30% of video duration
-    // so short videos (10s) aren't blocked by a fixed minimum
-    final ctrl = _ctrls.values.isNotEmpty
-        ? _ctrls.entries
-              .firstWhere(
-                (e) => e.key == _posts.indexOf(post),
-                orElse: () => _ctrls.entries.first,
-              )
-              .value
-        : null;
+    // so short videos (10s) aren't blocked by a fixed minimum.
+    final ctrl = _pool.controllerAt(_posts.indexOf(post));
     final videoDurSec = (ctrl?.value.duration.inMilliseconds ?? 0) / 1000.0;
     final minRequired = videoDurSec > 0
         ? (videoDurSec * 0.3).clamp(2.0, 30.0)
@@ -450,63 +458,42 @@ class _ShotsScreenState extends State<ShotsScreen>
 
   void _autoOpenQuiz(QuizModel quiz) {
     if (!mounted) return;
-    // Pause current video while quiz is open
-    _ctrls[_curIdx]?.pause();
+    // Pause current video while quiz is open.
+    _pool.controllerAt(_curIdx)?.pause();
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => QuizScreen(quiz: quiz))).then((_) {
-      // Resume video when user comes back from quiz
+      // Resume video when user comes back from quiz.
       if (mounted) {
         _pendingQuizId = null;
         _quizBannerShown = false;
-        _ctrls[_curIdx]?.play();
+        _pool.resumeCurrent();
       }
     });
   }
 
-  /// Dispose controllers that are more than 1 page away (battery saving).
-  void _pruneDistant(int current) {
-    final toKill = _ctrls.keys.where((k) => (k - current).abs() > 1).toList();
-    for (final k in toKill) {
-      _ctrls[k]?.dispose();
-      _ctrls.remove(k);
-    }
-  }
+  // ── Page-change handler — delegates lifecycle to pool ────────
 
   void _onPageChanged(int idx) {
     HapticFeedback.selectionClick();
-
-    // Pause outgoing video
-    _ctrls[_curIdx]?.pause();
 
     setState(() {
       _curIdx = idx;
       _expanded = false;
     });
 
-    // Record watch start for new video (learn feed)
+    // Record watch start for new video (learn feed).
     if (_feed == ShotsFeed.learn && idx < _posts.length) {
       _recordWatchStart(_posts[idx].id);
     }
 
-    // Play or init incoming video
-    if (_ctrls.containsKey(idx)) {
-      _ctrls[idx]?.setVolume(_muted ? 0.0 : 1.0);
-      _ctrls[idx]?.play();
-    } else {
-      _initCtrl(idx);
-    }
+    // Hand off to the pool — it handles pause/play/preload/prune.
+    _pool.onPageChanged(idx);
 
-    // Preload next only (not 2+ ahead — saves data & battery)
-    _initCtrl(idx + 1);
-
-    // Dispose distant controllers
-    _pruneDistant(idx);
-
-    // Fetch more when 3 posts from the end
+    // Fetch more when 3 posts from the end.
     if (idx >= _posts.length - 3) _loadFeed();
 
-    // Track fun-feed watch count and nudge every 10 reels
+    // Track fun-feed watch count and nudge every 10 reels.
     if (_feed == ShotsFeed.fun) {
       _funReelCount++;
       if (_funReelCount % 10 == 0 && !_nudgePending) {
@@ -521,8 +508,9 @@ class _ShotsScreenState extends State<ShotsScreen>
   void _setFeed(ShotsFeed f) {
     if (f == _feed) return;
     HapticFeedback.selectionClick();
-    _ctrls[_curIdx]?.pause();
+    _pool.pauseAll();
     _quizPollTimer?.cancel();
+    _detachAllProgressListeners();
     setState(() {
       _feed = f;
       _expanded = false;
@@ -538,9 +526,7 @@ class _ShotsScreenState extends State<ShotsScreen>
 
   void _toggleMute() {
     setState(() => _muted = !_muted);
-    for (final c in _ctrls.values) {
-      c.setVolume(_muted ? 0.0 : 1.0);
-    }
+    _pool.setMuted(_muted);
   }
 
   Future<void> _openShotsCamera() async {
@@ -689,8 +675,8 @@ class _ShotsScreenState extends State<ShotsScreen>
   }
 
   Future<void> _showLearnNudge() async {
-    // Pause current video while dialog is up
-    _ctrls[_curIdx]?.pause();
+    // Pause current video while dialog is up.
+    _pool.controllerAt(_curIdx)?.pause();
 
     await showGeneralDialog<bool>(
       context: context,
@@ -711,14 +697,14 @@ class _ShotsScreenState extends State<ShotsScreen>
         },
         onSkip: () {
           Navigator.of(ctx).pop(false);
-          // Resume video and reset nudge flag so it fires again after next 10
-          _ctrls[_curIdx]?.play();
+          // Resume video and reset nudge flag so it fires again after next 10.
+          _pool.resumeCurrent();
           setState(() => _nudgePending = false);
         },
       ),
     );
 
-    // Safety: ensure flag is cleared if dialog dismissed any other way
+    // Safety: ensure flag is cleared if dialog dismissed any other way.
     if (mounted) setState(() => _nudgePending = false);
   }
 
@@ -727,7 +713,7 @@ class _ShotsScreenState extends State<ShotsScreen>
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).viewPadding.top;
     final hasPost = _posts.isNotEmpty;
-    // Build curData with adjusted likes count (reflects optimistic like/unlike)
+    // Build curData with adjusted likes count (reflects optimistic like/unlike).
     final curData = hasPost
         ? () {
             final p = _posts[_curIdx];
@@ -838,7 +824,7 @@ class _ShotsScreenState extends State<ShotsScreen>
   // ── Body: states + PageView ───────────────────────────────────
 
   Widget _buildBody() {
-    // Initial loading
+    // Initial loading.
     if (_loading && _posts.isEmpty) {
       return const Center(
         child: SizedBox(
@@ -852,7 +838,7 @@ class _ShotsScreenState extends State<ShotsScreen>
       );
     }
 
-    // Error
+    // Error.
     if (_error && _posts.isEmpty) {
       return Center(
         child: Column(
@@ -894,7 +880,7 @@ class _ShotsScreenState extends State<ShotsScreen>
       );
     }
 
-    // Empty (no videos in this section yet)
+    // Empty (no videos in this section yet).
     if (!_loading && _posts.isEmpty) {
       return Center(
         child: Column(
@@ -922,7 +908,7 @@ class _ShotsScreenState extends State<ShotsScreen>
       );
     }
 
-    // Real full-screen vertical PageView
+    // Real full-screen vertical PageView.
     return PageView.builder(
       controller: _pageCtrl,
       scrollDirection: Axis.vertical,
@@ -930,7 +916,8 @@ class _ShotsScreenState extends State<ShotsScreen>
       itemCount: _posts.length,
       itemBuilder: (_, i) {
         final post = _posts[i];
-        final ctrl = _ctrls[i];
+        // Read controller from the pool — null if not yet initialised.
+        final ctrl = _pool.controllerAt(i);
         final thumb = post.thumbnailUrl ?? post.mediaUrl;
         return _ShotVideoPage(controller: ctrl, thumbnailUrl: thumb);
       },
@@ -1175,9 +1162,8 @@ class _ShotVideoPage extends StatelessWidget {
               CachedNetworkImage(
                 imageUrl: thumbnailUrl!,
                 fit: BoxFit.cover,
-                memCacheWidth: 400, // cap in-memory decode size → less RAM
-                maxWidthDiskCache:
-                    400, // cap on-disk cached size → less storage
+                memCacheWidth: 400,
+                maxWidthDiskCache: 400,
                 placeholder: (_, __) => Container(color: Colors.black),
                 errorWidget: (_, __, ___) => Container(color: Colors.black),
               )

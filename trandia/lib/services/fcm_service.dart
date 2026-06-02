@@ -51,6 +51,11 @@ bool _mentionsEnabled  = true;
 typedef ConversationNavigator = void Function(String conversationId);
 ConversationNavigator? _onMessageTapped;
 
+/// Callback fired when a quiz_ready FCM data push arrives.
+/// Registered by QuizLoadingScreen and ShotsScreen while they're active;
+/// cleared on dispose so there are no stale navigations.
+void Function(String quizId)? _onQuizReady;
+
 // ── iOS notification details (reused) ─────────────────────────
 const _kIosDetails = DarwinNotificationDetails(
   presentAlert: true,
@@ -132,6 +137,12 @@ class FcmService {
   // ─────────────────────────────────────────────────────────────────────────
   static void registerMessageTapHandler(ConversationNavigator handler) {
     _onMessageTapped = handler;
+  }
+
+  /// Register a callback for quiz_ready FCM data pushes.
+  /// Pass null to deregister (call in dispose()).
+  static void setQuizReadyHandler(void Function(String quizId)? handler) {
+    _onQuizReady = handler;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -303,6 +314,16 @@ class FcmService {
       debugPrint('[FCM] onMessage type=$msgType title="${msg.notification?.title}"');
 
       if (msgType == 'welcome') return; // shown locally — no duplicate
+
+      // ── Quiz ready (data-only push, no visible notification) ──────────────
+      if (msgType == 'quiz_ready') {
+        final quizId = msg.data['quiz_id'] as String?;
+        debugPrint('[FCM] quiz_ready received quiz_id=$quizId');
+        if (quizId != null && quizId.isNotEmpty) {
+          _onQuizReady?.call(quizId);
+        }
+        return;
+      }
 
       // Master switch — all notifications off
       if (!_masterEnabled) {

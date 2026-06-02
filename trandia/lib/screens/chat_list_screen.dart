@@ -254,7 +254,13 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   Future<void> _loadConversations() async {
     if (mounted) setState(() { _hasError = false; });
     try {
-      final convs = await ChatService().getConversations();
+      // stale-while-revalidate: returns local cache immediately, then calls
+      // onRefreshed when fresh API data arrives so the UI updates silently.
+      final convs = await ChatService().getConversations(
+        onRefreshed: (fresh) {
+          if (mounted) setState(() { _conversations = fresh; });
+        },
+      );
       if (mounted) {
         setState(() {
           _conversations = convs;

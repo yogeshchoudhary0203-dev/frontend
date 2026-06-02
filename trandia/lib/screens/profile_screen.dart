@@ -15,7 +15,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import 'followers_screen(1).dart';
 import 'setting_screen.dart';
-import 'creator_profile_screen.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../services/location_service.dart';
@@ -122,35 +121,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _loadProfile() async {
+  Future<void> _loadProfile({bool forceRefresh = false}) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+
+    // ── Step 1: Read SharedPreferences (fast, local) ──────────────────────
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
+    final savedOrder = prefs.getStringList('social_platform_order');
+    if (savedOrder != null && savedOrder.isNotEmpty) {
+      final validPlatforms = {'snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'};
+      final loadedOrder = savedOrder.where((e) => validPlatforms.contains(e)).toList();
+      for (final p in validPlatforms) {
+        if (!loadedOrder.contains(p)) loadedOrder.add(p);
+      }
+      _platformOrder = loadedOrder;
+    }
+    final accountType = prefs.getString('settings_account_type') ?? '';
+
+    // ── Step 2: Render cached profile instantly (no loader flash) ─────────
+    final cached = UserService.cachedProfile;
+    if (cached != null && !forceRefresh) {
+      setState(() {
+        _profile = cached;
+        _accountType = accountType;
+        _isPrivateAccount = accountType == 'Private';
+        _isLoading = false;
+      });
+      // Load posts from ApiService cache (also fast — 90s TTL)
+      if (_userPosts.isEmpty) _loadPosts(cached.id);
+    } else {
+      // No cache — show loader
+      setState(() {
+        _isLoading = true;
+        _accountType = accountType;
+        _isPrivateAccount = accountType == 'Private';
+      });
+    }
+
+    // ── Step 3: Background refresh from network ───────────────────────────
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedOrder = prefs.getStringList('social_platform_order');
-      if (savedOrder != null && savedOrder.isNotEmpty) {
-        final validPlatforms = {'snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'};
-        final loadedOrder = savedOrder.where((e) => validPlatforms.contains(e)).toList();
-        for (final p in validPlatforms) {
-          if (!loadedOrder.contains(p)) loadedOrder.add(p);
-        }
-        _platformOrder = loadedOrder;
-      }
-      final accountType = prefs.getString('settings_account_type') ?? '';
-      // Set accountType immediately so creator screen switches without waiting for API
-      if (mounted) {
-        setState(() {
-          _isPrivateAccount = accountType == 'Private';
-          _accountType = accountType;
-        });
-      }
-      final profile = await UserService.getMyProfile();
-      if (mounted) {
+      final profile = await UserService.getMyProfile(forceRefresh: forceRefresh);
+      if (!mounted) return;
+      if (profile != null) {
         setState(() {
           _profile = profile;
+          _accountType = accountType;
+          _isPrivateAccount = accountType == 'Private';
           _isLoading = false;
         });
-        if (profile != null) _loadPosts(profile.id);
+        // Reload posts if we had no cache before, or on forced refresh
+        if (cached == null || forceRefresh) _loadPosts(profile.id);
+      } else {
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -203,7 +226,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } else {
       setState(() => _isUpdatingLocation = true);
       final success = await LocationService.requestAndSaveLocation(context);
-      if (success && mounted) await _loadProfile();
+      if (success && mounted) await _loadProfile(forceRefresh: true);
       if (mounted) setState(() => _isUpdatingLocation = false);
     }
   }
@@ -247,7 +270,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.pop(ctx);
                   setState(() => _isUpdatingLocation = true);
                   await UserService.updateLocationPrivacy(!isPublic);
-                  await _loadProfile();
+                  UserService.invalidateProfileCache();
+                  await _loadProfile(forceRefresh: true);
                   if (mounted) setState(() => _isUpdatingLocation = false);
                 },
               ),
@@ -261,7 +285,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.pop(ctx);
                   setState(() => _isUpdatingLocation = true);
                   final success = await LocationService.requestAndSaveLocation(context);
-                  if (success && mounted) await _loadProfile();
+                  if (success && mounted) await _loadProfile(forceRefresh: true);
                   if (mounted) setState(() => _isUpdatingLocation = false);
                 },
               ),
@@ -275,7 +299,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.pop(ctx);
                   setState(() => _isUpdatingLocation = true);
                   await UserService.removeLocation();
-                  await _loadProfile();
+                  UserService.invalidateProfileCache();
+                  await _loadProfile(forceRefresh: true);
                   if (mounted) setState(() => _isUpdatingLocation = false);
                 },
               ),
@@ -320,53 +345,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  bool get _isCreatorAccount =>
+      ['Business', 'Creator', 'Professional'].contains(_accountType);
+
   @override
   Widget build(BuildContext context) {
-    if (_profile != null && ['Business', 'Creator', 'Professional'].contains(_accountType)) {
-      return CreatorProfileScreen(
-        dark: widget.dark,
-        displayName: _profile!.name,
-        handle: _profile!.username,
-        title: '$_accountType Account',
-        bio: _profile!.bio ?? '',
-        followers: _profile!.followersCount.toString(),
-        following: _profile!.followingCount.toString(),
-        posts: _userPosts.length.toString(),
-        postCount: _userPosts.length,
-        avatarUrl: _profile!.picture ?? '',
-        owner: true,
-        userPosts: _userPosts,
-        postsLoading: _postsLoading,
-        myUserId: _profile!.id,
-        reach: '',
-        profileViews: '',
-        engagement: '',
-        onOpenSettings: () {
-          Navigator.of(context).push(
-            PageRouteBuilder(
-              pageBuilder: (_, animation, __) => SettingsScreen(dark: widget.dark),
-              transitionDuration: const Duration(milliseconds: 320),
-              reverseTransitionDuration: const Duration(milliseconds: 260),
-              transitionsBuilder: (_, animation, __, child) {
-                final curved = CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOutCubic,
-                  reverseCurve: Curves.easeInCubic,
-                );
-                return SlideTransition(
-                  position: Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero).animate(curved),
-                  child: FadeTransition(opacity: curved, child: child),
-                );
-              },
-            ),
-          ).then((_) => _loadProfile());
-        },
-        onPostDeleted: (postId) {
-          setState(() => _userPosts.removeWhere((p) => p.id == postId));
-        },
-      );
-    }
-
     final dark = widget.dark;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
@@ -506,7 +489,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           );
                                         },
                                       ),
-                                    ).then((_) => _loadProfile());
+                                    ).then((_) => _loadProfile(forceRefresh: true));
                                   },
                                 ),
                               ],
@@ -598,32 +581,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
 
-                          const SizedBox(height: 8),
-
-                          // TITLE CHIP
-                          Center(
-                            child: _TitleChip(dark: dark, muted: muted, fg: fg),
-                          ),
-
-                          // BIO
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
-                            child: Text(
-                              _profile?.bio?.isNotEmpty == true
-                                  ? _profile!.bio!
-                                  : 'Designer & art director.\n'
-                                      'Currently leading visual identity at Studio Atelier — '
-                                      'type, motion & quiet things.',
-                              textAlign: TextAlign.center,
-                              style: manrope(
-                                size: 13.5,
-                                weight: FontWeight.w500,
-                                color: muted,
-                                letterSpacing: -0.07,
-                                height: 1.55,
+                          // ACCOUNT TYPE CHIP (creator/business/professional only)
+                          if (_isCreatorAccount) ...[
+                            const SizedBox(height: 8),
+                            Center(
+                              child: _TitleChip(
+                                dark: dark,
+                                muted: muted,
+                                fg: fg,
+                                label: '$_accountType Account',
                               ),
                             ),
-                          ),
+                          ],
+
+                          // BIO
+                          if (_profile?.bio?.isNotEmpty == true)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
+                              child: Text(
+                                _profile!.bio!,
+                                textAlign: TextAlign.center,
+                                style: manrope(
+                                  size: 13.5,
+                                  weight: FontWeight.w500,
+                                  color: muted,
+                                  letterSpacing: -0.07,
+                                  height: 1.55,
+                                ),
+                              ),
+                            ),
+
+                          // CREATOR DASHBOARD CARD (only for creator/business/professional)
+                          if (_isCreatorAccount) ...[
+                            const SizedBox(height: 14),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: _CreatorDashboardCard(
+                                dark: dark,
+                                fg: fg,
+                                sub: sub,
+                                accountType: _accountType,
+                              ),
+                            ),
+                          ],
 
                           // SOCIAL LINKS
                           Padding(
@@ -1218,7 +1218,8 @@ class _TitleChip extends StatelessWidget {
   final bool dark;
   final Color muted;
   final Color fg;
-  const _TitleChip({required this.dark, required this.muted, required this.fg});
+  final String label;
+  const _TitleChip({required this.dark, required this.muted, required this.fg, this.label = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -1253,7 +1254,7 @@ class _TitleChip extends StatelessWidget {
               ),
               const SizedBox(width: 7),
               Text(
-                'Designer · Studio Atelier',
+                label,
                 style: manrope(
                   size: 12,
                   weight: FontWeight.w600,
@@ -2566,6 +2567,74 @@ class _OptionTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+// Creator Dashboard Card (shown only for creator/business/professional)
+// ───────────────────────────────────────────────────────────────
+class _CreatorDashboardCard extends StatelessWidget {
+  final bool dark;
+  final Color fg;
+  final Color sub;
+  final String accountType;
+  const _CreatorDashboardCard({
+    required this.dark,
+    required this.fg,
+    required this.sub,
+    required this.accountType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassSurface(
+      dark: dark,
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      blurSigma: 24,
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.black.withOpacity(0.06),
+            ),
+            child: Icon(Icons.insights_rounded, color: fg, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$accountType Dashboard',
+                  style: manrope(
+                    size: 14,
+                    weight: FontWeight.w800,
+                    color: fg,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Analytics coming soon',
+                  style: manrope(
+                    size: 12,
+                    weight: FontWeight.w500,
+                    color: sub,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: sub, size: 20),
+        ],
       ),
     );
   }

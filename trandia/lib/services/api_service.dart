@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,15 +13,11 @@ const Duration _kTimeout    = Duration(seconds: 15);
 const Duration _kCacheTtl   = Duration(seconds: 90);
 const int      _kCacheMaxSz = 40;   // max entries before LRU eviction
 
-// ── In-memory token cache ────────────────────────────────────────────────────
-// Avoids hitting SharedPreferences (disk I/O) on every single API request.
-// Updated on every saveToken / clearToken call so it always stays in sync.
+// ── In-memory token caches ───────────────────────────────────────────────────
 String? _cachedToken;
+String? _cachedRefreshToken;
 
 // ── In-memory GET response cache ────────────────────────────────────────────
-// Prevents re-fetching identical requests within 90 s (tab switches,
-// orientation changes, returning from sub-screens) without hitting the server.
-
 class _CacheEntry {
   final Map<String, dynamic> data;
   final DateTime expiresAt;
@@ -32,7 +29,6 @@ final _getCache = <String, _CacheEntry>{};
 
 void _cachePut(String key, Map<String, dynamic> data) {
   if (_getCache.length >= _kCacheMaxSz) {
-    // Evict the single oldest entry to keep memory bounded
     final oldest = _getCache.entries
         .reduce((a, b) => a.value.expiresAt.isBefore(b.value.expiresAt) ? a : b)
         .key;
@@ -42,14 +38,18 @@ void _cachePut(String key, Map<String, dynamic> data) {
 }
 
 /// Invalidate cache entries whose key contains [pathPrefix].
-/// Call after write operations that change feed data.
 void invalidateGetCache(String pathPrefix) {
   _getCache.removeWhere((k, _) => k.contains(pathPrefix));
 }
 
+// ── Refresh lock ─────────────────────────────────────────────────────────────
+// Ensures only ONE /auth/refresh call fires at a time.
+// All concurrent callers wait on the same Completer and get the same result.
+bool _isRefreshing = false;
+Completer<String?>? _refreshCompleter;
+
 class ApiService {
-  /// Returns the auth token — memory-first, falls back to SharedPreferences.
-  /// This avoids disk I/O on every single API call.
+  // ── Access token ─────────────────────────────────────────────────────────
   static Future<String?> getToken() async {
     if (_cachedToken != null) return _cachedToken;
     final prefs = await SharedPreferences.getInstance();
@@ -58,19 +58,47 @@ class ApiService {
   }
 
   static Future<void> saveToken(String token) async {
-    _cachedToken = token;                          // update memory immediately
+    _cachedToken = token;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
   }
 
   static Future<void> clearToken() async {
-    _cachedToken = null;                           // clear memory immediately
+    _cachedToken = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
   }
 
-  /// Check token validity in memory — no disk I/O, no network call.
-  /// Returns the valid token string, or null if missing/expired.
+  // ── Refresh token ─────────────────────────────────────────────────────────
+  static Future<String?> getRefreshToken() async {
+    if (_cachedRefreshToken != null) return _cachedRefreshToken;
+    final prefs = await SharedPreferences.getInstance();
+    _cachedRefreshToken = prefs.getString('refresh_token');
+    return _cachedRefreshToken;
+  }
+
+  static Future<void> saveRefreshToken(String token) async {
+    _cachedRefreshToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('refresh_token', token);
+  }
+
+  static Future<void> clearRefreshToken() async {
+    _cachedRefreshToken = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('refresh_token');
+  }
+
+  /// Clear ALL auth state (access + refresh tokens).
+  static Future<void> clearAllTokens() async {
+    await clearToken();
+    await clearRefreshToken();
+  }
+
+  // ── Token validation (sync — no I/O) ─────────────────────────────────────
+
+  /// Returns the cached access token if it is still valid (> 30s remaining).
+  /// Returns null if missing, malformed, or near/past expiry.
   static String? _validTokenSync() {
     final t = _cachedToken;
     if (t == null) return null;
@@ -82,7 +110,7 @@ class ApiService {
       ) as Map;
       final exp = payload['exp'] as int?;
       if (exp == null) return null;
-      // 30-second buffer — treat as expired slightly early to avoid edge cases
+      // 30-second buffer before actual expiry
       if (DateTime.now().millisecondsSinceEpoch ~/ 1000 >= exp - 30) return null;
       return t;
     } catch (_) {
@@ -90,23 +118,112 @@ class ApiService {
     }
   }
 
-  /// Build auth headers for a request that requires authentication.
-  /// Throws [ApiException] immediately (no network round-trip) if the token
-  /// is missing or already expired — prevents 401 errors at the server.
+  // ── Silent token refresh ──────────────────────────────────────────────────
+
+  /// Silently exchange the stored refresh token for a new access + refresh pair.
+  ///
+  /// Thread-safe: if multiple callers trigger a refresh simultaneously, only
+  /// ONE network request fires.  All other callers await the same Completer.
+  ///
+  /// Returns the new access token on success, or null if the refresh token is
+  /// invalid/expired (caller must log the user out).
+  static Future<String?> silentRefresh() async {
+    // ── Queue: wait for in-progress refresh ──────────────────────────────
+    if (_isRefreshing) {
+      return _refreshCompleter?.future;
+    }
+
+    _isRefreshing = true;
+    _refreshCompleter = Completer<String?>();
+
+    String? result;
+    try {
+      // Warm the refresh token cache
+      if (_cachedRefreshToken == null) await getRefreshToken();
+      final refreshToken = _cachedRefreshToken;
+
+      if (refreshToken == null || refreshToken.isEmpty) {
+        result = null;
+      } else {
+        // Call /auth/refresh directly via http (NOT through ApiService.post to
+        // avoid infinite recursion — this endpoint needs no auth header).
+        final response = await http
+            .post(
+              Uri.parse('$baseUrl/auth/refresh'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'refresh_token': refreshToken}),
+            )
+            .timeout(const Duration(seconds: 10));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final newAccess  = data['access_token']  as String?;
+          final newRefresh = data['refresh_token'] as String?;
+          if (newAccess != null && newAccess.isNotEmpty) {
+            await saveToken(newAccess);
+            if (newRefresh != null && newRefresh.isNotEmpty) {
+              await saveRefreshToken(newRefresh);
+            }
+            result = newAccess;
+          }
+        }
+        // 401 from /auth/refresh → refresh token expired/revoked → result stays null
+      }
+    } catch (_) {
+      result = null; // network error — result stays null
+    } finally {
+      _isRefreshing = false;
+      _refreshCompleter!.complete(result);
+      _refreshCompleter = null;
+    }
+    return result;
+  }
+
+  // ── Auth headers (with pre-emptive refresh) ───────────────────────────────
+
+  /// Build Authorization headers.
+  ///
+  /// Flow:
+  ///   1. If access token is valid → use it directly (fast path, no network).
+  ///   2. If access token expired → try silentRefresh().
+  ///   3. If refresh succeeds  → use the new access token.
+  ///   4. If refresh fails     → clear ALL tokens + throw ApiException so the
+  ///      app can route the user to the login screen.
   static Future<Map<String, String>> _authHeaders() async {
-    // Warm the in-memory cache if this is the first call after a cold start
+    // Warm in-memory cache on first call after cold start
     if (_cachedToken == null) await getToken();
 
     final token = _validTokenSync();
-    if (token == null) {
-      // Token is missing or expired — clear it so isLoggedIn() returns false
-      await clearToken();
-      throw const ApiException('Session expired. Please sign in again.');
+    if (token != null) {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
     }
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
+
+    // Access token expired — attempt silent refresh
+    final newToken = await silentRefresh();
+    if (newToken != null) {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $newToken',
+      };
+    }
+
+    // Refresh failed → full logout
+    await clearAllTokens();
+    throw const ApiException('Session expired. Please sign in again.');
+  }
+
+  /// Handle a 401 response from any endpoint.
+  ///
+  /// Tries silentRefresh once.  Returns the new token string on success, or
+  /// throws ApiException (which clears tokens) on failure.
+  static Future<String> _handleUnauthorized() async {
+    final newToken = await silentRefresh();
+    if (newToken != null) return newToken;
+    await clearAllTokens();
+    throw const ApiException('Session expired. Please sign in again.');
   }
 
   static Future<Map<String, dynamic>> post(
@@ -114,10 +231,10 @@ class ApiService {
     Map<String, dynamic> body, {
     bool requiresAuth = false,
   }) async {
-    final headers = requiresAuth
+    var headers = requiresAuth
         ? await _authHeaders()
         : <String, String>{'Content-Type': 'application/json'};
-    final http.Response response;
+    http.Response response;
     try {
       response = await http
           .post(
@@ -131,16 +248,28 @@ class ApiService {
           'Could not connect to server. Check your network.');
     }
 
-    if (response.statusCode == 401) {
-      await clearToken();
+    // 401 → try silent refresh once, then retry
+    if (response.statusCode == 401 && requiresAuth) {
+      final newToken = await _handleUnauthorized(); // throws if refresh fails
+      headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $newToken',
+      };
+      try {
+        response = await http
+            .post(Uri.parse('$baseUrl$path'), headers: headers, body: jsonEncode(body))
+            .timeout(_kTimeout);
+      } on Exception {
+        throw const ApiException('Could not connect to server. Check your network.');
+      }
+      if (response.statusCode == 401) {
+        await clearAllTokens();
+        throw const ApiException('Session expired. Please sign in again.');
+      }
+    } else if (response.statusCode == 401) {
       throw const ApiException('Session expired. Please sign in again.');
     }
 
-    // BUG FIX: jsonDecode had no try-catch.
-    // Railway returns an HTML 502/503 page (not JSON) when the app is cold-
-    // starting or crashing. Without this guard, jsonDecode throws a
-    // FormatException that bypasses all ApiException handlers and shows the
-    // user a raw Dart crash message. Now it maps to a clean error string.
     final dynamic data;
     try {
       data = jsonDecode(response.body);
@@ -161,43 +290,52 @@ class ApiService {
   static Future<Map<String, dynamic>> get(
     String path, {
     bool requiresAuth = false,
-    bool bypassCache  = false,    // pass true on pull-to-refresh
+    bool bypassCache  = false,
   }) async {
-    // ── In-memory cache check ───────────────────────────────────────────────
+    // ── In-memory cache check ────────────────────────────────────────────────
     if (!bypassCache) {
       final entry = _getCache[path];
-      if (entry != null && entry.valid) {
-        return entry.data;
-      }
+      if (entry != null && entry.valid) return entry.data;
     }
 
-    final headers = requiresAuth
+    var headers = requiresAuth
         ? await _authHeaders()
         : <String, String>{'Content-Type': 'application/json'};
-    final http.Response response;
+    http.Response response;
     try {
       response = await http
-          .get(
-            Uri.parse('$baseUrl$path'),
-            headers: headers,
-          )
+          .get(Uri.parse('$baseUrl$path'), headers: headers)
           .timeout(_kTimeout);
     } on Exception {
-      // Return stale cache if network is unavailable (offline resilience)
       if (!bypassCache) {
         final stale = _getCache[path];
         if (stale != null) return stale.data;
       }
-      throw const ApiException(
-          'Could not connect to server. Check your network.');
+      throw const ApiException('Could not connect to server. Check your network.');
     }
 
-    if (response.statusCode == 401) {
-      await clearToken();
+    // 401 → try silent refresh once, then retry
+    if (response.statusCode == 401 && requiresAuth) {
+      final newToken = await _handleUnauthorized();
+      headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $newToken',
+      };
+      try {
+        response = await http
+            .get(Uri.parse('$baseUrl$path'), headers: headers)
+            .timeout(_kTimeout);
+      } on Exception {
+        throw const ApiException('Could not connect to server. Check your network.');
+      }
+      if (response.statusCode == 401) {
+        await clearAllTokens();
+        throw const ApiException('Session expired. Please sign in again.');
+      }
+    } else if (response.statusCode == 401) {
       throw const ApiException('Session expired. Please sign in again.');
     }
 
-    // BUG FIX: same as post() — guard against non-JSON responses.
     final dynamic data;
     try {
       data = jsonDecode(response.body);
@@ -222,25 +360,36 @@ class ApiService {
     Map<String, dynamic> body, {
     bool requiresAuth = false,
   }) async {
-    final headers = requiresAuth
+    var headers = requiresAuth
         ? await _authHeaders()
         : <String, String>{'Content-Type': 'application/json'};
-    final http.Response response;
+    http.Response response;
     try {
       response = await http
-          .put(
-            Uri.parse('$baseUrl$path'),
-            headers: headers,
-            body: jsonEncode(body),
-          )
+          .put(Uri.parse('$baseUrl$path'), headers: headers, body: jsonEncode(body))
           .timeout(_kTimeout);
     } on Exception {
-      throw const ApiException(
-          'Could not connect to server. Check your network.');
+      throw const ApiException('Could not connect to server. Check your network.');
     }
 
-    if (response.statusCode == 401) {
-      await clearToken();
+    if (response.statusCode == 401 && requiresAuth) {
+      final newToken = await _handleUnauthorized();
+      headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $newToken',
+      };
+      try {
+        response = await http
+            .put(Uri.parse('$baseUrl$path'), headers: headers, body: jsonEncode(body))
+            .timeout(_kTimeout);
+      } on Exception {
+        throw const ApiException('Could not connect to server. Check your network.');
+      }
+      if (response.statusCode == 401) {
+        await clearAllTokens();
+        throw const ApiException('Session expired. Please sign in again.');
+      }
+    } else if (response.statusCode == 401) {
       throw const ApiException('Session expired. Please sign in again.');
     }
 
@@ -266,10 +415,10 @@ class ApiService {
     Map<String, dynamic>? body,
     bool requiresAuth = false,
   }) async {
-    final headers = requiresAuth
+    var headers = requiresAuth
         ? await _authHeaders()
         : <String, String>{'Content-Type': 'application/json'};
-    final http.Response response;
+    http.Response response;
     try {
       response = await http
           .delete(
@@ -279,12 +428,31 @@ class ApiService {
           )
           .timeout(_kTimeout);
     } on Exception {
-      throw const ApiException(
-          'Could not connect to server. Check your network.');
+      throw const ApiException('Could not connect to server. Check your network.');
     }
 
-    if (response.statusCode == 401) {
-      await clearToken();
+    if (response.statusCode == 401 && requiresAuth) {
+      final newToken = await _handleUnauthorized();
+      headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $newToken',
+      };
+      try {
+        response = await http
+            .delete(
+              Uri.parse('$baseUrl$path'),
+              headers: headers,
+              body: body != null ? jsonEncode(body) : null,
+            )
+            .timeout(_kTimeout);
+      } on Exception {
+        throw const ApiException('Could not connect to server. Check your network.');
+      }
+      if (response.statusCode == 401) {
+        await clearAllTokens();
+        throw const ApiException('Session expired. Please sign in again.');
+      }
+    } else if (response.statusCode == 401) {
       throw const ApiException('Session expired. Please sign in again.');
     }
 
@@ -310,24 +478,36 @@ class ApiService {
     String path, {
     bool requiresAuth = false,
   }) async {
-    final headers = requiresAuth
+    var headers = requiresAuth
         ? await _authHeaders()
         : <String, String>{'Content-Type': 'application/json'};
-    final http.Response response;
+    http.Response response;
     try {
       response = await http
-          .get(
-            Uri.parse('$baseUrl$path'),
-            headers: headers,
-          )
+          .get(Uri.parse('$baseUrl$path'), headers: headers)
           .timeout(_kTimeout);
     } on Exception {
-      throw const ApiException(
-          'Could not connect to server. Check your network.');
+      throw const ApiException('Could not connect to server. Check your network.');
     }
 
-    if (response.statusCode == 401) {
-      await clearToken();
+    if (response.statusCode == 401 && requiresAuth) {
+      final newToken = await _handleUnauthorized();
+      headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $newToken',
+      };
+      try {
+        response = await http
+            .get(Uri.parse('$baseUrl$path'), headers: headers)
+            .timeout(_kTimeout);
+      } on Exception {
+        throw const ApiException('Could not connect to server. Check your network.');
+      }
+      if (response.statusCode == 401) {
+        await clearAllTokens();
+        throw const ApiException('Session expired. Please sign in again.');
+      }
+    } else if (response.statusCode == 401) {
       throw const ApiException('Session expired. Please sign in again.');
     }
 

@@ -124,9 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfile() async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedOrder = prefs.getStringList('social_platform_order');
@@ -134,30 +132,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final validPlatforms = {'snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'};
         final loadedOrder = savedOrder.where((e) => validPlatforms.contains(e)).toList();
         for (final p in validPlatforms) {
-          if (!loadedOrder.contains(p)) {
-            loadedOrder.add(p);
-          }
+          if (!loadedOrder.contains(p)) loadedOrder.add(p);
         }
         _platformOrder = loadedOrder;
       }
-      // Read account type to show private lock badge
       final accountType = prefs.getString('settings_account_type') ?? '';
+      // Set accountType immediately so creator screen switches without waiting for API
+      if (mounted) {
+        setState(() {
+          _isPrivateAccount = accountType == 'Private';
+          _accountType = accountType;
+        });
+      }
       final profile = await UserService.getMyProfile();
       if (mounted) {
         setState(() {
           _profile = profile;
           _isLoading = false;
-          _isPrivateAccount = accountType == 'Private';
-          _accountType = accountType;
         });
         if (profile != null) _loadPosts(profile.id);
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -339,6 +335,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
         postCount: _userPosts.length,
         avatarUrl: _profile!.picture ?? '',
         owner: true,
+        userPosts: _userPosts,
+        postsLoading: _postsLoading,
+        myUserId: _profile!.id,
+        reach: '',
+        profileViews: '',
+        engagement: '',
+        onOpenSettings: () {
+          Navigator.of(context).push(
+            PageRouteBuilder(
+              pageBuilder: (_, animation, __) => SettingsScreen(dark: widget.dark),
+              transitionDuration: const Duration(milliseconds: 320),
+              reverseTransitionDuration: const Duration(milliseconds: 260),
+              transitionsBuilder: (_, animation, __, child) {
+                final curved = CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                  reverseCurve: Curves.easeInCubic,
+                );
+                return SlideTransition(
+                  position: Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero).animate(curved),
+                  child: FadeTransition(opacity: curved, child: child),
+                );
+              },
+            ),
+          ).then((_) => _loadProfile());
+        },
+        onPostDeleted: (postId) {
+          setState(() => _userPosts.removeWhere((p) => p.id == postId));
+        },
       );
     }
 

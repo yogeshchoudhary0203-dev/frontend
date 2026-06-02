@@ -122,35 +122,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _loadProfile() async {
+  Future<void> _loadProfile({bool forceRefresh = false}) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+
+    // ── Step 1: Read SharedPreferences (fast, local) ──────────────────────
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
+    final savedOrder = prefs.getStringList('social_platform_order');
+    if (savedOrder != null && savedOrder.isNotEmpty) {
+      final validPlatforms = {'snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'};
+      final loadedOrder = savedOrder.where((e) => validPlatforms.contains(e)).toList();
+      for (final p in validPlatforms) {
+        if (!loadedOrder.contains(p)) loadedOrder.add(p);
+      }
+      _platformOrder = loadedOrder;
+    }
+    final accountType = prefs.getString('settings_account_type') ?? '';
+
+    // ── Step 2: Render cached profile instantly (no loader flash) ─────────
+    final cached = UserService.cachedProfile;
+    if (cached != null && !forceRefresh) {
+      setState(() {
+        _profile = cached;
+        _accountType = accountType;
+        _isPrivateAccount = accountType == 'Private';
+        _isLoading = false;
+      });
+      // Load posts from ApiService cache (also fast — 90s TTL)
+      if (_userPosts.isEmpty) _loadPosts(cached.id);
+    } else {
+      // No cache — show loader
+      setState(() {
+        _isLoading = true;
+        _accountType = accountType;
+        _isPrivateAccount = accountType == 'Private';
+      });
+    }
+
+    // ── Step 3: Background refresh from network ───────────────────────────
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedOrder = prefs.getStringList('social_platform_order');
-      if (savedOrder != null && savedOrder.isNotEmpty) {
-        final validPlatforms = {'snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'};
-        final loadedOrder = savedOrder.where((e) => validPlatforms.contains(e)).toList();
-        for (final p in validPlatforms) {
-          if (!loadedOrder.contains(p)) loadedOrder.add(p);
-        }
-        _platformOrder = loadedOrder;
-      }
-      final accountType = prefs.getString('settings_account_type') ?? '';
-      // Set accountType immediately so creator screen switches without waiting for API
-      if (mounted) {
-        setState(() {
-          _isPrivateAccount = accountType == 'Private';
-          _accountType = accountType;
-        });
-      }
-      final profile = await UserService.getMyProfile();
-      if (mounted) {
+      final profile = await UserService.getMyProfile(forceRefresh: forceRefresh);
+      if (!mounted) return;
+      if (profile != null) {
         setState(() {
           _profile = profile;
+          _accountType = accountType;
+          _isPrivateAccount = accountType == 'Private';
           _isLoading = false;
         });
-        if (profile != null) _loadPosts(profile.id);
+        // Reload posts if we had no cache before, or on forced refresh
+        if (cached == null || forceRefresh) _loadPosts(profile.id);
+      } else {
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -203,7 +227,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } else {
       setState(() => _isUpdatingLocation = true);
       final success = await LocationService.requestAndSaveLocation(context);
-      if (success && mounted) await _loadProfile();
+      if (success && mounted) await _loadProfile(forceRefresh: true);
       if (mounted) setState(() => _isUpdatingLocation = false);
     }
   }
@@ -247,7 +271,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.pop(ctx);
                   setState(() => _isUpdatingLocation = true);
                   await UserService.updateLocationPrivacy(!isPublic);
-                  await _loadProfile();
+                  UserService.invalidateProfileCache();
+                  await _loadProfile(forceRefresh: true);
                   if (mounted) setState(() => _isUpdatingLocation = false);
                 },
               ),
@@ -261,7 +286,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.pop(ctx);
                   setState(() => _isUpdatingLocation = true);
                   final success = await LocationService.requestAndSaveLocation(context);
-                  if (success && mounted) await _loadProfile();
+                  if (success && mounted) await _loadProfile(forceRefresh: true);
                   if (mounted) setState(() => _isUpdatingLocation = false);
                 },
               ),
@@ -275,7 +300,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.pop(ctx);
                   setState(() => _isUpdatingLocation = true);
                   await UserService.removeLocation();
-                  await _loadProfile();
+                  UserService.invalidateProfileCache();
+                  await _loadProfile(forceRefresh: true);
                   if (mounted) setState(() => _isUpdatingLocation = false);
                 },
               ),
@@ -359,7 +385,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
             ),
-          ).then((_) => _loadProfile());
+          ).then((_) => _loadProfile(forceRefresh: true));
         },
         onPostDeleted: (postId) {
           setState(() => _userPosts.removeWhere((p) => p.id == postId));
@@ -506,7 +532,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           );
                                         },
                                       ),
-                                    ).then((_) => _loadProfile());
+                                    ).then((_) => _loadProfile(forceRefresh: true));
                                   },
                                 ),
                               ],

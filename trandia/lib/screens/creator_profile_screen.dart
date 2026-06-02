@@ -12,6 +12,8 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
+import '../services/post_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUNNABLE DEMO — light + dark in one file. Tap the pill to switch themes.
@@ -111,24 +113,28 @@ class _ThemeToggle extends StatelessWidget {
 class CreatorProfileScreen extends StatefulWidget {
   const CreatorProfileScreen({
     super.key,
-    this.displayName = 'Sarah Dietrich',
-    this.handle = 'sarah.d',
-    this.title = 'Designer · Studio Atelier',
-    this.bio =
-        'Designer & art director.\nCurrently leading visual identity at Studio Atelier — type, motion & quiet things.',
-    this.followers = '24.3K',
-    this.following = '482',
-    this.posts = '168',
-    this.postCount = 168,
+    this.displayName = '',
+    this.handle = '',
+    this.title = '',
+    this.bio = '',
+    this.followers = '0',
+    this.following = '0',
+    this.posts = '0',
+    this.postCount = 0,
     this.verified = true,
     this.initialFollowing = false,
     this.dark = false,
     this.owner = true,
     this.avatarUrl = '',
-    this.reach = '48.2K',
-    this.profileViews = '3,920',
-    this.engagement = '6.8%',
+    this.reach = '',
+    this.profileViews = '',
+    this.engagement = '',
     this.onOpenDashboard,
+    this.onOpenSettings,
+    this.userPosts = const [],
+    this.postsLoading = false,
+    this.myUserId,
+    this.onPostDeleted,
   });
 
   final String displayName;
@@ -152,13 +158,22 @@ class CreatorProfileScreen extends StatefulWidget {
   /// Profile photo. Empty string falls back to the monogram avatar.
   final String avatarUrl;
 
-  /// Mini-stats shown on the Creator-dashboard entry card (owner only).
+  /// Analytics stats — pass empty string '' if not yet available (shows '--').
   final String reach;
   final String profileViews;
   final String engagement;
 
   /// Tapped when the Creator-dashboard card is pressed.
   final VoidCallback? onOpenDashboard;
+
+  /// Tapped when the settings gear is pressed.
+  final VoidCallback? onOpenSettings;
+
+  /// Real posts from API.
+  final List<PostModel> userPosts;
+  final bool postsLoading;
+  final String? myUserId;
+  final void Function(String postId)? onPostDeleted;
 
   @override
   State<CreatorProfileScreen> createState() => _CreatorProfileScreenState();
@@ -298,7 +313,14 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                     const SizedBox(height: 20),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: _PostsSection(t: t, count: widget.postCount),
+                      child: _PostsSection(
+                        t: t,
+                        count: widget.userPosts.length,
+                        posts: widget.userPosts,
+                        isLoading: widget.postsLoading,
+                        myUserId: widget.myUserId,
+                        onPostDeleted: widget.onPostDeleted,
+                      ),
                     ),
                   ],
                 ),
@@ -349,7 +371,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                         icon: widget.owner
                             ? Icons.settings_outlined
                             : Icons.more_vert_rounded,
-                        onTap: () {},
+                        onTap: widget.onOpenSettings ?? () {},
                       ),
                     ],
                   ),
@@ -787,9 +809,9 @@ class _DashboardEntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mini = [
-      ['Reach', reach],
-      ['Views', views],
-      ['Eng.', engagement],
+      ['Reach', reach.isNotEmpty ? reach : '--'],
+      ['Views', views.isNotEmpty ? views : '--'],
+      ['Eng.', engagement.isNotEmpty ? engagement : '--'],
     ];
     return Container(
       decoration: BoxDecoration(
@@ -1179,12 +1201,23 @@ class _CircleIconButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POSTS SECTION
+// POSTS SECTION — real posts from API
 // ─────────────────────────────────────────────────────────────────────────────
 class _PostsSection extends StatelessWidget {
-  const _PostsSection({required this.t, required this.count});
+  const _PostsSection({
+    required this.t,
+    required this.count,
+    required this.posts,
+    required this.isLoading,
+    this.myUserId,
+    this.onPostDeleted,
+  });
   final _GlassTheme t;
   final int count;
+  final List<PostModel> posts;
+  final bool isLoading;
+  final String? myUserId;
+  final void Function(String postId)? onPostDeleted;
 
   @override
   Widget build(BuildContext context) {
@@ -1237,7 +1270,37 @@ class _PostsSection extends StatelessWidget {
                   ],
                 ),
               ),
-              _PostsGrid(t: t),
+              if (isLoading)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: t.fg,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                )
+              else if (posts.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: Text(
+                      'No posts yet',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: t.muted,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                _RealPostsGrid(
+                  t: t,
+                  posts: posts,
+                  myUserId: myUserId,
+                  onPostDeleted: onPostDeleted,
+                ),
             ],
           ),
         ),
@@ -1246,124 +1309,479 @@ class _PostsSection extends StatelessWidget {
   }
 }
 
-class _PostsGrid extends StatelessWidget {
-  const _PostsGrid({required this.t});
+class _RealPostsGrid extends StatelessWidget {
+  const _RealPostsGrid({
+    required this.t,
+    required this.posts,
+    this.myUserId,
+    this.onPostDeleted,
+  });
   final _GlassTheme t;
+  final List<PostModel> posts;
+  final String? myUserId;
+  final void Function(String postId)? onPostDeleted;
 
   @override
   Widget build(BuildContext context) {
-    const tiles = 9;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: tiles,
+      padding: EdgeInsets.zero,
+      itemCount: posts.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
         mainAxisSpacing: 6,
         crossAxisSpacing: 6,
         childAspectRatio: 1,
       ),
-      itemBuilder: (_, i) {
-        final kind = (i == 1)
-            ? _TileKind.carousel
-            : (i == 4)
-                ? _TileKind.reel
-                : _TileKind.photo;
-        return _PostTile(t: t, i: i, kind: kind, count: i == 1 ? 4 : null);
+      itemBuilder: (_, i) => _RealPostTile(
+        t: t,
+        post: posts[i],
+        i: i,
+        myUserId: myUserId,
+        onDeleted: () => onPostDeleted?.call(posts[i].id),
+      ),
+    );
+  }
+}
+
+class _RealPostTile extends StatelessWidget {
+  const _RealPostTile({
+    required this.t,
+    required this.post,
+    required this.i,
+    this.myUserId,
+    this.onDeleted,
+  });
+  final _GlassTheme t;
+  final PostModel post;
+  final int i;
+  final String? myUserId;
+  final VoidCallback? onDeleted;
+
+  @override
+  Widget build(BuildContext context) {
+    final isVideo = post.mediaType == 'video';
+    final imageUrl = isVideo && post.thumbnailUrl != null
+        ? post.thumbnailUrl!
+        : post.mediaUrl;
+
+    final aPct = t.dark ? (22 - (i % 5) * 3) : (92 - (i % 5) * 4);
+    final bPct = (aPct - (t.dark ? 12 : 18)).clamp(t.dark ? 4 : 56, 100).toDouble();
+    final g1 = HSLColor.fromAHSL(1, 0, 0, aPct / 100).toColor();
+    final g2 = HSLColor.fromAHSL(1, 0, 0, bPct / 100).toColor();
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showPostModal(context),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [g1, g2],
+            ),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox(),
+              ),
+              if (isVideo)
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded, size: 11, color: Colors.white),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPostModal(BuildContext context) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'post_card',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 350),
+      pageBuilder: (_, __, ___) => _CreatorPostModal(
+        t: t,
+        post: post,
+        myUserId: myUserId,
+        onDeleted: onDeleted,
+      ),
+      transitionBuilder: (ctx, anim, _, child) {
+        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
+        return FadeTransition(
+          opacity: anim,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.82, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
       },
     );
   }
 }
 
-enum _TileKind { photo, carousel, reel }
-
-class _PostTile extends StatelessWidget {
-  const _PostTile({
+// ─────────────────────────────────────────────────────────────────────────────
+// POST MODAL for creator profile
+// ─────────────────────────────────────────────────────────────────────────────
+class _CreatorPostModal extends StatefulWidget {
+  const _CreatorPostModal({
     required this.t,
-    required this.i,
-    required this.kind,
-    this.count,
+    required this.post,
+    this.myUserId,
+    this.onDeleted,
   });
   final _GlassTheme t;
-  final int i;
-  final _TileKind kind;
-  final int? count;
+  final PostModel post;
+  final String? myUserId;
+  final VoidCallback? onDeleted;
+
+  @override
+  State<_CreatorPostModal> createState() => _CreatorPostModalState();
+}
+
+class _CreatorPostModalState extends State<_CreatorPostModal> {
+  VideoPlayerController? _videoCtrl;
+  bool _videoReady = false;
+  bool _liked = false;
+  late int _likesCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _liked = widget.post.isLiked;
+    _likesCount = widget.post.likesCount;
+    if (widget.post.mediaType == 'video') {
+      _videoCtrl = VideoPlayerController.networkUrl(
+        Uri.parse(widget.post.mediaUrl),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      )
+        ..setLooping(true)
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() => _videoReady = true);
+            _videoCtrl!.play();
+          }
+        });
+    }
+  }
+
+  @override
+  void dispose() {
+    _videoCtrl?.dispose();
+    super.dispose();
+  }
+
+  bool get _isOwner =>
+      widget.myUserId != null && widget.post.userId == widget.myUserId;
+
+  void _toggleLike() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _liked = !_liked;
+      _likesCount += _liked ? 1 : -1;
+    });
+    if (_liked) {
+      PostService.instance.likePost(widget.post.id);
+    } else {
+      PostService.instance.unlikePost(widget.post.id);
+    }
+  }
+
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return n > 0 ? '$n' : '';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final aPct = t.dark ? (22 - (i % 5) * 3) : (92 - (i % 5) * 4);
-    final bPct = (aPct - (t.dark ? 12 : 18))
-        .clamp(t.dark ? 4 : 56, 100)
-        .toDouble();
-    final g1 = HSLColor.fromAHSL(1, 0, 0, aPct / 100).toColor();
-    final g2 = HSLColor.fromAHSL(1, 0, 0, bPct / 100).toColor();
-    final angle = (135 + (i * 29) % 90) * math.pi / 180;
-    final dx = math.cos(angle);
-    final dy = math.sin(angle);
+    final size = MediaQuery.of(context).size;
+    final cardW = size.width * 0.88;
+    final isVideo = widget.post.mediaType == 'video';
+    final thumbUrl = isVideo && widget.post.thumbnailUrl != null
+        ? widget.post.thumbnailUrl!
+        : widget.post.mediaUrl;
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        gradient: LinearGradient(
-          begin: Alignment(-dx, -dy),
-          end: Alignment(dx, dy),
-          colors: [g1, g2],
-        ),
-      ),
-      child: Stack(children: [
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: RadialGradient(
-                center: const Alignment(-0.5, -1),
-                radius: 1.2,
-                colors: [
-                  Colors.white.withValues(alpha: t.dark ? 0.06 : 0.55),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.55],
-              ),
+    return GestureDetector(
+      onTap: () => Navigator.of(context).pop(),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+              child: Container(color: Colors.black.withValues(alpha: 0.55)),
             ),
           ),
-        ),
-        if (kind != _TileKind.photo)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0x73000000),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    kind == _TileKind.reel
-                        ? Icons.play_arrow_rounded
-                        : Icons.collections_outlined,
-                    color: Colors.white,
-                    size: 12,
+          Center(
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                width: cardW,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(28),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.18),
+                      Colors.white.withValues(alpha: 0.07),
+                    ],
                   ),
-                  if (kind == _TileKind.carousel && count != null) ...[
-                    const SizedBox(width: 3),
-                    Text(
-                      '$count',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.30),
+                    width: 1.2,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 42,
+                      offset: Offset(0, 20),
                     ),
                   ],
-                ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Header
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: ClipOval(
+                                  child: widget.post.userPicture != null
+                                      ? Image.network(widget.post.userPicture!, fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => _avatarFallback())
+                                      : _avatarFallback(),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(widget.post.userName,
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                                    Text('@${widget.post.userUsername}',
+                                      style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 11.5)),
+                                  ],
+                                ),
+                              ),
+                              Text(widget.post.timeAgo,
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+                              if (_isOwner) ...[
+                                const SizedBox(width: 4),
+                                GestureDetector(
+                                  onTap: () => _confirmDelete(context),
+                                  behavior: HitTestBehavior.opaque,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(Icons.more_vert_rounded,
+                                        color: Colors.white.withValues(alpha: 0.75), size: 20),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        // Media
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            width: cardW - 24,
+                            height: cardW - 24,
+                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.network(thumbUrl, fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(color: Colors.black26)),
+                                if (isVideo && _videoReady && _videoCtrl != null)
+                                  GestureDetector(
+                                    onTap: () => setState(() {
+                                      _videoCtrl!.value.isPlaying
+                                          ? _videoCtrl!.pause()
+                                          : _videoCtrl!.play();
+                                    }),
+                                    child: SizedBox.expand(
+                                      child: FittedBox(
+                                        fit: BoxFit.cover,
+                                        child: SizedBox(
+                                          width: _videoCtrl!.value.size.width,
+                                          height: _videoCtrl!.value.size.height,
+                                          child: VideoPlayer(_videoCtrl!),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (isVideo && !_videoReady)
+                                  const Center(
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Actions
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                          child: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: _toggleLike,
+                                behavior: HitTestBehavior.opaque,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      _liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                      color: _liked ? const Color(0xFFFF4D6D) : Colors.white,
+                                      size: 22,
+                                    ),
+                                    if (_likesCount > 0) ...[
+                                      const SizedBox(width: 5),
+                                      Text(_fmt(_likesCount),
+                                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 20),
+                              Row(
+                                children: [
+                                  const Icon(Icons.mode_comment_outlined, color: Colors.white, size: 22),
+                                  if (widget.post.commentsCount > 0) ...[
+                                    const SizedBox(width: 5),
+                                    Text(_fmt(widget.post.commentsCount),
+                                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (widget.post.caption.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
+                            child: Text(
+                              widget.post.caption,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.82),
+                                  fontSize: 13,
+                                  height: 1.4),
+                            ),
+                          ),
+                        const SizedBox(height: 14),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
-      ]),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 12,
+            right: 20,
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.15),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
+                ),
+                child: const Icon(Icons.close, color: Colors.white, size: 18),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _avatarFallback() => Container(
+    color: Colors.white24,
+    alignment: Alignment.center,
+    child: Text(
+      widget.post.userName.isNotEmpty ? widget.post.userName[0].toUpperCase() : '?',
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+    ),
+  );
+
+  void _confirmDelete(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: widget.t.dark ? const Color(0xFF1C1C1E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Post?', style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text('This will permanently delete the post. This cannot be undone.',
+            style: TextStyle(fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await PostService.instance.deletePost(widget.post.id);
+                if (mounted) {
+                  Navigator.of(context).pop();
+                  widget.onDeleted?.call();
+                  HapticFeedback.mediumImpact();
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Delete failed: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Delete',
+                style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'api_service.dart';
 import 'chat_service.dart';
 import 'fcm_service.dart';
+import 'local_db.dart';
 import '../utils/web_utils.dart';
 
 const String _webClientId =
@@ -357,6 +358,11 @@ class AuthService {
       // Fire-and-forget — local cleanup always happens below.
     }
     try { await ApiService.clearAllTokens(); } catch (_) {}
+    // Clear local DB so next user gets a fresh cache
+    try {
+      final LocalDb db = LocalDb.instance;
+      await db.clearAll();
+    } catch (_) {}
     try { ChatService().dispose(); } catch (_) {}
     try { await FirebaseAuth.instance.signOut(); } catch (_) {}
     if (!kIsWeb) {

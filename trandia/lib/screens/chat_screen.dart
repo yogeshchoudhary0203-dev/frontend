@@ -255,13 +255,29 @@ class _ChatScreenState extends State<ChatScreen>
       }
     }
 
-    // Step 2: Fetch fresh from API (silent refresh if cache was shown)
+    // Step 2: Get messages — returns local DB instantly if available,
+    // then silently fetches fresh from API via onRefreshed callback.
     try {
-      final msgs = await ChatService().getMessages(convId, limit: 30);
+      final msgs = await ChatService().getMessages(
+        convId,
+        limit: 30,
+        onRefreshed: (fresh) {
+          // Called when background API refresh completes
+          if (!mounted) return;
+          final freshDisplayable = fresh.where(_isDisplayableMessage).toList();
+          final freshIds = freshDisplayable.map((m) => m.id).toSet();
+          final pendingMsgs = _messages
+              .where((m) => _pendingIds.contains(m.id) && !freshIds.contains(m.id))
+              .toList();
+          setState(() {
+            _messages = [...pendingMsgs, ...freshDisplayable];
+            _hasOlderMessages = fresh.length >= 30;
+          });
+        },
+      );
       if (!mounted) return;
       final freshDisplayable = msgs.where(_isDisplayableMessage).toList();
       final freshIds = freshDisplayable.map((m) => m.id).toSet();
-      // Preserve any optimistic (pending) messages not yet confirmed by server
       final pendingMsgs = _messages
           .where((m) => _pendingIds.contains(m.id) && !freshIds.contains(m.id))
           .toList();

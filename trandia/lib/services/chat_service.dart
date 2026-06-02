@@ -7,6 +7,7 @@ import '../models/chat_model.dart';
 import 'api_service.dart';
 import 'cryptography_service.dart';
 import 'auth_service.dart';
+import 'local_db.dart';
 
 /// Singleton chat service — WebSocket + REST.
 class ChatService {
@@ -107,6 +108,8 @@ class ChatService {
             final exists = cached.any((m) => m.id == msg.id);
             if (!exists) cached.insert(0, msg);
           }
+          // Persist new incoming message to local DB (offline access)
+          unawaited(LocalDb.instance.upsertMessage(msg));
           _messageCtrl.add(msg);
 
         case 'message_deleted':
@@ -337,7 +340,48 @@ class ChatService {
 
   // ── REST endpoints ───────────────────────────────────────────
 
-  Future<List<ChatConversation>> getConversations() async {
+  // ── Conversations (stale-while-revalidate) ──────────────────────────────
+
+  /// Returns conversations from local DB immediately (fast path), then
+  /// fetches fresh data from the API in the background and notifies the
+  /// caller via [onRefreshed] so the UI can update without a visible reload.
+  ///
+  /// If local cache is empty, falls back to a blocking API call so the
+  /// first-ever load still shows data.
+  Future<List<ChatConversation>> getConversations({
+    void Function(List<ChatConversation>)? onRefreshed,
+  }) async {
+    // 1. Load from local DB immediately
+    final cached = await LocalDb.instance.loadConversations();
+
+    if (cached.isNotEmpty) {
+      // Return stale data right away; refresh in background
+      _refreshConversationsInBackground(onRefreshed);
+      return cached;
+    }
+
+    // 2. No local cache → blocking fetch (first open)
+    final fresh = await _fetchConversationsFromApi();
+    if (fresh.isNotEmpty) {
+      unawaited(LocalDb.instance.saveConversations(fresh));
+    }
+    return fresh;
+  }
+
+  void _refreshConversationsInBackground(
+      void Function(List<ChatConversation>)? onRefreshed) {
+    Future(() async {
+      try {
+        final fresh = await _fetchConversationsFromApi();
+        if (fresh.isNotEmpty) {
+          unawaited(LocalDb.instance.saveConversations(fresh));
+          onRefreshed?.call(fresh);
+        }
+      } catch (_) {}
+    });
+  }
+
+  Future<List<ChatConversation>> _fetchConversationsFromApi() async {
     final token = await ApiService.getToken();
     final res = await http.get(
       Uri.parse('$baseUrl/chat/conversations'),
@@ -366,7 +410,7 @@ class ChatService {
         );
       }).toList();
     } else if (res.statusCode == 401) {
-      await ApiService.clearToken();
+      await ApiService.clearAllTokens();
       throw const ApiException('Session expired. Please sign in again.');
     } else {
       throw ApiException('Failed to load conversations (${res.statusCode})');
@@ -378,11 +422,74 @@ class ChatService {
     return List.unmodifiable(_msgCache[conversationId] ?? []);
   }
 
+  // ── Messages (stale-while-revalidate for first page) ────────────────────
+
+  /// Load messages for [conversationId].
+  ///
+  /// First page (skip=0, no beforeId):
+  ///   • Returns local DB cache immediately if available.
+  ///   • Fetches fresh from API in background; notifies via [onRefreshed].
+  ///
+  /// Pagination pages: always fetched from the API (no local cache for those).
   Future<List<ChatMessage>> getMessages(
     String conversationId, {
     int skip = 0,
     int limit = 50,
     String? beforeId,
+    void Function(List<ChatMessage>)? onRefreshed,
+  }) async {
+    final isFirstPage = skip == 0 && beforeId == null;
+
+    if (isFirstPage) {
+      // Check in-memory cache first (fastest)
+      final inMem = _msgCache[conversationId];
+      if (inMem != null && inMem.isNotEmpty) {
+        _refreshMessagesInBackground(conversationId, limit, onRefreshed);
+        return List.unmodifiable(inMem);
+      }
+
+      // Then try local DB
+      final local = await LocalDb.instance.loadMessages(conversationId);
+      if (local.isNotEmpty) {
+        _msgCache[conversationId] = local;
+        _refreshMessagesInBackground(conversationId, limit, onRefreshed);
+        return local;
+      }
+    }
+
+    // No cache (or pagination page) → blocking fetch
+    return _fetchMessagesFromApi(
+      conversationId,
+      skip: skip,
+      limit: limit,
+      beforeId: beforeId,
+      saveToDb: isFirstPage,
+    );
+  }
+
+  void _refreshMessagesInBackground(
+    String conversationId,
+    int limit,
+    void Function(List<ChatMessage>)? onRefreshed,
+  ) {
+    Future(() async {
+      try {
+        final fresh = await _fetchMessagesFromApi(
+          conversationId,
+          limit: limit,
+          saveToDb: true,
+        );
+        if (fresh.isNotEmpty) onRefreshed?.call(fresh);
+      } catch (_) {}
+    });
+  }
+
+  Future<List<ChatMessage>> _fetchMessagesFromApi(
+    String conversationId, {
+    int skip = 0,
+    int limit = 50,
+    String? beforeId,
+    bool saveToDb = false,
   }) async {
     final token = await ApiService.getToken();
     final query = StringBuffer('skip=$skip&limit=$limit');
@@ -400,13 +507,15 @@ class ChatService {
       final List data = jsonDecode(res.body) as List;
       await _ensureKeysLoaded();
       final msgs = await _decryptMessagesInBatches(data);
-      // Update in-memory cache only for first page
       if (skip == 0 && beforeId == null && msgs.isNotEmpty) {
         _msgCache[conversationId] = msgs;
+        if (saveToDb) {
+          unawaited(LocalDb.instance.saveMessages(conversationId, msgs));
+        }
       }
       return msgs;
     } else if (res.statusCode == 401) {
-      await ApiService.clearToken();
+      await ApiService.clearAllTokens();
       throw const ApiException('Session expired. Please sign in again.');
     } else {
       throw ApiException('Failed to load messages (${res.statusCode})');

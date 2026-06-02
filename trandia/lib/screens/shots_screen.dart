@@ -27,6 +27,7 @@ import '../services/user_service.dart';
 import '../services/video_controller_pool.dart';
 import '../models/quiz_model.dart';
 import '../services/quiz_service.dart';
+import '../services/fcm_service.dart';
 import '../services/auth_service.dart';
 import 'glass_common.dart';
 import 'comments_screen.dart';
@@ -128,7 +129,8 @@ class _ShotsScreenState extends State<ShotsScreen>
   // videoId → wall-clock start time (for watchDurationSeconds)
   final Map<String, DateTime> _watchStartTimes = {};
   // Background poll after quiz is triggered
-  Timer? _quizPollTimer;
+  Timer? _quizFallbackTimer;   // single fallback check — NOT a polling loop
+  Timer? _quizTimeoutTimer;    // absolute max wait — 90 s
   String? _pendingQuizId;
   bool _quizBannerShown = false;
 
@@ -197,7 +199,9 @@ class _ShotsScreenState extends State<ShotsScreen>
   @override
   void dispose() {
     appRouteObserver.unsubscribe(this);
-    _quizPollTimer?.cancel();
+    FcmService.setQuizReadyHandler(null); // deregister quiz handler
+    _quizFallbackTimer?.cancel();
+    _quizTimeoutTimer?.cancel();
     _spin.dispose();
     _pageCtrl.dispose();
     _pool.disposeAll();
@@ -419,39 +423,62 @@ class _ShotsScreenState extends State<ShotsScreen>
         final quizId = result['quiz_id'] as String?;
         if (quizId != null && quizId != _pendingQuizId) {
           _pendingQuizId = quizId;
-          _startQuizPolling(quizId);
+          _startQuizWait(quizId);
         }
       }
     } catch (_) {}
   }
 
-  // ── Background polling — every 5 seconds until quiz is ready ──
+  // ── Quiz ready handling — push-first, single fallback, NO polling loop ──
 
-  void _startQuizPolling(String quizId) {
-    _quizPollTimer?.cancel();
+  void _startQuizWait(String quizId) {
+    // Cancel any previous wait (shouldn't happen, but just in case)
+    _quizFallbackTimer?.cancel();
+    _quizTimeoutTimer?.cancel();
     _quizBannerShown = false;
-    int attempts = 0;
-    _quizPollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      if (!mounted) {
-        _quizPollTimer?.cancel();
-        return;
-      }
-      attempts++;
-      if (attempts > 36) {
-        _quizPollTimer?.cancel();
-        return;
-      } // 3 min max
 
+    // Primary: FCM push handler registered in FcmService
+    // When backend sends quiz_ready, FcmService calls this immediately
+    FcmService.setQuizReadyHandler((String readyQuizId) {
+      if (!mounted || _quizBannerShown) return;
+      if (readyQuizId != quizId) return; // not our quiz
+      _quizFallbackTimer?.cancel();
+      _quizTimeoutTimer?.cancel();
+      _quizBannerShown = true;
+      _fetchAndOpenQuiz(quizId);
+    });
+
+    // Fallback: single check after 30 s (in case FCM was missed)
+    _quizFallbackTimer = Timer(const Duration(seconds: 30), () async {
+      if (!mounted || _quizBannerShown) return;
       final quiz = await QuizService.getQuiz(quizId);
-      if (!mounted) return;
-      if (quiz?.status == 'ready' && !_quizBannerShown) {
-        _quizPollTimer?.cancel();
+      if (!mounted || _quizBannerShown) return;
+      if (quiz?.status == 'ready') {
+        _quizTimeoutTimer?.cancel();
         _quizBannerShown = true;
         _autoOpenQuiz(quiz!);
       } else if (quiz?.status == 'failed') {
-        _quizPollTimer?.cancel();
+        _quizTimeoutTimer?.cancel();
+        _pendingQuizId = null;
+        FcmService.setQuizReadyHandler(null);
       }
+      // Still pending → wait for FCM or timeout
     });
+
+    // Hard timeout: 90 s — silently give up to avoid wasting resources
+    _quizTimeoutTimer = Timer(const Duration(seconds: 90), () {
+      if (!mounted || _quizBannerShown) return;
+      _quizBannerShown = true; // prevent future triggers for this quiz
+      _pendingQuizId = null;
+      FcmService.setQuizReadyHandler(null);
+    });
+  }
+
+  Future<void> _fetchAndOpenQuiz(String quizId) async {
+    if (!mounted) return;
+    final quiz = await QuizService.getQuiz(quizId);
+    if (!mounted) return;
+    if (quiz != null && quiz.status == 'ready') _autoOpenQuiz(quiz);
   }
 
   // ── Quiz ready → auto-open quiz screen, video pauses ────────
@@ -508,9 +535,10 @@ class _ShotsScreenState extends State<ShotsScreen>
   void _setFeed(ShotsFeed f) {
     if (f == _feed) return;
     HapticFeedback.selectionClick();
-    _pool.pauseAll();
-    _quizPollTimer?.cancel();
-    _detachAllProgressListeners();
+    _ctrls[_curIdx]?.pause();
+    _quizFallbackTimer?.cancel();
+    _quizTimeoutTimer?.cancel();
+    FcmService.setQuizReadyHandler(null);
     setState(() {
       _feed = f;
       _expanded = false;

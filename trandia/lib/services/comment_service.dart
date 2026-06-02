@@ -1,443 +1,191 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+// comment_service.dart
+//
+// Real API-backed comment service.
+// All mock data, SharedPreferences, and local storage are removed.
+// Every operation calls the backend; the UI layer does optimistic inserts.
+
 import 'api_service.dart';
 
-class LocalComment {
-  final String id;
-  final String authorName;
-  final String authorInitials;
-  final String text;
-  final String timeAgo;
-  final bool isLiked;
-  final String? parentId; // null = top-level comment, non-null = reply (max 1 level)
-  final List<LocalComment> replies; // only populated for top-level comments
+// ─────────────────────────────────────────────────────────────────────────────
+// Model
+// ─────────────────────────────────────────────────────────────────────────────
 
-  LocalComment({
+class Comment {
+  final String id;
+  final String postId;
+  final String userId;
+  final String userName;
+  final String userUsername;
+  final String? userPicture;
+  final String text;
+  final String? parentId;   // null = top-level; non-null = reply (max 1 level)
+  final int likesCount;
+  bool isLiked;
+  final DateTime createdAt;
+  final List<Comment> replies;  // only populated on top-level comments
+
+  Comment({
     required this.id,
-    required this.authorName,
-    required this.authorInitials,
+    required this.postId,
+    required this.userId,
+    required this.userName,
+    required this.userUsername,
+    this.userPicture,
     required this.text,
-    required this.timeAgo,
-    this.isLiked = false,
     this.parentId,
+    this.likesCount = 0,
+    this.isLiked = false,
+    required this.createdAt,
     this.replies = const [],
   });
 
-  LocalComment copyWith({bool? isLiked, List<LocalComment>? replies}) {
-    return LocalComment(
-      id: id,
-      authorName: authorName,
-      authorInitials: authorInitials,
-      text: text,
-      timeAgo: timeAgo,
-      isLiked: isLiked ?? this.isLiked,
-      parentId: parentId,
-      replies: replies ?? this.replies,
+  factory Comment.fromJson(Map<String, dynamic> j) {
+    final rawReplies = (j['replies'] as List?) ?? [];
+    return Comment(
+      id:           j['id'] ?? '',
+      postId:       j['post_id'] ?? '',
+      userId:       j['user_id'] ?? '',
+      userName:     j['user_name'] ?? '',
+      userUsername: j['user_username'] ?? '',
+      userPicture:  j['user_picture'] as String?,
+      text:         j['text'] ?? '',
+      parentId:     j['parent_id'] as String?,
+      likesCount:   (j['likes_count'] as num?)?.toInt() ?? 0,
+      isLiked:      j['is_liked'] == true,
+      createdAt:    DateTime.tryParse(j['created_at'] ?? '') ?? DateTime.now(),
+      replies:      rawReplies
+          .whereType<Map<String, dynamic>>()
+          .map(Comment.fromJson)
+          .toList(),
     );
   }
 
-  factory LocalComment.fromJson(Map<String, dynamic> json) {
-    final rawReplies = json['replies'] as List<dynamic>? ?? [];
-    return LocalComment(
-      id: json['id'] ?? '',
-      authorName: json['authorName'] ?? '',
-      authorInitials: json['authorInitials'] ?? '',
-      text: json['text'] ?? '',
-      timeAgo: json['timeAgo'] ?? '',
-      isLiked: json['isLiked'] ?? false,
-      parentId: json['parentId'],
-      replies: rawReplies.map((e) => LocalComment.fromJson(e as Map<String, dynamic>)).toList(),
-    );
+  /// Human-readable relative time (e.g. "2m ago", "3h ago").
+  String get timeAgo {
+    final diff = DateTime.now().difference(createdAt);
+    if (diff.inSeconds < 60)  return '${diff.inSeconds}s ago';
+    if (diff.inMinutes < 60)  return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24)    return '${diff.inHours}h ago';
+    if (diff.inDays < 7)      return '${diff.inDays}d ago';
+    if (diff.inDays < 30)     return '${(diff.inDays / 7).floor()}w ago';
+    if (diff.inDays < 365)    return '${(diff.inDays / 30).floor()}mo ago';
+    return '${(diff.inDays / 365).floor()}y ago';
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'authorName': authorName,
-      'authorInitials': authorInitials,
-      'text': text,
-      'timeAgo': timeAgo,
-      'isLiked': isLiked,
-      'parentId': parentId,
-      'replies': replies.map((e) => e.toJson()).toList(),
-    };
+  /// Two-letter initials derived from the display name.
+  String get initials {
+    final parts = userName.trim().split(' ');
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+  }
+
+  Comment copyWith({bool? isLiked, int? likesCount, List<Comment>? replies}) {
+    return Comment(
+      id:           id,
+      postId:       postId,
+      userId:       userId,
+      userName:     userName,
+      userUsername: userUsername,
+      userPicture:  userPicture,
+      text:         text,
+      parentId:     parentId,
+      likesCount:   likesCount ?? this.likesCount,
+      isLiked:      isLiked ?? this.isLiked,
+      createdAt:    createdAt,
+      replies:      replies ?? this.replies,
+    );
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Result type for paginated fetch
+// ─────────────────────────────────────────────────────────────────────────────
+
+class CommentsResult {
+  final List<Comment> comments;
+  final String? nextCursor;
+  const CommentsResult({required this.comments, this.nextCursor});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Service
+// ─────────────────────────────────────────────────────────────────────────────
+
 class CommentService {
-  static const String _keyPrefix = 'post_comments_';
+  CommentService._();
+  static final CommentService instance = CommentService._();
 
-  static String _getPostKey(String user, String description) {
-    final cleanDesc = description.replaceAll(RegExp(r'\s+'), '').toLowerCase();
-    final hash = cleanDesc.hashCode;
-    return '$_keyPrefix${user.replaceAll(" ", "_")}_$hash';
-  }
+  // ── Fetch ─────────────────────────────────────────────────────────────────
 
-  // ── JWT Auth Check ──────────────────────────────────────────────────────
-  /// Returns true if user has a valid (non-expired) JWT token.
-  static Future<bool> isAuthenticated() async {
-    try {
-      final token = await ApiService.getToken();
-      if (token == null) return false;
-      // Decode and check expiry
-      final parts = token.split('.');
-      if (parts.length != 3) return false;
-      final normalized = base64Url.normalize(parts[1]);
-      final payload = jsonDecode(utf8.decode(base64Url.decode(normalized))) as Map;
-      final exp = payload['exp'] as int?;
-      if (exp == null) return false;
-      return DateTime.now().millisecondsSinceEpoch ~/ 1000 < (exp - 30);
-    } catch (_) {
-      return false;
-    }
-  }
+  /// Fetch paginated top-level comments (with replies inlined).
+  /// Pass [cursor] = last seen comment id for subsequent pages.
+  Future<CommentsResult> fetchComments(
+    String postId, {
+    String? cursor,
+    int limit = 20,
+  }) async {
+    final path = cursor != null
+        ? '/posts/$postId/comments?cursor=$cursor&limit=$limit'
+        : '/posts/$postId/comments?limit=$limit';
 
-  /// Get mock comments tailored to the post user and context
-  static List<LocalComment> _getMockComments(String user) {
-    final cleanUser = user.trim().toLowerCase();
-    if (cleanUser.contains('arjun')) {
-      return [
-        LocalComment(
-          id: 'mock_arjun_1',
-          authorName: 'Priya Sharma',
-          authorInitials: 'PS',
-          text: 'Beautiful click! Manali is absolute magic during golden hour. ❤️',
-          timeAgo: '2m ago',
-        ),
-        LocalComment(
-          id: 'mock_arjun_2',
-          authorName: 'Rohan Verma',
-          authorInitials: 'RV',
-          text: 'Which camera/phone did you use to capture this? The colors are unreal!',
-          timeAgo: '10m ago',
-        ),
-        LocalComment(
-          id: 'mock_arjun_3',
-          authorName: 'Sneha Nair',
-          authorInitials: 'SN',
-          text: 'Chasing mountains is the best therapy. Stunning capture Arjun!',
-          timeAgo: '30m ago',
-        ),
-      ];
-    } else if (cleanUser.contains('priya')) {
-      return [
-        LocalComment(
-          id: 'mock_priya_1',
-          authorName: 'Dev Malhotra',
-          authorInitials: 'DM',
-          text: 'That sunset transition was butter smooth! Please drop the BTS soon 🔥',
-          timeAgo: '5m ago',
-        ),
-        LocalComment(
-          id: 'mock_priya_2',
-          authorName: 'Arjun Kapoor',
-          authorInitials: 'AK',
-          text: 'The grading is next level. What software did you use?',
-          timeAgo: '12m ago',
-        ),
-        LocalComment(
-          id: 'mock_priya_3',
-          authorName: 'Kavya Rao',
-          authorInitials: 'KR',
-          text: 'Wow, watched this on loop. Absolute masterpiece Priya! 🙌',
-          timeAgo: '25m ago',
-        ),
-      ];
-    } else if (cleanUser.contains('rohan')) {
-      return [
-        LocalComment(
-          id: 'mock_rohan_1',
-          authorName: 'Sneha Nair',
-          authorInitials: 'SN',
-          text: 'Chandni Chowk aloo chaat is legendary! Now I\'m hungry at midnight 😂',
-          timeAgo: '15m ago',
-        ),
-        LocalComment(
-          id: 'mock_rohan_2',
-          authorName: 'Nikhil Kumar',
-          authorInitials: 'NK',
-          text: 'Next time check out Natraj Dahi Bhalla near there, it\'s also incredible!',
-          timeAgo: '20m ago',
-        ),
-        LocalComment(
-          id: 'mock_rohan_3',
-          authorName: 'Arjun Kapoor',
-          authorInitials: 'AK',
-          text: 'Spicy and perfect. Great recommendation Rohan!',
-          timeAgo: '45m ago',
-        ),
-      ];
-    } else if (cleanUser.contains('sneha')) {
-      return [
-        LocalComment(
-          id: 'mock_sneha_1',
-          authorName: 'Nikhil Kumar',
-          authorInitials: 'NK',
-          text: 'Night owl coder club! Good luck with the build. Let\'s connect! 💻',
-          timeAgo: '1h ago',
-        ),
-        LocalComment(
-          id: 'mock_sneha_2',
-          authorName: 'Dev Malhotra',
-          authorInitials: 'DM',
-          text: 'Flutter is love. Clean code is life. Looking forward to seeing what you are making.',
-          timeAgo: '1h ago',
-        ),
-        LocalComment(
-          id: 'mock_sneha_3',
-          authorName: 'Priya Sharma',
-          authorInitials: 'PS',
-          text: 'Lo-fi + late night is the ultimate developer cheat code.',
-          timeAgo: '2h ago',
-        ),
-      ];
-    } else if (cleanUser.contains('dev')) {
-      return [
-        LocalComment(
-          id: 'mock_dev_1',
-          authorName: 'Arjun Kapoor',
-          authorInitials: 'AK',
-          text: 'Sunrise from Triund is an unforgettable feeling! Hard work pays off.',
-          timeAgo: '1h ago',
-        ),
-        LocalComment(
-          id: 'mock_dev_2',
-          authorName: 'Rohan Verma',
-          authorInitials: 'RV',
-          text: 'Did you get cold chai at the top? That guy is a lifesaver 😂',
-          timeAgo: '2h ago',
-        ),
-        LocalComment(
-          id: 'mock_dev_3',
-          authorName: 'Kavya Rao',
-          authorInitials: 'KR',
-          text: 'Spectacular view Dev! Adding this to my trekking list.',
-          timeAgo: '3h ago',
-        ),
-      ];
-    }
-    return [
-      LocalComment(
-        id: 'mock_generic_1',
-        authorName: 'Trandia Fan',
-        authorInitials: 'TF',
-        text: 'This post is amazing! Keep sharing such amazing content.',
-        timeAgo: '1h ago',
-      ),
-    ];
-  }
+    final data = await ApiService.get(path, requiresAuth: true, bypassCache: true);
+    final raw = (data['comments'] as List?) ?? [];
+    final comments = raw
+        .whereType<Map<String, dynamic>>()
+        .map(Comment.fromJson)
+        .toList();
 
-  /// Get comments (mocks + custom user saved comments) with replies nested
-  static Future<List<LocalComment>> getComments(String user, String description) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getPostKey(user, description);
-    final String? localCommentsJson = prefs.getString(key);
-
-    final mockList = _getMockComments(user);
-
-    List<LocalComment> savedList = [];
-    if (localCommentsJson != null) {
-      try {
-        final List decoded = jsonDecode(localCommentsJson) as List;
-        savedList = decoded.map((e) => LocalComment.fromJson(e)).toList();
-      } catch (_) {}
-    }
-
-    // Merge: flat list of all comments
-    final allFlat = <LocalComment>[...mockList, ...savedList];
-
-    // Build parent-child map. Replies are ONLY 1 level deep.
-    final Map<String, List<LocalComment>> repliesMap = {};
-    final List<LocalComment> topLevel = [];
-
-    for (final c in allFlat) {
-      if (c.parentId != null && c.parentId!.isNotEmpty) {
-        // This is a reply — but enforce 1-level limit:
-        // If the parent itself has a parentId, attach to the root parent instead.
-        final effectiveParentId = _resolveRootParent(c.parentId!, allFlat);
-        repliesMap.putIfAbsent(effectiveParentId, () => []);
-        repliesMap[effectiveParentId]!.add(c);
-      } else {
-        topLevel.add(c);
-      }
-    }
-
-    // Attach replies to their parent comments
-    final result = topLevel.map((parent) {
-      final childReplies = repliesMap[parent.id] ?? [];
-      return parent.copyWith(replies: childReplies);
-    }).toList();
-
-    return result;
-  }
-
-  /// Resolve to root parent (prevents infinite nesting — max 1 level)
-  static String _resolveRootParent(String parentId, List<LocalComment> allComments) {
-    final parent = allComments.where((c) => c.id == parentId).firstOrNull;
-    if (parent != null && parent.parentId != null && parent.parentId!.isNotEmpty) {
-      // The parent is itself a reply — use its parent (the root) instead
-      return parent.parentId!;
-    }
-    return parentId;
-  }
-
-  /// Save new top-level comment (JWT validated)
-  static Future<void> saveComment(
-    String user,
-    String description,
-    String commentText,
-    String myUserName,
-    String myUserInitials,
-  ) async {
-    // JWT auth check
-    final authenticated = await isAuthenticated();
-    if (!authenticated) {
-      throw const ApiException('Please sign in to post a comment.');
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getPostKey(user, description);
-
-    // Get current saved comments (just custom ones)
-    final String? localCommentsJson = prefs.getString(key);
-    List<LocalComment> savedList = [];
-    if (localCommentsJson != null) {
-      try {
-        final List decoded = jsonDecode(localCommentsJson) as List;
-        savedList = decoded.map((e) => LocalComment.fromJson(e)).toList();
-      } catch (_) {}
-    }
-
-    // Append new comment
-    final newComment = LocalComment(
-      id: 'user_comment_${DateTime.now().millisecondsSinceEpoch}',
-      authorName: myUserName,
-      authorInitials: myUserInitials,
-      text: commentText,
-      timeAgo: 'just now',
+    return CommentsResult(
+      comments:   comments,
+      nextCursor: data['next_cursor'] as String?,
     );
-    savedList.add(newComment);
-
-    await prefs.setString(key, jsonEncode(savedList.map((e) => e.toJson()).toList()));
   }
 
-  /// Save a reply to a comment (JWT validated, max 1-level enforced)
-  static Future<LocalComment> saveReply(
-    String user,
-    String description,
-    String parentCommentId,
-    String replyText,
-    String myUserName,
-    String myUserInitials,
-  ) async {
-    // JWT auth check
-    final authenticated = await isAuthenticated();
-    if (!authenticated) {
-      throw const ApiException('Please sign in to reply.');
-    }
+  // ── Create ────────────────────────────────────────────────────────────────
 
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getPostKey(user, description);
-
-    // Get all saved comments to resolve parent chain
-    final String? localCommentsJson = prefs.getString(key);
-    List<LocalComment> savedList = [];
-    if (localCommentsJson != null) {
-      try {
-        final List decoded = jsonDecode(localCommentsJson) as List;
-        savedList = decoded.map((e) => LocalComment.fromJson(e)).toList();
-      } catch (_) {}
-    }
-
-    // Also load mocks to resolve parent chain
-    final mockList = _getMockComments(user);
-    final allComments = [...mockList, ...savedList];
-
-    // Enforce 1-level max: if parent is already a reply, attach to its root parent
-    final effectiveParentId = _resolveRootParent(parentCommentId, allComments);
-
-    final reply = LocalComment(
-      id: 'reply_${DateTime.now().millisecondsSinceEpoch}',
-      authorName: myUserName,
-      authorInitials: myUserInitials,
-      text: replyText,
-      timeAgo: 'just now',
-      parentId: effectiveParentId,
+  /// Post a new comment or reply.
+  /// Returns the server-confirmed [Comment] with its real MongoDB id.
+  Future<Comment> postComment(
+    String postId,
+    String text, {
+    String? parentId,
+  }) async {
+    final body = <String, dynamic>{
+      'text': text.trim(),
+      if (parentId != null && parentId.isNotEmpty) 'parent_id': parentId,
+    };
+    final data = await ApiService.post(
+      '/posts/$postId/comments',
+      body,
+      requiresAuth: true,
     );
-
-    savedList.add(reply);
-    await prefs.setString(key, jsonEncode(savedList.map((e) => e.toJson()).toList()));
-
-    return reply;
+    return Comment.fromJson(data['comment'] as Map<String, dynamic>);
   }
 
-  /// Get only the user-made comments count
-  static Future<int> getCommentsCount(String user, String description) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getPostKey(user, description);
-    final String? localCommentsJson = prefs.getString(key);
-    if (localCommentsJson == null) return 0;
-    try {
-      final List decoded = jsonDecode(localCommentsJson) as List;
-      return decoded.length;
-    } catch (_) {
-      return 0;
-    }
+  // ── Delete ────────────────────────────────────────────────────────────────
+
+  Future<void> deleteComment(String commentId) async {
+    await ApiService.delete(
+      '/posts/comments/$commentId',
+      requiresAuth: true,
+    );
   }
 
-  /// Toggle like on a comment (works for both mocks and user comments)
-  static Future<List<LocalComment>> toggleCommentLike(
-      String user, String description, String commentId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getPostKey(user, description);
-    final String? localCommentsJson = prefs.getString(key);
+  // ── Like / Unlike ─────────────────────────────────────────────────────────
 
-    // Get custom list
-    List<LocalComment> savedList = [];
-    if (localCommentsJson != null) {
-      try {
-        final List decoded = jsonDecode(localCommentsJson) as List;
-        savedList = decoded.map((e) => LocalComment.fromJson(e)).toList();
-      } catch (_) {}
-    }
-
-    final mockList = _getMockComments(user);
-    final allComments = [...mockList, ...savedList];
-
-    // Find the comment and update it
-    final index = allComments.indexWhere((c) => c.id == commentId);
-    if (index != -1) {
-      final currentComment = allComments[index];
-      final updatedComment = currentComment.copyWith(isLiked: !currentComment.isLiked);
-
-      // Check if it was in saved custom comments
-      final savedIndex = savedList.indexWhere((c) => c.id == commentId);
-      if (savedIndex != -1) {
-        savedList[savedIndex] = updatedComment;
-      } else {
-        // It was a mock comment. To toggle its like state dynamically, we will
-        // save the toggle preference. But wait, since it's a mock, we can either
-        // save a list of liked mock IDs, or just add the modified mock to savedList,
-        // or a simple shared pref bool 'liked_comment_<id>'.
-        // Let's store the liked status of mocks in SharedPreferences under a custom key.
-        final mockLikedKey = 'mock_comment_liked_$commentId';
-        final isCurrentlyLiked = prefs.getBool(mockLikedKey) ?? false;
-        await prefs.setBool(mockLikedKey, !isCurrentlyLiked);
-      }
-    }
-
-    // Save custom list
-    if (savedList.isNotEmpty) {
-      await prefs.setString(key, jsonEncode(savedList.map((e) => e.toJson()).toList()));
-    }
-
-    return getComments(user, description);
+  Future<void> likeComment(String commentId) async {
+    await ApiService.post(
+      '/posts/comments/$commentId/like',
+      {},
+      requiresAuth: true,
+    );
   }
 
-  /// Check if a mock comment is liked
-  static Future<bool> isMockCommentLiked(String commentId) async {
-    if (!commentId.startsWith('mock_')) return false;
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('mock_comment_liked_$commentId') ?? false;
+  Future<void> unlikeComment(String commentId) async {
+    await ApiService.delete(
+      '/posts/comments/$commentId/like',
+      requiresAuth: true,
+    );
   }
 }

@@ -4,10 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/quiz_model.dart';
 import '../services/quiz_service.dart';
+import '../services/fcm_service.dart';
 import 'glass_common.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Entry point — polls until quiz is ready, then launches QuizScreen
+// Entry point — waits for quiz_ready FCM push, then launches QuizScreen.
+//
+// Push-first strategy (no polling loop):
+//   1. Backend sends `quiz_ready` FCM data push when generation completes.
+//   2. FcmService.startForegroundListener() receives it and calls our handler.
+//   3. Handler navigates to QuizScreen immediately.
+//
+// Fallback (single check, NOT a loop):
+//   If FCM doesn't arrive within 30 s (device offline, FCM delay, etc.)
+//   we do ONE status check. If still pending, we wait up to 90 s total
+//   before giving up to avoid hanging forever.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class QuizLoadingScreen extends StatefulWidget {
@@ -21,48 +32,89 @@ class QuizLoadingScreen extends StatefulWidget {
 class _QuizLoadingScreenState extends State<QuizLoadingScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulse;
-  Timer? _pollTimer;
-  int _attempts = 0;
+  Timer? _fallbackTimer;    // fires ONCE at 30 s
+  Timer? _timeoutTimer;     // fires ONCE at 90 s (absolute max)
+  bool _navigated = false;
 
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
-    _poll();
-    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _poll());
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+
+    // Register push handler — called by FcmService when quiz_ready arrives
+    FcmService.setQuizReadyHandler(_onQuizReadyPush);
+
+    // Fallback: single check after 30 s (in case FCM was delayed or missed)
+    _fallbackTimer = Timer(const Duration(seconds: 30), _fallbackCheck);
+
+    // Hard timeout: 90 s — show error so user is never stuck forever
+    _timeoutTimer = Timer(const Duration(seconds: 90), () {
+      if (!mounted || _navigated) return;
+      _showError('Quiz generation timed out. Please try again.');
+    });
   }
 
   @override
   void dispose() {
+    FcmService.setQuizReadyHandler(null); // deregister so no stale callback fires
+    _fallbackTimer?.cancel();
+    _timeoutTimer?.cancel();
     _pulse.dispose();
-    _pollTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _poll() async {
-    if (!mounted) return;
-    _attempts++;
-    if (_attempts > 20) {
-      _pollTimer?.cancel();
-      if (mounted) _showError('Quiz generation failed. Try again later.');
-      return;
-    }
+  // ── Called by FcmService when backend sends quiz_ready push ──────────────
+
+  void _onQuizReadyPush(String quizId) {
+    if (!mounted || _navigated) return;
+    if (quizId != widget.quizId) return; // not our quiz
+    _fallbackTimer?.cancel();
+    _timeoutTimer?.cancel();
+    _loadAndNavigate();
+  }
+
+  // ── Single fallback check (fires ONCE at 30 s) ────────────────────────────
+
+  Future<void> _fallbackCheck() async {
+    if (!mounted || _navigated) return;
     final quiz = await QuizService.getQuiz(widget.quizId);
-    if (!mounted) return;
-    if (quiz == null) return;
+    if (!mounted || _navigated) return;
+    if (quiz == null) return; // still generating — wait for FCM or timeout
     if (quiz.status == 'ready') {
-      _pollTimer?.cancel();
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => QuizScreen(quiz: quiz)),
-      );
+      _timeoutTimer?.cancel();
+      _navigateToQuiz(quiz);
     } else if (quiz.status == 'failed') {
-      _pollTimer?.cancel();
+      _timeoutTimer?.cancel();
       _showError('Quiz generation failed. Try again later.');
     }
+    // status == 'generating' → keep waiting; FCM or timeout will handle it
+  }
+
+  // ── Fetch quiz and navigate ───────────────────────────────────────────────
+
+  Future<void> _loadAndNavigate() async {
+    if (!mounted || _navigated) return;
+    final quiz = await QuizService.getQuiz(widget.quizId);
+    if (!mounted || _navigated) return;
+    if (quiz != null && quiz.status == 'ready') {
+      _navigateToQuiz(quiz);
+    }
+    // If null / not ready yet, FCM arrived too early — ignore (shouldn't happen)
+  }
+
+  void _navigateToQuiz(QuizModel quiz) {
+    if (_navigated) return;
+    _navigated = true;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => QuizScreen(quiz: quiz)),
+    );
   }
 
   void _showError(String msg) {
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -71,7 +123,10 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
         content: Text(msg, style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
-            onPressed: () { Navigator.pop(context); Navigator.pop(context); },
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
             child: const Text('OK', style: TextStyle(color: Color(0xFF00E676))),
           ),
         ],
@@ -92,24 +147,38 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
               builder: (_, __) => Opacity(
                 opacity: 0.6 + _pulse.value * 0.4,
                 child: Container(
-                  width: 80, height: 80,
+                  width: 80,
+                  height: 80,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
                       colors: [Color(0xFF00E676), Color(0xFF00BCD4)],
                     ),
                     boxShadow: [
-                      BoxShadow(color: const Color(0xFF00E676).withOpacity(0.4), blurRadius: 30),
+                      BoxShadow(
+                        color: const Color(0xFF00E676).withOpacity(0.4),
+                        blurRadius: 30,
+                      ),
                     ],
                   ),
-                  child: const Icon(Icons.psychology_rounded, color: Colors.black, size: 40),
+                  child: const Icon(
+                    Icons.psychology_rounded,
+                    color: Colors.black,
+                    size: 40,
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 28),
-            Text('Quiz Ban Raha Hai...', style: manrope(size: 18, weight: FontWeight.w700)),
+            Text(
+              'Quiz Ban Raha Hai...',
+              style: manrope(size: 18, weight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
-            Text('AI questions generate kar raha hai', style: manrope(size: 13, color: Colors.white54)),
+            Text(
+              'AI questions generate kar raha hai',
+              style: manrope(size: 13, color: Colors.white54),
+            ),
           ],
         ),
       ),

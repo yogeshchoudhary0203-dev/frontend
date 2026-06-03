@@ -26,6 +26,7 @@ import '../../widgets/feed/video_card.dart' show FeedVideoPool;
 import '../../widgets/stories/story_bar.dart';
 import '../../widgets/home/home_nav_bar.dart';
 import '../../widgets/home/suggested_users.dart';
+import '../../l10n/app_localizations.dart';
 import 'skill_score.dart';
 import 'infinity_btn.dart';
 import 'trandia_island.dart';
@@ -75,6 +76,10 @@ class _HomeScreenState extends State<HomeScreen>
   String?               _nextCursor;
   bool                  _loadingFeed    = false;
   bool                  _feedError      = false;
+  // true only when API confirms no more pages (nextCursor == null after a
+  // successful fetch). Prevents the stuck-cache bug where _nextCursor == null
+  // after a cache-only load blocks all future feed fetches.
+  bool                  _feedFullyLoaded = false;
   bool                  _quickReelOpening = false;
   bool                  _loadingSuggestions = false;
   final List<UserProfile> _suggestedUsers = [];
@@ -251,14 +256,17 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadFeed({bool refresh = false}) async {
     if (_loadingFeed) return;
-    if (!refresh && _nextCursor == null && _posts.isNotEmpty) return;
+    // Only block pagination when we have CONFIRMED from the API that there
+    // are no more pages.  Never block when running from stale local cache
+    // (_feedFullyLoaded stays false until a real API response arrives).
+    if (!refresh && _feedFullyLoaded && _posts.isNotEmpty) return;
 
     // -- Stale-while-revalidate for first page (not pagination, not pull-refresh) --
     final isFirstPage = !refresh && _nextCursor == null && _posts.isEmpty;
     if (isFirstPage) {
       final cached = await LocalDb.instance.loadFeedPosts();
       if (cached.isNotEmpty && mounted) {
-        // Render cached posts instantly — no spinner shown to user
+        // Render cached posts instantly ï¿½ no spinner shown to user
         setState(() {
           _posts.addAll(cached);
           _feedError = false;
@@ -284,6 +292,8 @@ class _HomeScreenState extends State<HomeScreen>
         }
         _posts.addAll(result.posts);
         _nextCursor = result.nextCursor;
+        _feedFullyLoaded = result.nextCursor == null; // confirmed no more pages
+        _feedError = false;
         FeedVideoPool.grow(_posts);
       });
       // Save first page to local DB for next cold open
@@ -308,13 +318,14 @@ class _HomeScreenState extends State<HomeScreen>
           _posts
             ..clear()
             ..addAll(result.posts);
-          _nextCursor = result.nextCursor;
-          _feedError  = false;
+          _nextCursor      = result.nextCursor;
+          _feedFullyLoaded = result.nextCursor == null;
+          _feedError       = false;
         });
         unawaited(LocalDb.instance.saveFeedPosts(result.posts));
       }
     } catch (_) {
-      // Silently ignore — user is already seeing stale data, which is fine
+      // Silently ignore ï¿½ user is already seeing stale data, which is fine
     }
   }
 
@@ -676,21 +687,63 @@ class _HomeScreenState extends State<HomeScreen>
                   }
                   if (_feedError) {
                     return SizedBox(
-                      height: 200,
-                      child: Center(child: GestureDetector(
-                        onTap: () => _loadFeed(refresh: true),
-                        child: Text('Tap to retry',
-                          style: TextStyle(
-                            color: (isDark ? Colors.white : Colors.black)
-                                .withValues(alpha: 0.45),
-                            fontSize: 14,
-                          )),
-                      )),
+                      height: 240,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.wifi_off_rounded,
+                              size: 40,
+                              color: (isDark ? Colors.white : Colors.black)
+                                  .withValues(alpha: 0.20),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              'Could not load feed',
+                              style: TextStyle(
+                                color: (isDark ? Colors.white : Colors.black)
+                                    .withValues(alpha: 0.65),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            GestureDetector(
+                              onTap: () => _loadFeed(refresh: true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 22, vertical: 10),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.12)
+                                      : Colors.black.withValues(alpha: 0.07),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.20)
+                                        : Colors.black.withValues(alpha: 0.10),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Retry',
+                                  style: TextStyle(
+                                    color: (isDark ? Colors.white : Colors.black)
+                                        .withValues(alpha: 0.85),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     );
                   }
                   return SizedBox(
                     height: 200,
-                    child: Center(child: Text('No posts yet',
+                    child: Center(child: Text('No posts yet'.tr(ctx),
                       style: TextStyle(
                         color: (isDark ? Colors.white : Colors.black)
                             .withValues(alpha: 0.38),

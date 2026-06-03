@@ -12,6 +12,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'api_service.dart';
@@ -166,6 +167,27 @@ class MediaUploadService {
     required String resourceType,
     void Function(double progress)? onProgress,
   }) async {
+    // Step 0: compress images client-side before upload (videos skipped)
+    File fileToUpload = file;
+    if (resourceType == 'image') {
+      try {
+        final compressed = await FlutterImageCompress.compressAndGetFile(
+          file.absolute.path,
+          '${file.absolute.path}_compressed.jpg',
+          minWidth:  1920,
+          minHeight: 1920,
+          quality:   85,
+          keepExif:  false,
+        );
+        if (compressed != null) {
+          fileToUpload = File(compressed.path);
+        }
+      } catch (_) {
+        // Compression failed — silently fall back to original file
+        fileToUpload = file;
+      }
+    }
+
     // Step 1: get signed upload params from backend (API secret stays on server)
     onProgress?.call(0.05);
     final sigParams = await _fetchSignature(folder.value, resourceType);
@@ -173,11 +195,16 @@ class MediaUploadService {
     // Step 2: upload directly to Cloudinary — Railway never touches the bytes
     onProgress?.call(0.10);
     final result = await _uploadToCloudinary(
-      file:         file,
+      file:         fileToUpload,
       sigParams:    sigParams,
       resourceType: resourceType,
       onProgress:   onProgress,
     );
+
+    // Clean up temp compressed file if one was created
+    if (fileToUpload.path != file.path) {
+      try { await fileToUpload.delete(); } catch (_) {}
+    }
 
     onProgress?.call(1.0);
     return result;

@@ -109,7 +109,7 @@ IconData _kindIcon(NfKind k) {
 
 /// Fixed item height so card sizing stays consistent.
 const double _kCardHeight = 66;
-const double _kCardGap    = 10;
+const double _kCardGap    = 6;
 const double _kListStartY = 112; // header(48) + 12 + chips(30) + 22 spacing
 const double _kIslandCollapseRange = 80;
 const double _kIslandPinLift = 64; // keeps the folded stack above the bottom safe area
@@ -436,7 +436,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       backgroundColor: dark ? const Color(0xFF1A1A1A) : Colors.white,
       child: ListView.builder(
         controller: _scroll,
-        physics: const AlwaysScrollableScrollPhysics(),
+        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         padding: EdgeInsets.only(top: listInnerTopPadding, bottom: 40, left: 10, right: 10),
         itemCount: items.length + (_isLoadingMore ? 1 : 0),
         addAutomaticKeepAlives: false,
@@ -631,7 +631,7 @@ class _DynamicIslandScrollCard extends StatelessWidget {
         final collapseRaw = (1.0 - (distanceToBottomStack / _kIslandCollapseRange))
             .clamp(0.0, 1.0)
             .toDouble();
-        final collapseT = Curves.easeInCubic.transform(collapseRaw);
+        final collapseT = Curves.easeInOutCubic.transform(collapseRaw);
 
         // ── Bottom-entry: item entering from below screen ──
         final distanceFromBottom = screenHeight - itemY;
@@ -642,38 +642,37 @@ class _DynamicIslandScrollCard extends StatelessWidget {
         final entryT = Curves.easeOutCubic.transform(entryRaw);
 
         // Combine both effects
-        final slideUp     = _lerp(28.0, 0.0, entryT);   // slides up from below
+        final slideUp      = _lerp(22.0, 0.0, entryT);
         final entryOpacity = _lerp(0.0, 1.0, entryT);
 
-        final collapseWidthFactor = _lerp(1.0, 0.58, collapseT);
-        final collapseScaleY      = _lerp(1.0, 0.70, collapseT);
-        final collapseDrop        = _lerp(0.0, 18.0, collapseT);
-        final collapseOpacity     = _lerp(1.0, 0.10, Curves.easeOut.transform(collapseT));
+        final collapseWidthFactor = _lerp(1.0, 0.62, collapseT);
+        final collapseScaleY      = _lerp(1.0, 0.74, collapseT);
+        final collapseDrop        = _lerp(0.0, 14.0, collapseT);
+        final collapseOpacity     = _lerp(1.0, 0.12, Curves.easeInOutCubic.transform(collapseT));
 
         final finalOpacity = (entryOpacity * collapseOpacity).clamp(0.0, 1.0);
         final finalSlide   = slideUp + collapseDrop;
 
         if (collapseT == 0 && entryT == 1.0) return child!;
 
-        return ClipRect(
-          child: Opacity(
-            opacity: finalOpacity,
-            child: Transform.translate(
-              offset: Offset(0, finalSlide),
-              child: Transform.scale(
-                alignment: Alignment.bottomCenter,
-                scaleY: collapseScaleY,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: FractionallySizedBox(
-                    widthFactor: collapseWidthFactor,
-                    child: child,
-                  ),
-                ),
+        Widget result = Transform.translate(
+          offset: Offset(0, finalSlide),
+          child: Transform.scale(
+            alignment: Alignment.bottomCenter,
+            scaleY: collapseScaleY,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: FractionallySizedBox(
+                widthFactor: collapseWidthFactor,
+                child: child,
               ),
             ),
           ),
         );
+        if (finalOpacity < 0.99) {
+          result = Opacity(opacity: finalOpacity, child: result);
+        }
+        return ClipRect(child: result);
       },
     );
   }

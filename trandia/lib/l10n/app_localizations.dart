@@ -252,6 +252,11 @@ const Map<String, String> _hinglish = {
   'Please wait while we check your username...': 'Ruko, username check ho raha hai...',
   'Please fix the username before continuing.': 'Aage jaane se pehle username theek karo.',
   'Could not delete notification': 'Notification delete nahi ho saki',
+  'Follow Karo': 'Follow Karo',
+  'Followed by you': 'Follow kar liya',
+  'Suggested': 'Suggestion',
+  'Tap to retry': 'Tap karke dobara try karo',
+  'No posts yet': 'Abhi koi post nahi',
 };
 
 const Map<String, String> _hi = {
@@ -426,4 +431,9 @@ const Map<String, String> _hi = {
   'That username is taken. Choose another.': 'यह यूजरनेम लिया जा चुका है। दूसरा चुनें।',
   'Please wait while we check your username...': 'यूजरनेम जांचने तक कृपया प्रतीक्षा करें...',
   'Please fix the username before continuing.': 'जारी रखने से पहले यूजरनेम ठीक करें।',
+  'Follow Karo': 'फॉलो करें',
+  'Followed by you': 'आपने फॉलो किया',
+  'Suggested': 'सुझाव',
+  'Tap to retry': 'दोबारा कोशिश के लिए टैप करें',
+  'No posts yet': 'अभी कोई पोस्ट नहीं',
 };

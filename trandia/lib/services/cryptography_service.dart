@@ -7,7 +7,7 @@ import 'package:pointycastle/asymmetric/api.dart';
 import 'package:pointycastle/key_generators/api.dart';
 import 'package:pointycastle/key_generators/rsa_key_generator.dart';
 import 'dart:developer' as developer;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_service.dart';
 
 class CryptographyService {
@@ -17,6 +17,11 @@ class CryptographyService {
 
   static const String _kPublicKeyPref = 'e2ee_public_key';
   static const String _kPrivateKeyPref = 'e2ee_private_key';
+
+  // flutter_secure_storage instance — uses Android Keystore / iOS Keychain
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   // ── Key Generation & Serialization ───────────────────────────
 
@@ -56,34 +61,30 @@ class CryptographyService {
 
   /// Initialize E2EE keys locally. Generates if not present, then returns public key.
   Future<String> initKeys() async {
-    final prefs = await SharedPreferences.getInstance();
-    var pub = prefs.getString(_kPublicKeyPref);
-    var priv = prefs.getString(_kPrivateKeyPref);
+    var pub = await _secureStorage.read(key: _kPublicKeyPref);
+    var priv = await _secureStorage.read(key: _kPrivateKeyPref);
 
     if (pub == null || priv == null) {
       final pair = await generateRSAKeyPair();
       pub = pair['public']!;
       priv = pair['private']!;
-      await prefs.setString(_kPublicKeyPref, pub);
-      await prefs.setString(_kPrivateKeyPref, priv);
+      await _secureStorage.write(key: _kPublicKeyPref, value: pub);
+      await _secureStorage.write(key: _kPrivateKeyPref, value: priv);
     }
     return pub;
   }
 
   Future<String?> getLocalPublicKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kPublicKeyPref);
+    return _secureStorage.read(key: _kPublicKeyPref);
   }
 
   Future<String?> getLocalPrivateKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kPrivateKeyPref);
+    return _secureStorage.read(key: _kPrivateKeyPref);
   }
 
   Future<void> clearLocalKeys() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kPublicKeyPref);
-    await prefs.remove(_kPrivateKeyPref);
+    await _secureStorage.delete(key: _kPublicKeyPref);
+    await _secureStorage.delete(key: _kPrivateKeyPref);
   }
 
   // ── Helper BigInt Encoders ───────────────────────────────────

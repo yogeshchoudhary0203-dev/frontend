@@ -2067,6 +2067,7 @@ class _PostCardModalState extends State<_PostCardModal> {
   bool _liked = false;
   late int _likesCount;
   bool _muted = false;
+  bool _deleting = false; // true while delete API call is in progress
 
   @override
   void initState() {
@@ -2117,10 +2118,12 @@ class _PostCardModalState extends State<_PostCardModal> {
 
   void _showOptions() {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    // useRootNavigator: true — modal is on root navigator, sheet must be too
+    // so Navigator.of(sheetCtx).pop() closes only the sheet, nothing else.
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      useRootNavigator: false,
+      useRootNavigator: true,
       builder: (sheetCtx) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
@@ -2151,7 +2154,7 @@ class _PostCardModalState extends State<_PostCardModal> {
                   label: 'Delete Post',
                   color: Colors.redAccent,
                   onTap: () {
-                    Navigator.of(sheetCtx).pop(); // close only the sheet
+                    Navigator.of(sheetCtx, rootNavigator: true).pop();
                     _confirmDelete();
                   },
                 ),
@@ -2160,7 +2163,7 @@ class _PostCardModalState extends State<_PostCardModal> {
                 label: 'Copy Link',
                 color: dark ? Colors.white : Colors.black87,
                 onTap: () {
-                  Navigator.of(sheetCtx).pop();
+                  Navigator.of(sheetCtx, rootNavigator: true).pop();
                   HapticFeedback.selectionClick();
                 },
               ),
@@ -2173,9 +2176,11 @@ class _PostCardModalState extends State<_PostCardModal> {
   }
 
   void _confirmDelete() {
+    if (!mounted) return;
     final dark = Theme.of(context).brightness == Brightness.dark;
     showDialog<void>(
       context: context,
+      useRootNavigator: true,
       barrierColor: Colors.black54,
       builder: (ctx) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
@@ -2192,17 +2197,18 @@ class _PostCardModalState extends State<_PostCardModal> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(),
               child: const Text('Cancel'),
             ),
             TextButton(
               onPressed: () async {
-                Navigator.pop(ctx); // close dialog
+                Navigator.of(ctx, rootNavigator: true).pop();
                 await _executeDelete();
               },
               child: const Text(
                 'Delete',
-                style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                    color: Colors.redAccent, fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -2212,17 +2218,49 @@ class _PostCardModalState extends State<_PostCardModal> {
   }
 
   Future<void> _executeDelete() async {
+    if (!mounted || widget.post.id.isEmpty) return;
+
+    // Show loading state on the modal while deleting
+    if (mounted) setState(() => _deleting = true);
+
     try {
       await PostService.instance.deletePost(widget.post.id);
+
+
       if (mounted) {
-        Navigator.of(context).pop();
+        // Close modal using root navigator to avoid tab-navigator confusion
+        Navigator.of(context, rootNavigator: true).pop();
         widget.onDeleted?.call();
         HapticFeedback.mediumImpact();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e')),
+        setState(() => _deleting = false);
+        // Use root navigator's context for the error dialog — ScaffoldMessenger
+        // is not reliably reachable from inside a GeneralDialog context.
+        showDialog<void>(
+          context: context,
+          useRootNavigator: true,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1C1C1E),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20)),
+            title: const Text('Delete Failed',
+                style: TextStyle(color: Colors.white,
+                    fontWeight: FontWeight.w700)),
+            content: Text(
+              e.toString().replaceFirst('ApiException: ', ''),
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(ctx, rootNavigator: true).pop(),
+                child: const Text('OK',
+                    style: TextStyle(color: Color(0xFF00E676))),
+              ),
+            ],
+          ),
         );
       }
     }

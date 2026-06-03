@@ -5,11 +5,13 @@
 //
 // Drop in `lib/` alongside glass_common.dart.
 
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:video_player/video_player.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
@@ -38,6 +40,85 @@ const _highlights = <HighlightItem>[
   HighlightItem('Reads', 4),
   HighlightItem('Type', 5),
 ];
+
+// ── In-memory thumbnail cache ─────────────────────────────────────────────
+// Prevents re-generating the same thumbnail on every grid rebuild.
+// Key = video URL, Value = raw JPEG bytes.
+final _thumbCache = <String, Uint8List>{};
+
+// ── Auto-generated video thumbnail tile ──────────────────────────────────
+class _VideoThumbnailTile extends StatefulWidget {
+  final String videoUrl;
+  const _VideoThumbnailTile({required this.videoUrl});
+
+  @override
+  State<_VideoThumbnailTile> createState() => _VideoThumbnailTileState();
+}
+
+class _VideoThumbnailTileState extends State<_VideoThumbnailTile> {
+  Uint8List? _bytes;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    // 1. Check in-memory cache first
+    final cached = _thumbCache[widget.videoUrl];
+    if (cached != null) {
+      if (mounted) setState(() { _bytes = cached; _loading = false; });
+      return;
+    }
+
+    // 2. Generate from video URL
+    try {
+      final bytes = await VideoThumbnail.thumbnailData(
+        video:    widget.videoUrl,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 300,
+        quality:  70,
+      );
+      if (bytes != null && bytes.isNotEmpty) {
+        _thumbCache[widget.videoUrl] = bytes; // cache for reuse
+      }
+      if (mounted) setState(() { _bytes = bytes; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      // Subtle shimmer — just a semi-transparent overlay on the gradient
+      return const Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: Colors.white38,
+          ),
+        ),
+      );
+    }
+    if (_bytes != null) {
+      return Image.memory(
+        _bytes!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    }
+    // Generation failed — fallback to centered play icon
+    return const Center(
+      child: Icon(Icons.play_circle_outline_rounded, color: Colors.white54, size: 30),
+    );
+  }
+}
 
 /// Wider tonal range tile gradient.
 LinearGradient _tileGradient(bool dark, int i) {
@@ -1912,11 +1993,24 @@ class _ProfileTileView extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox(),
-              ),
+              // Image post → network image
+              if (!isVideo)
+                Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox(),
+                )
+              // Video + backend-provided thumbnail
+              else if (post.thumbnailUrl != null && post.thumbnailUrl!.isNotEmpty)
+                Image.network(
+                  post.thumbnailUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      _VideoThumbnailTile(videoUrl: post.mediaUrl),
+                )
+              // Video + no thumbnail → auto-generate from video URL
+              else
+                _VideoThumbnailTile(videoUrl: post.mediaUrl),
               if (isVideo)
                 Positioned(
                   top: 6,

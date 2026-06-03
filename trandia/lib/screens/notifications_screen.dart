@@ -430,6 +430,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildCascadeList(List<NfItem> items, bool dark, double listInnerTopPadding, double listStartGlobalY) {
+    // Cache once per build — never read inside AnimatedBuilder to avoid per-frame calls
+    final screenH  = MediaQuery.sizeOf(context).height;
+    final botPad   = MediaQuery.paddingOf(context).bottom;
+
     return RefreshIndicator(
       onRefresh: _fetchNotifications,
       color: dark ? Colors.white : Colors.black,
@@ -440,6 +444,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         padding: EdgeInsets.only(top: listInnerTopPadding, bottom: 40, left: 10, right: 10),
         itemCount: items.length + (_isLoadingMore ? 1 : 0),
         addAutomaticKeepAlives: false,
+        addRepaintBoundaries: false,   // RepaintBoundary is applied manually per item
+        cacheExtent: 300,              // pre-render items just off-screen for smooth scroll
         itemBuilder: (context, i) {
           if (i >= items.length) {
             return Padding(
@@ -460,6 +466,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             controller: _scroll,
             index: i,
             listStartGlobalY: listStartGlobalY,
+            screenHeight: screenH,
+            bottomPad: botPad,
             child: RepaintBoundary(
               key: ValueKey(items[i].id.isEmpty ? i.toString() : items[i].id),
               child: Padding(
@@ -602,12 +610,17 @@ class _DynamicIslandScrollCard extends StatelessWidget {
   final ScrollController controller;
   final int index;
   final double listStartGlobalY;
+  // Pre-computed outside the AnimatedBuilder to avoid per-frame MediaQuery calls
+  final double screenHeight;
+  final double bottomPad;
   final Widget child;
 
   const _DynamicIslandScrollCard({
     required this.controller,
     required this.index,
     required this.listStartGlobalY,
+    required this.screenHeight,
+    required this.bottomPad,
     required this.child,
   });
 
@@ -617,8 +630,7 @@ class _DynamicIslandScrollCard extends StatelessWidget {
       animation: controller,
       child: child,
       builder: (context, child) {
-        final screenHeight = MediaQuery.sizeOf(context).height;
-        final bottomPad = MediaQuery.paddingOf(context).bottom;
+        // screenHeight & bottomPad are passed in — no MediaQuery per frame
         final scrollY = controller.hasClients ? controller.offset : 0.0;
         final itemY = listStartGlobalY +
             (index * (_kCardHeight + _kCardGap)) -

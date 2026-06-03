@@ -148,6 +148,13 @@ const _seedFollowers = <_UserRow>[];
 
 const _seedFollowing = <_UserRow>[];
 
+// ── DynamicIsland scroll animation constants ──────────────────────────────────
+const double _kUserCardHeight       = 68.0;   // approximate _UserRowCard height
+const double _kUserCardGap          = 8.0;    // separatorBuilder gap
+const double _kUserCollapseRange    = 80.0;   // px before bottom where collapse starts
+const double _kUserIslandPinLift    = 64.0;   // keeps stack above bottom safe area
+const double _kUserEntryRange       = 150.0;  // px from bottom for entry animation
+
 // ───────────────────────────────────────────────────────────────
 // State
 // ───────────────────────────────────────────────────────────────
@@ -399,34 +406,59 @@ class _FollowersScreenState extends State<FollowersScreen> {
                               ),
                             ),
                           )
-                        : ListView.separated(
-                            controller: _scrollCtrl,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            itemCount: list.length +
-                                (_activeIsLoadingMore && _query.isEmpty ? 1 : 0),
-                            separatorBuilder: (_, __) => const SizedBox(height: 8),
-                            itemBuilder: (_, i) {
-                              if (i >= list.length) {
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  child: Center(
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: dark ? Colors.white : Colors.black,
+                        : LayoutBuilder(
+                            builder: (lbCtx, _) {
+                              final box = lbCtx.findRenderObject() as RenderBox?;
+                              final listStartGlobalY =
+                                  box?.localToGlobal(Offset.zero).dy ?? 0.0;
+                              final screenH = MediaQuery.sizeOf(context).height;
+                              final botPad  = MediaQuery.paddingOf(context).bottom;
+                              return ListView.builder(
+                                controller: _scrollCtrl,
+                                physics: const BouncingScrollPhysics(
+                                    parent: AlwaysScrollableScrollPhysics()),
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                itemCount: list.length +
+                                    (_activeIsLoadingMore && _query.isEmpty ? 1 : 0),
+                                addAutomaticKeepAlives: false,
+                                addRepaintBoundaries: false,
+                                cacheExtent: 300,
+                                itemBuilder: (_, i) {
+                                  if (i >= list.length) {
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                      child: Center(
+                                        child: SizedBox(
+                                          width: 20, height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: dark ? Colors.white : Colors.black,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  final u = list[i];
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: _kUserCardGap),
+                                    child: _DynamicUserScrollCard(
+                                      controller: _scrollCtrl,
+                                      index: i,
+                                      listStartGlobalY: listStartGlobalY,
+                                      screenHeight: screenH,
+                                      bottomPad: botPad,
+                                      child: RepaintBoundary(
+                                        key: ValueKey(u.id),
+                                        child: _UserRowCard(
+                                          u: u,
+                                          i: i,
+                                          dark: dark,
+                                          onToggle: () => _toggleFollow(u),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              }
-                              final u = list[i];
-                              return _UserRowCard(
-                                u: u,
-                                i: i,
-                                dark: dark,
-                                onToggle: () => _toggleFollow(u),
+                                  );
+                                },
                               );
                             },
                           ),
@@ -1078,6 +1110,85 @@ class _UserRowCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// ───────────────────────────────────────────────────────────────
+// DynamicIsland scroll animation — same effect as notifications
+// ───────────────────────────────────────────────────────────────
+
+class _DynamicUserScrollCard extends StatelessWidget {
+  final ScrollController controller;
+  final int index;
+  final double listStartGlobalY;
+  final double screenHeight;
+  final double bottomPad;
+  final Widget child;
+
+  const _DynamicUserScrollCard({
+    required this.controller,
+    required this.index,
+    required this.listStartGlobalY,
+    required this.screenHeight,
+    required this.bottomPad,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      child: child,
+      builder: (context, child) {
+        final scrollY      = controller.hasClients ? controller.offset : 0.0;
+        final itemY        = listStartGlobalY + (index * (_kUserCardHeight + _kUserCardGap)) - scrollY;
+        final itemBottomY  = itemY + _kUserCardHeight;
+        final bottomStackY = screenHeight - bottomPad - _kUserIslandPinLift;
+
+        // ── Bottom collapse: card approaching bottom stack ──
+        final collapseRaw = (1.0 - ((bottomStackY - itemBottomY) / _kUserCollapseRange))
+            .clamp(0.0, 1.0);
+        final collapseT = Curves.easeInOutCubic.transform(collapseRaw);
+
+        // ── Entry animation: card sliding in from below ──
+        final entryRaw = ((screenHeight - itemY) / _kUserEntryRange).clamp(0.0, 1.0);
+        final entryT   = Curves.easeOutCubic.transform(entryRaw);
+
+        // Fast path — no transform needed
+        if (collapseT == 0 && entryT == 1.0) return child!;
+
+        final slideUp           = _lerp(20.0, 0.0, entryT);
+        final entryOpacity      = _lerp(0.0, 1.0, entryT);
+        final collapseWidthFactor = _lerp(1.0, 0.62, collapseT);
+        final collapseScaleY    = _lerp(1.0, 0.74, collapseT);
+        final collapseDrop      = _lerp(0.0, 14.0, collapseT);
+        final collapseOpacity   = _lerp(1.0, 0.12, Curves.easeInOutCubic.transform(collapseT));
+
+        final finalOpacity = (entryOpacity * collapseOpacity).clamp(0.0, 1.0);
+        final finalSlide   = slideUp + collapseDrop;
+
+        Widget result = Transform.translate(
+          offset: Offset(0, finalSlide),
+          child: Transform.scale(
+            alignment: Alignment.bottomCenter,
+            scaleY: collapseScaleY,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: FractionallySizedBox(
+                widthFactor: collapseWidthFactor,
+                child: child,
+              ),
+            ),
+          ),
+        );
+        if (finalOpacity < 0.99) {
+          result = Opacity(opacity: finalOpacity, child: result);
+        }
+        return ClipRect(child: result);
+      },
+    );
+  }
+
+  static double _lerp(double a, double b, double t) => a + (b - a) * t;
 }
 
 class _FollowCta extends StatelessWidget {

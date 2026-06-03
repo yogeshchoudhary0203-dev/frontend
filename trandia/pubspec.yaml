@@ -48,6 +48,7 @@ dependencies:
   path: ^1.9.1
   video_thumbnail: ^0.5.3
   flutter_riverpod: ^2.6.1
+  firebase_crashlytics: ^4.3.10
 
 dev_dependencies:
   flutter_test:

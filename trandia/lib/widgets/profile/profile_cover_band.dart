@@ -4,6 +4,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../screens/glass_common.dart';
+import '../../l10n/app_localizations.dart';
 
 class ProfileCoverBand extends StatelessWidget {
   final bool dark;
@@ -212,7 +213,7 @@ class ProfileStat extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          label.tr(context).toUpperCase(),
+          AppLocalizations.of(context).text(label).toUpperCase(),
           style: manrope(
             size: 10.5,
             weight: FontWeight.w700,

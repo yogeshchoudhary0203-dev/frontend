@@ -7,14 +7,9 @@
 //           bio → social row → Follow / Message → posts section → 3-col grid
 // • Pure black/white tones for content; brand colors only on social glyphs
 
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../services/user_service.dart';
 import '../services/follow_state.dart';
 import '../services/auth_service.dart';

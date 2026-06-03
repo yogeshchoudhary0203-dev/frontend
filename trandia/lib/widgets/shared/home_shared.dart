@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 extension ColorOpacity on Color {
-  Color op(double opacity) => withOpacity(opacity);
+  Color op(double opacity) => withValues(alpha: opacity);
 }
 
 class HomeOrb extends StatelessWidget {

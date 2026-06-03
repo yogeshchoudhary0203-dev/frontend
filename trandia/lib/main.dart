@@ -58,14 +58,11 @@ void main() async {
     (msg) => debugPrint('[FCM] opened from background: ${msg.data}'),
   );
 
+  // Route Flutter framework errors to Crashlytics
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   runZonedGuarded(
     () {
       runApp(const ProviderScope(child: TrandiaApp()));
-      // Intentional crash for testing Crashlytics
-      Future.delayed(const Duration(seconds: 5), () {
-        FirebaseCrashlytics.instance.crash();
-      });
     },
     (e, st) {
       debugPrint('[UNCAUGHT] $e\n$st');

@@ -1,0 +1,197 @@
+﻿Analyzing trandia...                                            
+
+   info - The local variable '_a' starts with an underscore - lib\main.dart:126:26 - no_leading_underscores_for_local_identifiers
+   info - The local variable '_b' starts with an underscore - lib\main.dart:126:30 - no_leading_underscores_for_local_identifiers
+   info - The local variable '_a2' starts with an underscore - lib\main.dart:127:44 - no_leading_underscores_for_local_identifiers
+   info - Statements in an if should be enclosed in a block - lib\screens\auth\email_verification_pending_screen.dart:57:31 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\auth\email_verification_pending_screen.dart:58:14 - curly_braces_in_flow_control_structures
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\signup_screen.dart:298:62 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\signup_screen.dart:323:57 - use_build_context_synchronously
+   info - Unnecessary use of multiple underscores - lib\screens\call_screens.dart:107:32 - unnecessary_underscores
+warning - The value of the field '_fadeIn' isn't used - lib\screens\call_screens.dart:578:34 - unused_field
+   info - Unnecessary use of multiple underscores - lib\screens\chat_list_screen.dart:344:46 - unnecessary_underscores
+   info - Don't use 'BuildContext's across async gaps - lib\screens\chat_list_screen.dart:601:34 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\chat_list_screen.dart:620:32 - use_build_context_synchronously
+warning - The value of the local variable 'avatarLetter' isn't used - lib\screens\chat_list_screen.dart:849:11 - unused_local_variable
+   info - Unnecessary use of multiple underscores - lib\screens\chat_list_screen.dart:882:41 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\chat_list_screen.dart:889:48 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\chat_list_screen.dart:1539:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\chat_list_screen.dart:1542:44 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\comments_screen.dart:483:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\create_post_screens.dart:529:47 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\create_post_screens.dart:529:51 - unnecessary_underscores
+   info - Don't use 'BuildContext's across async gaps - lib\screens\create_post_screens.dart:1359:46 - use_build_context_synchronously
+   info - Unnecessary use of multiple underscores - lib\screens\create_post_screens.dart:1479:35 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\create_post_screens.dart:2375:18 - unnecessary_underscores
+warning - The value of the field '_pendingPhotoName' isn't used - lib\screens\edit_profile_screen.dart:41:13 - unused_field
+   info - Unnecessary use of multiple underscores - lib\screens\edit_profile_screen.dart:678:27 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\edit_profile_screen.dart:678:31 - unnecessary_underscores
+warning - The declaration 'monoAvatar' isn't referenced - lib\screens\followers_screen.dart:91:25 - unused_element
+warning - The declaration '_seedFollowers' isn't referenced - lib\screens\followers_screen.dart:147:7 - unused_element
+warning - The declaration '_seedFollowing' isn't referenced - lib\screens\followers_screen.dart:149:7 - unused_element
+   info - Statements in an if should be enclosed in a block - lib\screens\followers_screen.dart:237:24 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\followers_screen.dart:238:12 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\followers_screen.dart:263:47 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\followers_screen.dart:264:16 - curly_braces_in_flow_control_structures
+warning - The value of the local variable 'muted' isn't used - lib\screens\followers_screen.dart:1002:11 - unused_local_variable
+   info - Unnecessary use of multiple underscores - lib\screens\glass_common.dart:263:34 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\glass_common.dart:263:38 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\glass_common.dart:264:34 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:239:34 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:430:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:433:44 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:460:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:463:44 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:492:39 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:495:46 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:525:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:528:44 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:895:28 - unnecessary_underscores
+   info - The import of 'package:flutter/services.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' - lib\screens\home\infinity_btn.dart:3:8 - unnecessary_import
+   info - Unnecessary use of multiple underscores - lib\screens\home\infinity_btn.dart:37:20 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\interest_screen.dart:103:37 - unnecessary_underscores
+   info - Parameter 'key' could be a super parameter - lib\screens\intro_slides.dart:6:9 - use_super_parameters
+   info - Unnecessary use of multiple underscores - lib\screens\liked_by_screen.dart:185:47 - unnecessary_underscores
+warning - This 'onError' handler must return a value assignable to 'Map<String, dynamic>', but ends without returning a value - lib\screens\notification_settings_screen.dart:81:22 - body_might_complete_normally_catch_error
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\screens\notification_settings_screen.dart:354:15 - deprecated_member_use
+warning - The value of the local variable 'shimmerBase' isn't used - lib\screens\notifications_screen.dart:493:11 - unused_local_variable
+warning - A value for optional parameter 'key' isn't ever given - lib\screens\notifications_screen.dart:997:11 - unused_element_parameter
+warning - A value for optional parameter 'delay' isn't ever given - lib\screens\notifications_screen.dart:1000:10 - unused_element_parameter
+   info - The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' - lib\screens\profile_screen.dart:5:8 - unnecessary_import
+warning - Unused import: '../l10n/app_localizations.dart' - lib\screens\profile_screen.dart:15:8 - unused_import
+   info - The private field _tab could be 'final' - lib\screens\profile_screen.dart:30:10 - prefer_final_fields
+warning - The value of the field '_tab' isn't used - lib\screens\profile_screen.dart:30:10 - unused_field
+   info - Statements in an if should be enclosed in a block - lib\screens\profile_screen.dart:157:27 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\profile_screen.dart:255:21 - curly_braces_in_flow_control_structures
+   info - Unnecessary use of multiple underscores - lib\screens\profile_screen.dart:291:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\profile_screen.dart:301:44 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\profile_screen.dart:436:65 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\profile_screen.dart:443:56 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\quiz_screen.dart:147:28 - unnecessary_underscores
+   info - Statements in an if should be enclosed in a block - lib\screens\quiz_screen.dart:455:39 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\quiz_screen.dart:456:40 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\quiz_screen.dart:457:40 - curly_braces_in_flow_control_structures
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\screens\quiz_screen.dart:578:13 - use_null_aware_elements
+   info - The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' - lib\screens\saved_posts_screen.dart:1:8 - unnecessary_import
+warning - The declaration '_startChat' isn't referenced - lib\screens\search_screen.dart:37:14 - unused_element
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:100:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:107:44 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:424:61 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:437:68 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:493:49 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:585:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:922:43 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:929:50 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:994:41 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\search_screen.dart:1005:48 - unnecessary_underscores
+warning - A value for optional parameter 'switchValue' isn't ever given - lib\screens\setting_screen.dart:31:10 - unused_element_parameter
+warning - A value for optional parameter 'onSwitch' isn't ever given - lib\screens\setting_screen.dart:32:10 - unused_element_parameter
+warning - The declaration '_saveSettingString' isn't referenced - lib\screens\setting_screen.dart:129:16 - unused_element
+   info - Unnecessary use of multiple underscores - lib\screens\setting_screen.dart:152:35 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\setting_screen.dart:155:42 - unnecessary_underscores
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\screens\setting_screen.dart:815:23 - deprecated_member_use
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\screens\setting_screen.dart:950:19 - deprecated_member_use
+warning - The value of the local variable 'initial' isn't used - lib\screens\setting_screen.dart:1057:11 - unused_local_variable
+warning - The declaration '_SwitchRow' isn't referenced - lib\screens\setting_screen.dart:1178:7 - unused_element
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\screens\setting_screen.dart:1205:9 - deprecated_member_use
+warning - The declaration '_toShot' isn't referenced - lib\screens\shots_screen.dart:72:10 - unused_element
+   info - Unnecessary use of multiple underscores - lib\screens\shots_screen.dart:714:36 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\shots_screen.dart:721:29 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\shots_screen.dart:1195:34 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\shots_screen.dart:1196:34 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\shots_screen.dart:1196:38 - unnecessary_underscores
+   info - The 'child' argument should be last in widget constructor invocations - lib\screens\shots_screen.dart:1440:11 - sort_child_properties_last
+   info - Unnecessary use of multiple underscores - lib\screens\shots_screen.dart:1451:45 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\shots_screen.dart:1462:52 - unnecessary_underscores
+   info - The 'child' argument should be last in widget constructor invocations - lib\screens\shots_screen.dart:1489:11 - sort_child_properties_last
+   info - Unnecessary use of multiple underscores - lib\screens\single_post_screen.dart:187:40 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\single_post_screen.dart:187:44 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\single_post_screen.dart:538:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\single_post_screen.dart:541:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\single_post_screen.dart:541:32 - unnecessary_underscores
+warning - Unused import: 'intro_slides.dart' - lib\screens\splash_screen.dart:19:8 - unused_import
+   info - Unnecessary use of multiple underscores - lib\screens\splash_screen.dart:145:26 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\splash_screen.dart:145:30 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\splash_screen.dart:146:39 - unnecessary_underscores
+warning - The value of the local variable 'dark' isn't used - lib\screens\story_upload_screen.dart:210:11 - unused_local_variable
+   info - The import of 'package:flutter/services.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' - lib\screens\story_view_screen.dart:3:8 - unnecessary_import
+   info - Unnecessary use of multiple underscores - lib\screens\story_view_screen.dart:399:32 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\story_view_screen.dart:412:33 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\story_view_screen.dart:412:37 - unnecessary_underscores
+warning - Unused import: 'dart:math' - lib\screens\user_profile_screen.dart:10:8 - unused_import
+warning - Unused import: 'dart:ui' - lib\screens\user_profile_screen.dart:11:8 - unused_import
+warning - Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' - lib\screens\user_profile_screen.dart:15:8 - unused_import
+warning - Unused import: 'package:url_launcher/url_launcher.dart' - lib\screens\user_profile_screen.dart:16:8 - unused_import
+warning - Unused import: 'package:cached_network_image/cached_network_image.dart' - lib\screens\user_profile_screen.dart:17:8 - unused_import
+   info - Unnecessary use of multiple underscores - lib\screens\user_profile_screen.dart:315:39 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\user_profile_screen.dart:322:46 - unnecessary_underscores
+warning - Unnecessary cast - lib\services\chat_service.dart:67:26 - unnecessary_cast
+warning - Unnecessary cast - lib\services\chat_service.dart:68:26 - unnecessary_cast
+warning - Unnecessary cast - lib\services\chat_service.dart:69:26 - unnecessary_cast
+warning - Unnecessary cast - lib\services\chat_service.dart:70:26 - unnecessary_cast
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\services\chat_service.dart:303:9 - use_null_aware_elements
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\services\chat_service.dart:304:9 - use_null_aware_elements
+   info - Statements in an if should be enclosed in a block - lib\services\chat_service.dart:325:57 - curly_braces_in_flow_control_structures
+   info - The 'if' statement could be replaced by a null-aware assignment - lib\services\chat_service.dart:557:5 - prefer_conditional_assignment
+   info - The 'if' statement could be replaced by a null-aware assignment - lib\services\chat_service.dart:560:5 - prefer_conditional_assignment
+   info - The 'if' statement could be replaced by a null-aware assignment - lib\services\chat_service.dart:563:5 - prefer_conditional_assignment
+   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart' - lib\services\cryptography_service.dart:3:8 - unnecessary_import
+warning - The declaration '_encodeBigInt' isn't referenced - lib\services\cryptography_service.dart:113:17 - unused_element
+   info - Library names are not necessary - lib\utils\web_utils.dart:3:9 - unnecessary_library_name
+   info - Dangling library doc comment - lib\utils\web_utils_stub.dart:2:1 - dangling_library_doc_comments
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:101:42 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:102:42 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:102:46 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:124:40 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:125:40 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:125:44 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:141:49 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:144:56 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:158:47 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\feed_post_card.dart:165:54 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\video_card.dart:45:20 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\video_card.dart:243:34 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\video_card.dart:244:34 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\feed\video_card.dart:244:38 - unnecessary_underscores
+   info - Statements in an if should be enclosed in a block - lib\widgets\home\suggested_users.dart:72:25 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\widgets\home\suggested_users.dart:72:61 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\widgets\home\suggested_users.dart:79:27 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\widgets\home\suggested_users.dart:79:60 - curly_braces_in_flow_control_structures
+   info - Unnecessary use of multiple underscores - lib\widgets\home\suggested_users.dart:107:35 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\home\suggested_users.dart:135:50 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\home\suggested_users.dart:135:54 - unnecessary_underscores
+   info - The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' - lib\widgets\profile\profile_cover_band.dart:4:8 - unnecessary_import
+warning - Unused import: '../../models/chat_model.dart' - lib\widgets\profile\profile_posts_box.dart:9:8 - unused_import
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:228:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:228:32 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:259:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:259:41 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:265:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:265:41 - unnecessary_underscores
+warning - The value of the field '_deleting' isn't used - lib\widgets\profile\profile_posts_box.dart:325:8 - unused_field
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:640:41 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:640:45 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:729:33 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:729:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\profile_posts_box.dart:770:35 - unnecessary_underscores
+warning - Unused import: '../../screens/glass_common.dart' - lib\widgets\profile\profile_social_links.dart:7:8 - unused_import
+warning - Unused import: '../../services/user_service.dart' - lib\widgets\profile\profile_social_links.dart:8:8 - unused_import
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\user_profile_posts_section.dart:192:33 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\user_profile_posts_section.dart:192:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\user_profile_stats_header.dart:106:44 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\user_profile_stats_header.dart:106:48 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\profile\user_profile_stats_header.dart:107:44 - unnecessary_underscores
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\widgets\shared\home_shared.dart:4:31 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\widgets\stories\story_bar.dart:57:26 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\stories\story_bar.dart:57:30 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\stories\story_bar.dart:58:39 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\stories\story_bar.dart:217:48 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\widgets\stories\story_bar.dart:217:52 - unnecessary_underscores
+
+flutter : 187 issues found. (ran in 30.4s)
+At line:2 char:1
++ flutter analyze 2>&1 | Out-File -FilePath "analyze_full.txt" -Encodin ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (187 issues found. (ran in 30.4s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

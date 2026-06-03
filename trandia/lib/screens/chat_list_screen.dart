@@ -846,8 +846,6 @@ class _ChatRow extends StatelessWidget {
     final sub = GlassTokens.sub(dark);
 
     final otherUser = c.getOtherParticipant(myUserId);
-    final avatarLetter =
-        otherUser.username.isNotEmpty ? otherUser.username[0].toUpperCase() : '?';
 
     final unread    = c.unreadCounts[myUserId] ?? 0;
     final rawLast   = c.lastMessage ?? '';

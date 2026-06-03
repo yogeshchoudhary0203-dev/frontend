@@ -999,7 +999,6 @@ class _UserRowCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final fg = _Tk.fg(dark);
     final sub = _Tk.sub(dark);
-    final muted = _Tk.muted(dark);
     final state = u.isFollowing ? _FollowState.following : _FollowState.follow;
 
     return ClipRRect(

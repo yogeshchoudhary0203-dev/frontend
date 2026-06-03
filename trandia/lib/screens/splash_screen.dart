@@ -16,7 +16,6 @@
 
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'intro_slides.dart';
 
 // ---------------------------------------------------------------------------
 // Standalone entry point — delete this main() when wiring into your app.

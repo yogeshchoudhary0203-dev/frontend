@@ -64,10 +64,10 @@ class ChatService {
         CryptographyService().getLocalPrivateKey(),
         ApiService.getToken(),
       ]);
-      _myUserId        = results[0] as String?;
-      _localPublicKey  = results[1] as String?;
-      _localPrivateKey = results[2] as String?;
-      final token      = results[3] as String?;
+      _myUserId        = results[0];
+      _localPublicKey  = results[1];
+      _localPrivateKey = results[2];
+      final token      = results[3];
 
       if (token == null) { _isConnecting = false; return; }
 

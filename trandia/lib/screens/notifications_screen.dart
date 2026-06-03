@@ -490,7 +490,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildLoadingShimmer(bool dark) {
-    final shimmerBase = dark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05);
     return ListView.builder(
       padding: const EdgeInsets.only(top: 16, left: 10, right: 10),
       itemCount: 6,

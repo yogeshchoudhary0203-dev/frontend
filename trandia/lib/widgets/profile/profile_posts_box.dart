@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../../screens/glass_common.dart';
-import '../../models/chat_model.dart';
 import '../../services/post_service.dart';
 import 'profile_video_thumbnail.dart';
 

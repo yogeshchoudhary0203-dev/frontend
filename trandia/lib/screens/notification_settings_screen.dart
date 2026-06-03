@@ -78,7 +78,7 @@ class _NotificationSettingsScreenState
         'mentions': notifMentions,
       },
       requiresAuth: true,
-    ).catchError((_) {});
+    ).catchError((_) => <String, dynamic>{});
   }
 
   @override
@@ -351,7 +351,7 @@ class _NSwitchRow extends StatelessWidget {
             Switch(
               value: value,
               onChanged: enabled ? onChanged : null,
-              activeColor:
+              activeThumbColor:
                   dark ? const Color(0xFF0A0A0A) : Colors.white,
               activeTrackColor:
                   dark ? Colors.white : const Color(0xFF0A0A0A),

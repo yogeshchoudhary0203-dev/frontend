@@ -207,8 +207,6 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dark = _isDark;
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(

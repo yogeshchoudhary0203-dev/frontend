@@ -2,7 +2,6 @@
 // Coordinator — wires together profile widgets.
 // Actual UI sections are in lib/widgets/profile/.
 
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
@@ -12,7 +11,6 @@ import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../services/location_service.dart';
 import '../services/post_service.dart';
-import '../l10n/app_localizations.dart';
 import '../widgets/profile/profile_cover_band.dart';
 import '../widgets/profile/profile_header_info.dart';
 import '../widgets/profile/profile_social_links.dart';

@@ -812,7 +812,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         setState(() => notifications = v);
                         _saveSetting('settings_notifications', v);
                       },
-                      activeColor:
+                      activeThumbColor:
                           dark ? const Color(0xFF0A0A0A) : Colors.white,
                       activeTrackColor:
                           dark ? Colors.white : const Color(0xFF0A0A0A),
@@ -947,7 +947,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ? Switch(
                   value: item.switchValue!,
                   onChanged: item.onSwitch,
-                  activeColor:
+                  activeThumbColor:
                       dark ? const Color(0xFF0A0A0A) : Colors.white,
                   activeTrackColor:
                       dark ? Colors.white : const Color(0xFF0A0A0A),
@@ -1054,7 +1054,6 @@ class _AccountCard extends StatelessWidget {
     final sub = GlassTokens.sub(dark);
     final name = profile?.name ?? '';
     final username = profile?.username ?? '';
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
     return GlassSurface(
       dark: dark,
@@ -1202,7 +1201,7 @@ class _SwitchRow extends StatelessWidget {
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: dark ? const Color(0xFF0A0A0A) : Colors.white,
+        activeThumbColor: dark ? const Color(0xFF0A0A0A) : Colors.white,
         activeTrackColor: dark ? Colors.white : const Color(0xFF0A0A0A),
         inactiveThumbColor: dark ? Colors.white70 : Colors.black54,
         inactiveTrackColor: dark ? Colors.white12 : Colors.black12,

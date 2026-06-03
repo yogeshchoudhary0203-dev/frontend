@@ -20,6 +20,7 @@ import 'l10n/app_localizations.dart';
 import 'utils/web_utils.dart';
 import 'utils/navigator_key.dart';
 import 'utils/route_observer.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 export 'utils/navigator_key.dart' show navigatorKey;
 
@@ -58,7 +59,7 @@ void main() async {
 
   FlutterError.onError = (d) => FlutterError.presentError(d);
   runZonedGuarded(
-    () => runApp(const TrandiaApp()),
+    () => runApp(const ProviderScope(child: TrandiaApp())),
     (e, st) => debugPrint('[UNCAUGHT] $e\n$st'),
   );
 }

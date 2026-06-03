@@ -22,6 +22,7 @@ import '../../services/cryptography_service.dart';
 import '../../utils/route_observer.dart';
 import '../../widgets/shared/home_shared.dart';
 import '../../widgets/feed/feed_post_card.dart';
+import '../../widgets/feed/video_card.dart' show FeedVideoPool;
 import '../../widgets/stories/story_bar.dart';
 import '../../widgets/home/home_nav_bar.dart';
 import '../../widgets/home/suggested_users.dart';
@@ -277,9 +278,13 @@ class _HomeScreenState extends State<HomeScreen>
       );
       if (!mounted) return;
       setState(() {
-        if (refresh) _posts.clear();
+        if (refresh) {
+          _posts.clear();
+          FeedVideoPool.reset();
+        }
         _posts.addAll(result.posts);
         _nextCursor = result.nextCursor;
+        FeedVideoPool.grow(_posts);
       });
       // Save first page to local DB for next cold open
       if ((refresh || isFirstPage) && result.posts.isNotEmpty) {
@@ -721,6 +726,8 @@ class _HomeScreenState extends State<HomeScreen>
                   isDark: isDark,
                   onLike: () => _toggleLike(postIdx),
                   onLearnWatched: _markLearnContentWatched,
+                  postIndex: postIdx,
+                  allPosts: _posts,
                 );
               },
             ),

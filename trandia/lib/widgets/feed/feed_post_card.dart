@@ -18,10 +18,14 @@ class PostCard extends StatefulWidget {
   final bool isDark;
   final VoidCallback onLike;
   final ValueChanged<PostModel>? onLearnWatched;
+  final int postIndex;
+  final List<PostModel> allPosts;
   const PostCard({
     super.key,
     required this.post, required this.isDark, required this.onLike,
     this.onLearnWatched,
+    required this.postIndex,
+    required this.allPosts,
   });
   @override
   State<PostCard> createState() => _PostCardState();
@@ -106,7 +110,13 @@ class _PostCardState extends State<PostCard> {
           ])),
 
         p.isVideo
-            ? VideoCard(post: p, isDark: dark, onLearnWatched: widget.onLearnWatched)
+            ? VideoCard(
+                post: p,
+                isDark: dark,
+                postIndex: widget.postIndex,
+                allPosts: widget.allPosts,
+                onLearnWatched: widget.onLearnWatched,
+              )
             : AspectRatio(aspectRatio: p.aspectRatio,
                 child: InteractiveViewer(clipBehavior: Clip.none, minScale: 1.0, maxScale: 4.0,
                   child: Stack(fit: StackFit.expand, children: [

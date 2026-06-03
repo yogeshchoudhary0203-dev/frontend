@@ -20,6 +20,7 @@
         android:label="Trandia"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
+        android:allowBackup="false"
         android:usesCleartextTraffic="false">
 
         <!-- Must match _kChannelId in fcm_service.dart -->

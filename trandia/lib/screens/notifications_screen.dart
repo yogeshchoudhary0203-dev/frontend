@@ -347,7 +347,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     return Container(
       color: (dark ? GlassTokens.bgDark : GlassTokens.bgLight)
-          .withOpacity(bgOpacity),
+          .withValues(alpha: bgOpacity),
       child: Stack(children: [
         Opacity(
           opacity: bgOpacity,
@@ -482,7 +482,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildLoadingShimmer(bool dark) {
-    final shimmerBase = dark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05);
+    final shimmerBase = dark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05);
     return ListView.builder(
       padding: const EdgeInsets.only(top: 16, left: 10, right: 10),
       itemCount: 6,
@@ -493,10 +493,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           child: Container(
             height: _kCardHeight,
             decoration: BoxDecoration(
-              color: dark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.50),
+              color: dark ? Colors.white.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.50),
               borderRadius: BorderRadius.circular(999),
               border: Border.all(
-                color: dark ? Colors.white.withOpacity(0.07) : Colors.white.withOpacity(0.80),
+                color: dark ? Colors.white.withValues(alpha: 0.07) : Colors.white.withValues(alpha: 0.80),
                 width: 0.5,
               ),
             ),
@@ -506,7 +506,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 width: 44, height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.07),
+                  color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.07),
                 ),
               ),
               const SizedBox(width: 12),
@@ -518,7 +518,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     Container(
                       height: 12, width: 120,
                       decoration: BoxDecoration(
-                        color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.07),
+                        color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.07),
                         borderRadius: BorderRadius.circular(6),
                       ),
                     ),
@@ -526,7 +526,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     Container(
                       height: 10, width: 80,
                       decoration: BoxDecoration(
-                        color: dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04),
+                        color: dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04),
                         borderRadius: BorderRadius.circular(5),
                       ),
                     ),
@@ -548,7 +548,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.notifications_none_rounded, size: 56,
-            color: dark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.12)),
+            color: dark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.12)),
           const SizedBox(height: 16),
           Text('No notifications yet'.tr(context),
             style: manrope(size: 16, weight: FontWeight.w700, color: fg, letterSpacing: -0.2)),
@@ -568,7 +568,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.wifi_off_rounded, size: 48,
-            color: dark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.12)),
+            color: dark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.12)),
           const SizedBox(height: 16),
           Text('Couldn\'t load notifications'.tr(context),
             style: manrope(size: 15, weight: FontWeight.w700, color: fg)),
@@ -582,7 +582,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(999),
-                color: dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06),
+                color: dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06),
               ),
               child: Text('Retry'.tr(context),
                 style: manrope(size: 13, weight: FontWeight.w700, color: fg)),
@@ -763,7 +763,7 @@ class _NfCardInnerState extends State<_NfCardInner> {
     final dark = widget.dark;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
-    final iconChipBg = dark ? Colors.white.withOpacity(0.16) : Colors.black.withOpacity(0.08);
+    final iconChipBg = dark ? Colors.white.withValues(alpha: 0.16) : Colors.black.withValues(alpha: 0.08);
     final chipBorder = dark ? const Color(0xFF0C0C0E) : const Color(0xFFFAFAFA);
 
     return GestureDetector(
@@ -773,11 +773,11 @@ class _NfCardInnerState extends State<_NfCardInner> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       blurSigma: 44,
       bgColors: dark
-          ? [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)]
-          : [Colors.white.withOpacity(0.65), Colors.white.withOpacity(0.40)],
+          ? [Colors.white.withValues(alpha: 0.05), Colors.white.withValues(alpha: 0.02)]
+          : [Colors.white.withValues(alpha: 0.65), Colors.white.withValues(alpha: 0.40)],
       borderColor: dark
-          ? Colors.white.withOpacity(0.08)
-          : Colors.white.withOpacity(0.85),
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.white.withValues(alpha: 0.85),
       borderWidth: 0.5,
       child: Row(children: [
         // ── Avatar + kind chip ────────────────────────────────────────────
@@ -845,12 +845,12 @@ class _NfCardInnerState extends State<_NfCardInner> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: dark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.black.withOpacity(0.05),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
               border: Border.all(
                 color: dark
-                    ? Colors.white.withOpacity(0.14)
-                    : Colors.black.withOpacity(0.08),
+                    ? Colors.white.withValues(alpha: 0.14)
+                    : Colors.black.withValues(alpha: 0.08),
               ),
             ),
             alignment: Alignment.center,
@@ -858,8 +858,8 @@ class _NfCardInnerState extends State<_NfCardInner> {
               Icons.delete_outline_rounded,
               size: 16,
               color: dark
-                  ? Colors.white.withOpacity(0.72)
-                  : Colors.black.withOpacity(0.62),
+                  ? Colors.white.withValues(alpha: 0.72)
+                  : Colors.black.withValues(alpha: 0.62),
             ),
           ),
         ),
@@ -895,8 +895,8 @@ class _ActionButton extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.6),
-        border: Border.all(color: dark ? Colors.white.withOpacity(0.18) : Colors.black.withOpacity(0.10)),
+        color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.6),
+        border: Border.all(color: dark ? Colors.white.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.10)),
       ),
       child: Text(label.tr(context), style: manrope(size: 12, weight: FontWeight.w700, color: fg, letterSpacing: -0.12)),
     );
@@ -925,12 +925,12 @@ class _Chip extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: active
-                  ? (dark ? Colors.white.withOpacity(0.14) : Colors.white.withOpacity(0.85))
-                  : (dark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.45)),
+                  ? (dark ? Colors.white.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.85))
+                  : (dark ? Colors.white.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.45)),
               borderRadius: BorderRadius.circular(999),
               border: Border.all(color: active
-                ? (dark ? Colors.white.withOpacity(0.30) : Colors.black.withOpacity(0.12))
-                : (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06))),
+                ? (dark ? Colors.white.withValues(alpha: 0.30) : Colors.black.withValues(alpha: 0.12))
+                : (dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06))),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Text(label.tr(context),

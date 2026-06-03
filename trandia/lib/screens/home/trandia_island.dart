@@ -75,7 +75,7 @@ class _IslandNotificationOverlayState extends State<IslandNotificationOverlay> {
         return Stack(children: [
           Positioned.fill(child: ClipRect(child: BackdropFilter(
             filter: ui.ImageFilter.blur(sigmaX: bgBlur, sigmaY: bgBlur),
-            child: ColoredBox(color: (widget.isDark ? Colors.black : Colors.white).withOpacity(bgDim))))),
+            child: ColoredBox(color: (widget.isDark ? Colors.black : Colors.white).withValues(alpha: bgDim))))),
           Positioned(left: left, top: top, width: right - left, height: bottom - top,
             child: PopScope(
               canPop: false,
@@ -86,7 +86,7 @@ class _IslandNotificationOverlayState extends State<IslandNotificationOverlay> {
                     filter: ui.ImageFilter.blur(sigmaX: ui.lerpDouble(18, 26, fillT)!, sigmaY: ui.lerpDouble(18, 26, fillT)!),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: widget.isDark ? Colors.black.withOpacity(panelAlpha) : Colors.white.withOpacity(panelAlpha),
+                        color: widget.isDark ? Colors.black.withValues(alpha: panelAlpha) : Colors.white.withValues(alpha: panelAlpha),
                         borderRadius: BorderRadius.circular(borderR),
                       ),
                       child: GestureDetector(
@@ -110,7 +110,7 @@ class _IslandNotificationOverlayState extends State<IslandNotificationOverlay> {
                                 child: Center(child: Container(
                                   width: 36, height: 4,
                                   decoration: BoxDecoration(
-                                    color: (widget.isDark ? Colors.white : Colors.black).withOpacity(0.22),
+                                    color: (widget.isDark ? Colors.white : Colors.black).withValues(alpha: 0.22),
                                     borderRadius: BorderRadius.circular(2)),
                                 )))),
                         ]),

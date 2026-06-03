@@ -183,7 +183,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             width: 36, height: 4,
             decoration: BoxDecoration(
-              color: fg.withOpacity(0.15),
+              color: fg.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -369,7 +369,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const Spacer(),
-            Icon(Icons.block_rounded, size: 52, color: t.fg.withOpacity(0.4)),
+            Icon(Icons.block_rounded, size: 52, color: t.fg.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
             Text(
               'User not available',
@@ -378,7 +378,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 8),
             Text(
               'This account is not available.',
-              style: TextStyle(color: t.fg.withOpacity(0.5), fontSize: 14),
+              style: TextStyle(color: t.fg.withValues(alpha: 0.5), fontSize: 14),
             ),
             const Spacer(flex: 2),
           ]),

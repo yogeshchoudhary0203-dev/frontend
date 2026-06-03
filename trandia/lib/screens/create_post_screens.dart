@@ -43,17 +43,17 @@ class CpColors {
   Color get text => dark ? const Color(0xFFF3F3F4) : const Color(0xFF161618);
   Color get accentOn => dark ? const Color(0xFF0A0A0C) : Colors.white;
   Color get sub => (dark ? const Color(0xFFF3F3F4) : const Color(0xFF161618))
-      .withOpacity(0.58);
+      .withValues(alpha: 0.58);
   Color get fade => (dark ? const Color(0xFFF3F3F4) : const Color(0xFF161618))
-      .withOpacity(0.35);
+      .withValues(alpha: 0.35);
   Color get border => dark
-      ? Colors.white.withOpacity(0.08)
-      : const Color(0xFF161618).withOpacity(0.07);
+      ? Colors.white.withValues(alpha: 0.08)
+      : const Color(0xFF161618).withValues(alpha: 0.07);
   Color get pillBg => dark
-      ? Colors.white.withOpacity(0.05)
-      : const Color(0xFF161618).withOpacity(0.05);
+      ? Colors.white.withValues(alpha: 0.05)
+      : const Color(0xFF161618).withValues(alpha: 0.05);
   Color get surface =>
-      dark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.6);
+      dark ? Colors.white.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.6);
   Color get nextAction =>
       dark ? const Color(0xFF9ED7C5) : const Color(0xFF1F6A5A);
 }
@@ -283,8 +283,8 @@ class _CreatePostHubScreenState extends State<CreatePostHubScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           color: dark
-              ? Colors.white.withOpacity(0.07)
-              : Colors.black.withOpacity(0.05),
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.black.withValues(alpha: 0.05),
         ),
         child: Row(
           children: [
@@ -1055,7 +1055,7 @@ class _CreatePostUploadingScreenState extends State<CreatePostUploadingScreen>
                       Icon(
                         Icons.error_outline,
                         size: 48,
-                        color: c.text.withOpacity(0.5),
+                        color: c.text.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -1276,10 +1276,10 @@ class _CreatePostSuccessScreenState extends State<CreatePostSuccessScreen>
                               boxShadow: [
                                 BoxShadow(
                                   color: widget.dark
-                                      ? Colors.white.withOpacity(0.12)
+                                      ? Colors.white.withValues(alpha: 0.12)
                                       : const Color(
                                           0xFF14161E,
-                                        ).withOpacity(0.18),
+                                        ).withValues(alpha: 0.18),
                                   blurRadius: widget.dark ? 32 : 30,
                                   offset: const Offset(0, 10),
                                 ),
@@ -1430,10 +1430,10 @@ class _CropGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final line = Paint()
-      ..color = Colors.white.withOpacity(0.5)
+      ..color = Colors.white.withValues(alpha: 0.5)
       ..strokeWidth = 1;
     final outer = Paint()
-      ..color = Colors.white.withOpacity(0.85)
+      ..color = Colors.white.withValues(alpha: 0.85)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
     final w = size.width;
@@ -1839,7 +1839,7 @@ class _AdjustSlider extends StatelessWidget {
                           color: c.text,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.25),
+                              color: Colors.black.withValues(alpha: 0.25),
                               blurRadius: 6,
                               offset: const Offset(0, 2),
                             ),
@@ -1918,8 +1918,8 @@ class _TrimPanel extends StatelessWidget {
           height: 56,
           decoration: BoxDecoration(
             color: dark
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.5),
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.5),
             border: Border.all(color: c.border),
             borderRadius: BorderRadius.circular(10),
           ),
@@ -2017,8 +2017,8 @@ class _SectionCard extends StatelessWidget {
           color: active
               ? c.text
               : (dark
-                    ? Colors.white.withOpacity(0.03)
-                    : Colors.white.withOpacity(0.6)),
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : Colors.white.withValues(alpha: 0.6)),
           border: Border.all(color: active ? c.text : c.border),
           borderRadius: BorderRadius.circular(12),
         ),
@@ -2040,7 +2040,7 @@ class _SectionCard extends StatelessWidget {
               style: manrope(
                 size: 11.5,
                 weight: FontWeight.w500,
-                color: active ? c.accentOn.withOpacity(0.75) : c.sub,
+                color: active ? c.accentOn.withValues(alpha: 0.75) : c.sub,
                 letterSpacing: -0.06,
               ),
             ),
@@ -2114,7 +2114,7 @@ class _LearnTopicPicker extends StatelessWidget {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: c.text.withOpacity(0.55)),
+                borderSide: BorderSide(color: c.text.withValues(alpha: 0.55)),
               ),
             ),
           ),
@@ -2209,8 +2209,8 @@ class _OptionRow extends StatelessWidget {
               height: 32,
               decoration: BoxDecoration(
                 color: dark
-                    ? Colors.white.withOpacity(0.05)
-                    : const Color(0xFF161618).withOpacity(0.04),
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : const Color(0xFF161618).withValues(alpha: 0.04),
                 borderRadius: BorderRadius.circular(8),
               ),
               alignment: Alignment.center,

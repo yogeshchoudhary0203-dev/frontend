@@ -166,7 +166,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               'Photo upload failed. Please try again.',
               style: manrope(size: 14, weight: FontWeight.w600, color: Colors.white),
             ),
-            backgroundColor: Colors.redAccent.withOpacity(0.85),
+            backgroundColor: Colors.redAccent.withValues(alpha: 0.85),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -302,7 +302,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               msg.isNotEmpty ? msg : 'Failed to update profile',
               style: manrope(size: 14, weight: FontWeight.w600, color: Colors.white),
             ),
-            backgroundColor: Colors.redAccent.withOpacity(0.85),
+            backgroundColor: Colors.redAccent.withValues(alpha: 0.85),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -501,8 +501,8 @@ class _SaveButton extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
           color: dark
-              ? Colors.white.withOpacity(isSaving ? 0.06 : 0.14)
-              : Colors.black.withOpacity(isSaving ? 0.04 : 0.08),
+              ? Colors.white.withValues(alpha: isSaving ? 0.06 : 0.14)
+              : Colors.black.withValues(alpha: isSaving ? 0.04 : 0.08),
         ),
         child: isSaving
             ? SizedBox(
@@ -574,8 +574,8 @@ class _AvatarSection extends StatelessWidget {
                     boxShadow: [
                       BoxShadow(
                         color: dark
-                            ? Colors.black.withOpacity(0.8)
-                            : const Color(0xFF14161E).withOpacity(0.25),
+                            ? Colors.black.withValues(alpha: 0.8)
+                            : const Color(0xFF14161E).withValues(alpha: 0.25),
                         blurRadius: 36,
                         offset: const Offset(0, 18),
                         spreadRadius: -16,
@@ -609,13 +609,13 @@ class _AvatarSection extends StatelessWidget {
                     color: dark ? const Color(0xFF1C1C1F) : Colors.white,
                     border: Border.all(
                       color: dark
-                          ? Colors.white.withOpacity(0.12)
-                          : Colors.black.withOpacity(0.08),
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : Colors.black.withValues(alpha: 0.08),
                       width: 1.5,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(dark ? 0.5 : 0.12),
+                        color: Colors.black.withValues(alpha: dark ? 0.5 : 0.12),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                         spreadRadius: -4,
@@ -737,8 +737,8 @@ class _PhotoOptionTile extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           color: dark
-              ? Colors.white.withOpacity(0.07)
-              : Colors.black.withOpacity(0.05),
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.black.withValues(alpha: 0.05),
         ),
         child: Row(
           children: [
@@ -838,8 +838,8 @@ class _GlassTextField extends StatelessWidget {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: dark
-                          ? [Colors.transparent, Colors.white.withOpacity(0.14), Colors.transparent]
-                          : [Colors.transparent, Colors.white.withOpacity(0.98), Colors.transparent],
+                          ? [Colors.transparent, Colors.white.withValues(alpha: 0.14), Colors.transparent]
+                          : [Colors.transparent, Colors.white.withValues(alpha: 0.98), Colors.transparent],
                     ),
                   ),
                 ),
@@ -859,8 +859,8 @@ class _GlassTextField extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: dark
-                              ? Colors.white.withOpacity(0.09)
-                              : Colors.black.withOpacity(0.06),
+                              ? Colors.white.withValues(alpha: 0.09)
+                              : Colors.black.withValues(alpha: 0.06),
                         ),
                         child: Icon(icon, size: 20, color: fg),
                       ),
@@ -925,8 +925,8 @@ class _InfoNote extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: dark
-                  ? Colors.white.withOpacity(0.09)
-                  : Colors.black.withOpacity(0.06),
+                  ? Colors.white.withValues(alpha: 0.09)
+                  : Colors.black.withValues(alpha: 0.06),
             ),
             child: Icon(Icons.info_outline_rounded, size: 18, color: sub),
           ),
@@ -1076,8 +1076,8 @@ class _SocialLinksCard extends StatelessWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 14),
                   height: 1,
                   color: dark
-                      ? Colors.white.withOpacity(0.06)
-                      : Colors.black.withOpacity(0.05),
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
             ],
           );
@@ -1148,12 +1148,12 @@ class _SocialLinkField extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: dark
-                      ? Colors.white.withOpacity(0.06)
-                      : Colors.white.withOpacity(0.8),
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.white.withValues(alpha: 0.8),
                   border: Border.all(
                     color: dark
-                        ? Colors.white.withOpacity(0.12)
-                        : Colors.black.withOpacity(0.08),
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : Colors.black.withValues(alpha: 0.08),
                   ),
                 ),
                 alignment: Alignment.center,
@@ -1209,7 +1209,7 @@ class _SocialLinkField extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
               child: Icon(
                 Icons.drag_handle_rounded,
-                color: sub.withOpacity(0.6),
+                color: sub.withValues(alpha: 0.6),
                 size: 20,
               ),
             ),

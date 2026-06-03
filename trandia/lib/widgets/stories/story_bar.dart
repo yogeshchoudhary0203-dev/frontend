@@ -137,7 +137,7 @@ class _ShimmerBubble extends StatelessWidget {
   const _ShimmerBubble({required this.isDark});
   @override
   Widget build(BuildContext context) {
-    final c = (isDark ? Colors.white : Colors.black).withOpacity(0.07);
+    final c = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.07);
     return SizedBox(width: 70, child: Column(mainAxisSize: MainAxisSize.min, children: [
       Container(width: 70, height: 70, decoration: BoxDecoration(shape: BoxShape.circle, color: c)),
       const SizedBox(height: 6),
@@ -160,13 +160,13 @@ class _OwnStoryOptionsSheet extends StatelessWidget {
       decoration: BoxDecoration(color: bg, borderRadius: const BorderRadius.vertical(top: Radius.circular(26))),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         const SizedBox(height: 12),
-        Container(width: 36, height: 4, decoration: BoxDecoration(borderRadius: BorderRadius.circular(2), color: fg.withOpacity(0.16))),
+        Container(width: 36, height: 4, decoration: BoxDecoration(borderRadius: BorderRadius.circular(2), color: fg.withValues(alpha: 0.16))),
         const SizedBox(height: 16),
         Text('Your Story Options', style: GoogleFonts.manrope(color: fg, fontSize: 16, fontWeight: FontWeight.w800)),
         const SizedBox(height: 16),
         ListTile(leading: Icon(Icons.remove_red_eye_rounded, color: fg),
           title: Text('View Your Stories', style: GoogleFonts.manrope(color: fg, fontWeight: FontWeight.w600)), onTap: onView),
-        Divider(height: 1, color: fg.withOpacity(0.06), indent: 16, endIndent: 16),
+        Divider(height: 1, color: fg.withValues(alpha: 0.06), indent: 16, endIndent: 16),
         ListTile(leading: Icon(Icons.add_photo_alternate_rounded, color: fg),
           title: Text('Add New Story', style: GoogleFonts.manrope(color: fg, fontWeight: FontWeight.w600)), onTap: onAdd),
         SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
@@ -230,7 +230,7 @@ class _StoryBubble extends StatelessWidget {
                       shape: BoxShape.circle,
                       color: isDark ? Colors.white : Colors.black,
                       border: Border.all(color: isDark ? Colors.black : Colors.white, width: 1.5),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 4, offset: const Offset(0, 1.5))],
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 4, offset: const Offset(0, 1.5))],
                     ),
                     child: Icon(Icons.add, color: isDark ? Colors.black : Colors.white, size: 14),
                   ),

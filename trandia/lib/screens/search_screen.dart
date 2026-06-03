@@ -626,11 +626,11 @@ class _CircleGlass extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.6),
-              border: Border.all(color: dark ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95)),
+              color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.6),
+              border: Border.all(color: dark ? Colors.white.withValues(alpha: 0.10) : Colors.white.withValues(alpha: 0.95)),
               boxShadow: [
                 BoxShadow(
-                  color: dark ? Colors.black.withOpacity(0.7) : const Color(0xFF14161E).withOpacity(0.18),
+                  color: dark ? Colors.black.withValues(alpha: 0.7) : const Color(0xFF14161E).withValues(alpha: 0.18),
                   blurRadius: 24, offset: const Offset(0, 10), spreadRadius: -14,
                 ),
               ],
@@ -724,14 +724,14 @@ class _SearchInputPillState extends State<_SearchInputPill> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
                   colors: dark
-                    ? [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.04)]
-                    : [Colors.white.withOpacity(0.85), Colors.white.withOpacity(0.62)],
+                    ? [Colors.white.withValues(alpha: 0.10), Colors.white.withValues(alpha: 0.04)]
+                    : [Colors.white.withValues(alpha: 0.85), Colors.white.withValues(alpha: 0.62)],
                 ),
-                border: Border.all(color: dark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.95)),
+                border: Border.all(color: dark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.95)),
                 borderRadius: BorderRadius.circular(999),
                 boxShadow: [
                   BoxShadow(
-                    color: dark ? Colors.black.withOpacity(0.7) : const Color(0xFF14161E).withOpacity(0.20),
+                    color: dark ? Colors.black.withValues(alpha: 0.7) : const Color(0xFF14161E).withValues(alpha: 0.20),
                     blurRadius: 28, offset: const Offset(0, 12), spreadRadius: -14,
                   ),
                 ],
@@ -742,7 +742,7 @@ class _SearchInputPillState extends State<_SearchInputPill> {
                   child: Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(colors: dark
-                        ? [Colors.transparent, Colors.white.withOpacity(0.22), Colors.transparent]
+                        ? [Colors.transparent, Colors.white.withValues(alpha: 0.22), Colors.transparent]
                         : [Colors.transparent, Colors.white, Colors.transparent]),
                     ),
                   ),
@@ -775,7 +775,7 @@ class _SearchInputPillState extends State<_SearchInputPill> {
                         width: 26, height: 26, alignment: Alignment.center,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
+                          color: dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
                         ),
                         child: Icon(Icons.close_rounded, size: 14, color: fg),
                       ),
@@ -819,12 +819,12 @@ class _FilterChip extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: active
-                ? (dark ? Colors.white.withOpacity(0.14) : Colors.white.withOpacity(0.85))
-                : (dark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.45)),
+                ? (dark ? Colors.white.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.85))
+                : (dark ? Colors.white.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.45)),
               borderRadius: BorderRadius.circular(999),
               border: Border.all(color: active
-                ? (dark ? Colors.white.withOpacity(0.30) : Colors.black.withOpacity(0.12))
-                : (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06))),
+                ? (dark ? Colors.white.withValues(alpha: 0.30) : Colors.black.withValues(alpha: 0.12))
+                : (dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06))),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               if (leading != null) ...[Icon(leading, size: 13, color: fg), const SizedBox(width: 5)],
@@ -903,8 +903,8 @@ class _RecentRow extends StatelessWidget {
             width: 46, height: 46, alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06),
-              border: Border.all(color: dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.06)),
+              color: dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06),
+              border: Border.all(color: dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06)),
             ),
             child: Icon(
               r.kind == RecentKind.tag ? Icons.local_offer_outlined : Icons.location_on_outlined,
@@ -1058,7 +1058,7 @@ class _UserResultRow extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+                color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
               ),
               child: Icon(Icons.close_rounded, size: 14, color: sub),
             ),
@@ -1117,7 +1117,7 @@ class _FollowButtonState extends State<_FollowButton> {
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
             color: _isFollowing
-                ? (dark ? Colors.white.withOpacity(0.25) : Colors.black.withOpacity(0.18))
+                ? (dark ? Colors.white.withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.18))
                 : Colors.transparent,
           ),
         ),
@@ -1227,13 +1227,13 @@ class _RealSuggestedCardState extends State<_RealSuggestedCard> {
                 style: ElevatedButton.styleFrom(
                   padding: EdgeInsets.zero, elevation: 0,
                   backgroundColor: _following
-                    ? (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06))
+                    ? (dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06))
                     : (dark ? Colors.white : const Color(0xFF0A0A0A)),
                   foregroundColor: _following ? fg : (dark ? const Color(0xFF0A0A0A) : Colors.white),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(999),
                     side: _following
-                      ? BorderSide(color: dark ? Colors.white.withOpacity(0.14) : Colors.black.withOpacity(0.08))
+                      ? BorderSide(color: dark ? Colors.white.withValues(alpha: 0.14) : Colors.black.withValues(alpha: 0.08))
                       : BorderSide.none,
                   ),
                 ),
@@ -1324,7 +1324,7 @@ class _DiscoverTileView extends StatelessWidget {
           gradient: _tileGradient(dark, i),
           boxShadow: [
             BoxShadow(
-              color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.5),
+              color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.5),
               blurRadius: 0, offset: const Offset(0, 1), spreadRadius: 0,
             ),
           ],
@@ -1335,8 +1335,8 @@ class _DiscoverTileView extends StatelessWidget {
               gradient: RadialGradient(
                 center: const Alignment(-0.4, -1), radius: 1.2,
                 colors: dark
-                  ? [Colors.white.withOpacity(0.06), Colors.transparent]
-                  : [Colors.white.withOpacity(0.55), Colors.transparent],
+                  ? [Colors.white.withValues(alpha: 0.06), Colors.transparent]
+                  : [Colors.white.withValues(alpha: 0.55), Colors.transparent],
                 stops: const [0.0, 0.55],
               ),
             ),
@@ -1350,7 +1350,7 @@ class _DiscoverTileView extends StatelessWidget {
                   filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    color: Colors.black.withOpacity(0.42),
+                    color: Colors.black.withValues(alpha: 0.42),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(t.kind == TileKind.reel ? Icons.movie_creation_outlined : Icons.collections_outlined,
                         size: 12, color: Colors.white),
@@ -1369,7 +1369,7 @@ class _DiscoverTileView extends StatelessWidget {
                 filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: Container(
                   width: 30, height: 30, alignment: Alignment.center,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withOpacity(0.35)),
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.35)),
                   child: const Icon(Icons.play_arrow_rounded, size: 18, color: Colors.white),
                 ),
               ),

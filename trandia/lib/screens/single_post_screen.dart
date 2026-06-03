@@ -163,7 +163,7 @@ class _PostContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final fg       = GlassTokens.fg(dark);
     final sub      = GlassTokens.sub(dark);
-    final border   = (dark ? Colors.white : Colors.black).withOpacity(0.12);
+    final border   = (dark ? Colors.white : Colors.black).withValues(alpha: 0.12);
     final likedCol = dark ? const Color(0xFFFF3040) : const Color(0xFFED4956);
 
     return SingleChildScrollView(
@@ -235,7 +235,7 @@ post.isVideo
                   post.isLiked
                       ? Icons.favorite_rounded
                       : Icons.favorite_border_rounded,
-                  color: post.isLiked ? likedCol : fg.withOpacity(0.75),
+                  color: post.isLiked ? likedCol : fg.withValues(alpha: 0.75),
                   size: 24,
                 ),
                 const SizedBox(width: 5),
@@ -247,7 +247,7 @@ post.isVideo
             const SizedBox(width: 18),
             // Comment count
             Icon(Icons.chat_bubble_outline_rounded,
-                color: fg.withOpacity(0.75), size: 22),
+                color: fg.withValues(alpha: 0.75), size: 22),
             const SizedBox(width: 5),
             Text('${post.commentsCount}',
                 style: manrope(size: 13, weight: FontWeight.w600, color: fg)),
@@ -265,7 +265,7 @@ post.isVideo
               ),
               TextSpan(
                 text: post.caption,
-                style: manrope(size: 13, color: fg.withOpacity(0.85),
+                style: manrope(size: 13, color: fg.withValues(alpha: 0.85),
                     height: 1.4),
               ),
             ])),
@@ -374,7 +374,7 @@ class _VideoViewState extends State<_VideoView> {
                 width: 30, height: 30,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.black.withOpacity(0.5)),
+                  color: Colors.black.withValues(alpha: 0.5)),
                 child: Icon(
                   _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
                   color: Colors.white, size: 16),
@@ -390,7 +390,7 @@ class _VideoViewState extends State<_VideoView> {
               padding: EdgeInsets.zero,
               colors: VideoProgressColors(
                 playedColor: Colors.white,
-                bufferedColor: Colors.white.withOpacity(0.3),
+                bufferedColor: Colors.white.withValues(alpha: 0.3),
                 backgroundColor: Colors.transparent,
               ),
             )),
@@ -418,7 +418,7 @@ class _ErrorState extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(Icons.error_outline_rounded,
-              size: 48, color: sub.withOpacity(0.5)),
+              size: 48, color: sub.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
           Text('Post Not Found'.tr(context),
               style: manrope(size: 16, weight: FontWeight.w800,
@@ -439,13 +439,13 @@ class _ErrorState extends StatelessWidget {
                   horizontal: 24, vertical: 12),
               decoration: BoxDecoration(
                 color: dark
-                    ? Colors.white.withOpacity(0.12)
-                    : Colors.black.withOpacity(0.06),
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
                   color: dark
-                      ? Colors.white.withOpacity(0.15)
-                      : Colors.black.withOpacity(0.08),
+                      ? Colors.white.withValues(alpha: 0.15)
+                      : Colors.black.withValues(alpha: 0.08),
                 ),
               ),
               child: Text('Retry'.tr(context),
@@ -537,12 +537,12 @@ class _ZoomableImageState extends State<_ZoomableImage> with SingleTickerProvide
           fit: BoxFit.cover,
           placeholder: (_, __) => Container(
               color: (widget.dark ? Colors.white : Colors.black)
-                  .withOpacity(0.05)),
+                  .withValues(alpha: 0.05)),
           errorWidget: (_, __, ___) => Container(
             color: (widget.dark ? Colors.white : Colors.black)
-                .withOpacity(0.05),
+                .withValues(alpha: 0.05),
             child: Icon(Icons.broken_image_outlined,
-                color: widget.sub.withOpacity(0.4)),
+                color: widget.sub.withValues(alpha: 0.4)),
           ),
         ),
       ),

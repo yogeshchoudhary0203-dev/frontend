@@ -19,7 +19,7 @@ class ShareHelper {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(isDark ? 0.6 : 0.4),
+      barrierColor: Colors.black.withValues(alpha: isDark ? 0.6 : 0.4),
       isScrollControlled: true,
       builder: (context) {
         return _ShareSheetContent(post: post, isDark: isDark);
@@ -106,9 +106,9 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
                   border: Border.all(
-                    color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.12),
+                    color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.12),
                     width: 1,
                   ),
                   borderRadius: BorderRadius.circular(16),
@@ -246,7 +246,7 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.5 : 0.15),
+                color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
                 blurRadius: 30,
                 offset: const Offset(0, -10),
               )
@@ -261,7 +261,7 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
                 width: 44,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: textPrimary.withOpacity(0.2),
+                  color: textPrimary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
@@ -288,9 +288,9 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: textPrimary.withOpacity(0.07),
+                          color: textPrimary.withValues(alpha: 0.07),
                         ),
-                        child: Icon(Icons.close_rounded, size: 16, color: textPrimary.withOpacity(0.6)),
+                        child: Icon(Icons.close_rounded, size: 16, color: textPrimary.withValues(alpha: 0.6)),
                       ),
                     ),
                   ],
@@ -310,7 +310,7 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
                         height: 12,
                         child: CircularProgressIndicator(
                           strokeWidth: 1.5,
-                          color: textPrimary.withOpacity(0.4),
+                          color: textPrimary.withValues(alpha: 0.4),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -319,7 +319,7 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
                         style: manrope(
                           size: 11,
                           weight: FontWeight.w500,
-                          color: textPrimary.withOpacity(0.4),
+                          color: textPrimary.withValues(alpha: 0.4),
                         ),
                       ),
                     ],
@@ -357,19 +357,19 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
                               shape: BoxShape.circle,
                               gradient: LinearGradient(
                                 colors: [
-                                  opt.color.withOpacity(isDark ? 0.25 : 0.85),
-                                  opt.color.withOpacity(isDark ? 0.15 : 0.95),
+                                  opt.color.withValues(alpha: isDark ? 0.25 : 0.85),
+                                  opt.color.withValues(alpha: isDark ? 0.15 : 0.95),
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                               border: Border.all(
-                                color: opt.color.withOpacity(isDark ? 0.35 : 0.2),
+                                color: opt.color.withValues(alpha: isDark ? 0.35 : 0.2),
                                 width: 1.2,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: opt.color.withOpacity(isDark ? 0.12 : 0.25),
+                                  color: opt.color.withValues(alpha: isDark ? 0.12 : 0.25),
                                   blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 )
@@ -393,7 +393,7 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
                             style: manrope(
                               size: 11,
                               weight: FontWeight.w700,
-                              color: textPrimary.withOpacity(0.85),
+                              color: textPrimary.withValues(alpha: 0.85),
                               letterSpacing: -0.1,
                             ),
                           ),

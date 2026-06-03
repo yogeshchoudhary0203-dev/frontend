@@ -58,18 +58,18 @@ class SavedPostsScreen extends StatelessWidget {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: dark
-                                ? Colors.white.withOpacity(0.05)
-                                : Colors.black.withOpacity(0.05),
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : Colors.black.withValues(alpha: 0.05),
                             border: Border.all(
                               color: dark
-                                  ? Colors.white.withOpacity(0.1)
-                                  : Colors.black.withOpacity(0.1),
+                                  ? Colors.white.withValues(alpha: 0.1)
+                                  : Colors.black.withValues(alpha: 0.1),
                             ),
                           ),
                           child: Icon(
                             Icons.bookmark_border_rounded,
                             size: 48,
-                            color: fg.withOpacity(0.8),
+                            color: fg.withValues(alpha: 0.8),
                           ),
                         ),
                         const SizedBox(height: 24),

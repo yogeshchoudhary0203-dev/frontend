@@ -253,7 +253,7 @@ class _StoryViewScreenState extends State<StoryViewScreen>
               hintText:  'username',
               hintStyle: GoogleFonts.manrope(color: Colors.white30),
               filled:    true,
-              fillColor: Colors.white.withOpacity(0.07),
+              fillColor: Colors.white.withValues(alpha: 0.07),
               prefixText: '@',
               prefixStyle: GoogleFonts.manrope(color: Colors.white54),
               border: OutlineInputBorder(
@@ -404,7 +404,7 @@ class _StoryViewScreenState extends State<StoryViewScreen>
                     height: 32,
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.35)),
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withValues(alpha: 0.35)),
                     ),
                   ),
                 ),
@@ -425,7 +425,7 @@ class _StoryViewScreenState extends State<StoryViewScreen>
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end:   const Alignment(0, -0.3),
-                    colors: [Colors.black.withOpacity(0.65), Colors.transparent],
+                    colors: [Colors.black.withValues(alpha: 0.65), Colors.transparent],
                   ),
                 ),
               ),
@@ -438,7 +438,7 @@ class _StoryViewScreenState extends State<StoryViewScreen>
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end:   Alignment.topCenter,
-                    colors: [Colors.black.withOpacity(0.75), Colors.transparent],
+                    colors: [Colors.black.withValues(alpha: 0.75), Colors.transparent],
                   ),
                 ),
               ),
@@ -489,7 +489,7 @@ class _StoryViewScreenState extends State<StoryViewScreen>
                                   height: 3,
                                   child: LinearProgressIndicator(
                                     value: val,
-                                    backgroundColor: Colors.white.withOpacity(0.3),
+                                    backgroundColor: Colors.white.withValues(alpha: 0.3),
                                     valueColor: const AlwaysStoppedAnimation(Colors.white),
                                   ),
                                 ),
@@ -504,7 +504,7 @@ class _StoryViewScreenState extends State<StoryViewScreen>
                     Row(children: [
                       CircleAvatar(
                         radius:          19,
-                        backgroundColor: Colors.white.withOpacity(0.15),
+                        backgroundColor: Colors.white.withValues(alpha: 0.15),
                         backgroundImage: group.userPicture != null
                             ? CachedNetworkImageProvider(group.userPicture!)
                             : null,
@@ -583,9 +583,9 @@ class _StoryViewScreenState extends State<StoryViewScreen>
                           child: Container(
                             height: 46,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.12),
+                              color: Colors.white.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(23),
-                              border: Border.all(color: Colors.white.withOpacity(0.18)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Row(
@@ -653,7 +653,7 @@ class _SettingsSheet extends StatelessWidget {
           width: 36, height: 4,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(2),
-            color: Colors.white.withOpacity(0.16),
+            color: Colors.white.withValues(alpha: 0.16),
           ),
         ),
         const SizedBox(height: 8),
@@ -663,7 +663,7 @@ class _SettingsSheet extends StatelessWidget {
           subtitle: 'Hide your story from a specific person',
           onTap:    onHideFrom,
         ),
-        Divider(height: 1, color: Colors.white.withOpacity(0.06),
+        Divider(height: 1, color: Colors.white.withValues(alpha: 0.06),
             indent: 16, endIndent: 16),
         _Tile(
           icon:     Icons.star_rounded,
@@ -672,7 +672,7 @@ class _SettingsSheet extends StatelessWidget {
           enabled:  false,
           onTap:    onCloseFriends,
         ),
-        Divider(height: 1, color: Colors.white.withOpacity(0.06),
+        Divider(height: 1, color: Colors.white.withValues(alpha: 0.06),
             indent: 16, endIndent: 16),
         _Tile(
           icon:       Icons.delete_forever_rounded,
@@ -718,8 +718,8 @@ class _Tile extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: iconColor != null 
-                ? iconColor!.withOpacity(0.12)
-                : Colors.white.withOpacity(enabled ? 0.09 : 0.04),
+                ? iconColor!.withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: enabled ? 0.09 : 0.04),
           ),
           child: Icon(icon, color: iconColor ?? (enabled ? Colors.white : Colors.white24),
               size: 20),
@@ -743,7 +743,7 @@ class _Tile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
-              color: Colors.white.withOpacity(0.06),
+              color: Colors.white.withValues(alpha: 0.06),
             ),
             child: Text('Soon',
                 style: GoogleFonts.manrope(

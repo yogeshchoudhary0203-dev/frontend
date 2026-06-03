@@ -323,8 +323,8 @@ class _NSwitchRow extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: dark
-                    ? Colors.white.withOpacity(0.09)
-                    : Colors.black.withOpacity(0.06),
+                    ? Colors.white.withValues(alpha: 0.09)
+                    : Colors.black.withValues(alpha: 0.06),
               ),
               child: Icon(icon, size: 20, color: fg),
             ),

@@ -156,7 +156,7 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF00E676).withOpacity(0.4),
+                        color: const Color(0xFF00E676).withValues(alpha: 0.4),
                         blurRadius: 30,
                       ),
                     ],
@@ -397,7 +397,7 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.07),
+                color: Colors.white.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
@@ -432,9 +432,9 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: _diffColor(_current.difficulty).withOpacity(0.15),
+              color: _diffColor(_current.difficulty).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _diffColor(_current.difficulty).withOpacity(0.4)),
+              border: Border.all(color: _diffColor(_current.difficulty).withValues(alpha: 0.4)),
             ),
             child: Text(
               _diffLabel(_current.difficulty),
@@ -453,7 +453,7 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
         children: List.generate(5, (i) {
           Color color;
           if (i < _currentIndex)      color = const Color(0xFF00E676);
-          else if (i == _currentIndex) color = const Color(0xFF00E676).withOpacity(0.5);
+          else if (i == _currentIndex) color = const Color(0xFF00E676).withValues(alpha: 0.5);
           else                         color = Colors.white12;
           return Expanded(
             child: Container(
@@ -482,9 +482,9 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF6B6B).withOpacity(0.10),
+                color: const Color(0xFFFF6B6B).withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFFF6B6B).withOpacity(0.3)),
+                border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.3)),
               ),
               child: Row(children: [
                 const Icon(Icons.timer_off_rounded, color: Color(0xFFFF6B6B), size: 16),
@@ -501,9 +501,9 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
+                  color: Colors.white.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.10)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
                 ),
                 child: Text(
                   _current.questionText,
@@ -529,18 +529,18 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
     Widget? trailing;
 
     if (!_answered) {
-      borderColor = Colors.white.withOpacity(0.12);
-      bgColor     = Colors.white.withOpacity(0.05);
+      borderColor = Colors.white.withValues(alpha: 0.12);
+      bgColor     = Colors.white.withValues(alpha: 0.05);
     } else if (correct) {
       borderColor = const Color(0xFF00E676);
-      bgColor     = const Color(0xFF00E676).withOpacity(0.12);
+      bgColor     = const Color(0xFF00E676).withValues(alpha: 0.12);
       trailing    = const Icon(Icons.check_circle_rounded, color: Color(0xFF00E676), size: 20);
     } else if (selected) {
       borderColor = const Color(0xFFFF6B6B);
-      bgColor     = const Color(0xFFFF6B6B).withOpacity(0.12);
+      bgColor     = const Color(0xFFFF6B6B).withValues(alpha: 0.12);
       trailing    = const Icon(Icons.cancel_rounded, color: Color(0xFFFF6B6B), size: 20);
     } else {
-      borderColor = Colors.white.withOpacity(0.06);
+      borderColor = Colors.white.withValues(alpha: 0.06);
       bgColor     = Colors.transparent;
     }
 
@@ -562,8 +562,8 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: selected || (_answered && correct)
-                    ? borderColor.withOpacity(0.2)
-                    : Colors.white.withOpacity(0.06),
+                    ? borderColor.withValues(alpha: 0.2)
+                    : Colors.white.withValues(alpha: 0.06),
                 border: Border.all(color: borderColor),
               ),
               child: Center(
@@ -587,9 +587,9 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
       margin: const EdgeInsets.only(top: 4, bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF40C4FF).withOpacity(0.08),
+        color: const Color(0xFF40C4FF).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF40C4FF).withOpacity(0.25)),
+        border: Border.all(color: const Color(0xFF40C4FF).withValues(alpha: 0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -621,8 +621,8 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  color: Colors.white.withOpacity(0.07),
-                  border: Border.all(color: Colors.white.withOpacity(0.12)),
+                  color: Colors.white.withValues(alpha: 0.07),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
                 ),
                 child: Text('Skip', style: manrope(size: 14, weight: FontWeight.w600, color: Colors.white54)),
               ),
@@ -696,9 +696,9 @@ class _ResultScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00E676).withOpacity(0.12),
+                  color: const Color(0xFF00E676).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF00E676).withOpacity(0.4)),
+                  border: Border.all(color: const Color(0xFF00E676).withValues(alpha: 0.4)),
                 ),
                 child: Text(
                   '+${result.skillScoreDelta} Skill Points',
@@ -732,7 +732,7 @@ class _ResultScreen extends StatelessWidget {
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
+                        color: Colors.white.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: Colors.white12),
                       ),

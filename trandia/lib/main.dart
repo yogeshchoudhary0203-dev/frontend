@@ -116,8 +116,8 @@ class _TrandiaAppState extends State<TrandiaApp> with WidgetsBindingObserver {
         opaque: true,
         barrierDismissible: false,
         transitionDuration: const Duration(milliseconds: 220),
-        pageBuilder: (_, __, ___) => AppLockVerifyScreen(dark: dark),
-        transitionsBuilder: (_, animation, __, child) => FadeTransition(
+        pageBuilder: (_, _a, _b) => AppLockVerifyScreen(dark: dark),
+        transitionsBuilder: (_, animation, _a2, child) => FadeTransition(
           opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
           child: child,
         ),

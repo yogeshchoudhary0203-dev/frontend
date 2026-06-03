@@ -213,7 +213,7 @@ class ProfileStat extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          label.tr(context).toUpperCase(),
+          AppLocalizations.of(context).text(label).toUpperCase(),
           style: manrope(
             size: 10.5,
             weight: FontWeight.w700,

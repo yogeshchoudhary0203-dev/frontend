@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
@@ -57,10 +58,19 @@ void main() async {
     (msg) => debugPrint('[FCM] opened from background: ${msg.data}'),
   );
 
-  FlutterError.onError = (d) => FlutterError.presentError(d);
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   runZonedGuarded(
-    () => runApp(const ProviderScope(child: TrandiaApp())),
-    (e, st) => debugPrint('[UNCAUGHT] $e\n$st'),
+    () {
+      runApp(const ProviderScope(child: TrandiaApp()));
+      // Intentional crash for testing Crashlytics
+      Future.delayed(const Duration(seconds: 5), () {
+        FirebaseCrashlytics.instance.crash();
+      });
+    },
+    (e, st) {
+      debugPrint('[UNCAUGHT] $e\n$st');
+      FirebaseCrashlytics.instance.recordError(e, st, fatal: true);
+    },
   );
 }
 

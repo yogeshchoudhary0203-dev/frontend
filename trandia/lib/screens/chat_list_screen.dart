@@ -727,8 +727,8 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
     final isActive = _activeFilter == filter;
 
     final bgColor = isActive
-        ? (dark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.10))
-        : (dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03));
+        ? (dark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.10))
+        : (dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03));
 
     // Badge count for each filter
     int count = 0;
@@ -758,8 +758,8 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
             color: isActive
-                ? (dark ? Colors.white.withOpacity(0.30) : Colors.black.withOpacity(0.12))
-                : (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06)),
+                ? (dark ? Colors.white.withValues(alpha: 0.30) : Colors.black.withValues(alpha: 0.12))
+                : (dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06)),
           ),
         ),
         child: Row(
@@ -785,7 +785,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                 decoration: BoxDecoration(
                   color: isActive
                       ? (dark ? Colors.white : Colors.black)
-                      : (dark ? Colors.white.withOpacity(0.20) : Colors.black.withOpacity(0.10)),
+                      : (dark ? Colors.white.withValues(alpha: 0.20) : Colors.black.withValues(alpha: 0.10)),
                   shape: BoxShape.circle,
                 ),
                 child: Text(
@@ -914,11 +914,11 @@ class _ChatRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         blurSigma: 44,
         bgColors: dark
-            ? [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)]
-            : [Colors.white.withOpacity(0.65), Colors.white.withOpacity(0.40)],
+            ? [Colors.white.withValues(alpha: 0.05), Colors.white.withValues(alpha: 0.02)]
+            : [Colors.white.withValues(alpha: 0.65), Colors.white.withValues(alpha: 0.40)],
         borderColor: dark
-            ? Colors.white.withOpacity(0.08)
-            : Colors.white.withOpacity(0.85),
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.white.withValues(alpha: 0.85),
         borderWidth: 0.5,
         child: Row(children: [
           // Avatar with optional status/online overlay
@@ -989,7 +989,7 @@ class _ChatRow extends StatelessWidget {
                     style: manrope(
                         size: 12.5,
                         weight: previewWeight,
-                        color: isBlocked ? Colors.redAccent.withOpacity(0.7) : previewColor,
+                        color: isBlocked ? Colors.redAccent.withValues(alpha: 0.7) : previewColor,
                         letterSpacing: -0.05)),
                 ]),
           ),
@@ -1043,7 +1043,7 @@ class _ChatRow extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       isScrollControlled: true,
       builder: (ctx) {
         return BackdropFilter(
@@ -1055,16 +1055,16 @@ class _ChatRow extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: dark
-                    ? [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.05)]
-                    : [Colors.white.withOpacity(0.90), Colors.white.withOpacity(0.75)],
+                    ? [Colors.white.withValues(alpha: 0.10), Colors.white.withValues(alpha: 0.05)]
+                    : [Colors.white.withValues(alpha: 0.90), Colors.white.withValues(alpha: 0.75)],
               ),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: dark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.95),
+                color: dark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.95),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: dark ? Colors.black.withOpacity(0.6) : Colors.black.withOpacity(0.12),
+                  color: dark ? Colors.black.withValues(alpha: 0.6) : Colors.black.withValues(alpha: 0.12),
                   blurRadius: 32,
                   offset: const Offset(0, 8),
                   spreadRadius: -8,
@@ -1081,7 +1081,7 @@ class _ChatRow extends StatelessWidget {
                     margin: const EdgeInsets.only(top: 12),
                     width: 36, height: 4,
                     decoration: BoxDecoration(
-                      color: dark ? Colors.white.withOpacity(0.20) : Colors.black.withOpacity(0.15),
+                      color: dark ? Colors.white.withValues(alpha: 0.20) : Colors.black.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -1099,7 +1099,7 @@ class _ChatRow extends StatelessWidget {
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16),
                     height: 0.5,
-                    color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+                    color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
                   ),
 
                   // Lock / Unlock
@@ -1187,7 +1187,7 @@ class _ChatRow extends StatelessWidget {
                         width: double.infinity,
                         height: 48,
                         decoration: BoxDecoration(
-                          color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+                          color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         alignment: Alignment.center,
@@ -1237,8 +1237,8 @@ class _ChatRow extends StatelessWidget {
                 width: 38, height: 38,
                 decoration: BoxDecoration(
                   color: isDestructive
-                      ? Colors.redAccent.withOpacity(0.10)
-                      : (dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05)),
+                      ? Colors.redAccent.withValues(alpha: 0.10)
+                      : (dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
@@ -1269,7 +1269,7 @@ class _ChatRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       height: 0.5,
-      color: dark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05),
+      color: dark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
     );
   }
 
@@ -1300,7 +1300,7 @@ class _ChatRow extends StatelessWidget {
 
     final result = await showDialog<bool>(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (ctx) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: AlertDialog(

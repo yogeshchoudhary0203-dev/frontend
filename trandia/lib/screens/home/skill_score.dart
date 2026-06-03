@@ -169,7 +169,7 @@ class _SkillScoreScreenState extends State<SkillScoreScreen> {
   @override
   Widget build(BuildContext context) {
     final fg = widget.isDark ? Colors.white : const Color(0xFF111113);
-    final muted = fg.withOpacity(0.56);
+    final muted = fg.withValues(alpha: 0.56);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -303,7 +303,7 @@ class _ScoreHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = isDark ? Colors.white : const Color(0xFF111113);
-    final muted = fg.withOpacity(0.54);
+    final muted = fg.withValues(alpha: 0.54);
     return _SkillGlassPanel(
       isDark: isDark, radius: 24, blur: 34,
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
@@ -313,7 +313,7 @@ class _ScoreHero extends StatelessWidget {
             child: Stack(alignment: Alignment.center, children: [
               SizedBox.expand(child: CircularProgressIndicator(
                 value: data.score / 100, strokeWidth: 7, strokeCap: StrokeCap.round,
-                backgroundColor: fg.withOpacity(0.10), color: fg.withOpacity(0.88),
+                backgroundColor: fg.withValues(alpha: 0.10), color: fg.withValues(alpha: 0.88),
               )),
               Container(
                 width: 78, height: 78,
@@ -393,7 +393,7 @@ class _StatTile extends StatelessWidget {
           Row(children: [
             Container(width: 32, height: 32,
               decoration: BoxDecoration(shape: BoxShape.circle, color: fg.op(isDark ? 0.10 : 0.06)),
-              child: Icon(icon, color: fg.withOpacity(0.78), size: 19)),
+              child: Icon(icon, color: fg.withValues(alpha: 0.78), size: 19)),
             const Spacer(),
             Icon(Icons.north_east_rounded, color: fg.op(0.28), size: 15),
           ]),
@@ -402,11 +402,11 @@ class _StatTile extends StatelessWidget {
             Text(value, style: TextStyle(color: fg, fontSize: 29, fontWeight: FontWeight.w900, height: 1)),
             const SizedBox(width: 5),
             Padding(padding: const EdgeInsets.only(bottom: 3),
-              child: Text(unit, style: TextStyle(color: fg.withOpacity(0.46), fontSize: 11, fontWeight: FontWeight.w800))),
+              child: Text(unit, style: TextStyle(color: fg.withValues(alpha: 0.46), fontSize: 11, fontWeight: FontWeight.w800))),
           ]),
           const SizedBox(height: 5),
           Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: fg.withOpacity(0.54), fontSize: 12, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: fg.withValues(alpha: 0.54), fontSize: 12, fontWeight: FontWeight.w700)),
         ]),
       ),
     );
@@ -450,7 +450,7 @@ class _BreakdownSection extends StatelessWidget {
             child: Column(children: [
               Row(children: [
                 Expanded(child: Text(entry.key, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: fg.withOpacity(0.76), fontSize: 12.5, fontWeight: FontWeight.w800))),
+                  style: TextStyle(color: fg.withValues(alpha: 0.76), fontSize: 12.5, fontWeight: FontWeight.w800))),
                 Container(
                   constraints: const BoxConstraints(minWidth: 28),
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -462,7 +462,7 @@ class _BreakdownSection extends StatelessWidget {
               const SizedBox(height: 8),
               ClipRRect(borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(value: progress, minHeight: 6,
-                  backgroundColor: fg.withOpacity(0.085), color: fg.withOpacity(0.68))),
+                  backgroundColor: fg.withValues(alpha: 0.085), color: fg.withValues(alpha: 0.68))),
             ]),
           );
         }),

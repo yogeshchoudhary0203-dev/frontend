@@ -53,21 +53,21 @@ class FollowersScreen extends StatefulWidget {
 class _Tk {
   static Color fg(bool d) => d ? Colors.white : const Color(0xFF0A0A0A);
   static Color sub(bool d) =>
-      d ? Colors.white.withOpacity(0.55) : Colors.black.withOpacity(0.55);
+      d ? Colors.white.withValues(alpha: 0.55) : Colors.black.withValues(alpha: 0.55);
   static Color muted(bool d) =>
-      d ? Colors.white.withOpacity(0.72) : Colors.black.withOpacity(0.72);
+      d ? Colors.white.withValues(alpha: 0.72) : Colors.black.withValues(alpha: 0.72);
 
   static List<Color> glassBg(bool d) => d
-      ? [Colors.white.withOpacity(0.07), Colors.white.withOpacity(0.03)]
-      : [Colors.white.withOpacity(0.72), Colors.white.withOpacity(0.55)];
+      ? [Colors.white.withValues(alpha: 0.07), Colors.white.withValues(alpha: 0.03)]
+      : [Colors.white.withValues(alpha: 0.72), Colors.white.withValues(alpha: 0.55)];
 
   static Color glassBorder(bool d) =>
-      d ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95);
+      d ? Colors.white.withValues(alpha: 0.10) : Colors.white.withValues(alpha: 0.95);
 
   static BoxShadow cardShadow(bool d) => BoxShadow(
     color: d
-        ? Colors.black.withOpacity(0.8)
-        : const Color(0xFF14161E).withOpacity(0.18),
+        ? Colors.black.withValues(alpha: 0.8)
+        : const Color(0xFF14161E).withValues(alpha: 0.18),
     blurRadius: 28,
     offset: const Offset(0, 10),
     spreadRadius: -16,
@@ -550,22 +550,22 @@ class _Backdrop extends StatelessWidget {
           ),
           _blob(
             dark
-                ? Colors.white.withOpacity(0.10)
-                : Colors.white.withOpacity(0.95),
+                ? Colors.white.withValues(alpha: 0.10)
+                : Colors.white.withValues(alpha: 0.95),
             const Alignment(-1, -0.8),
             320,
           ),
           _blob(
             dark
-                ? Colors.white.withOpacity(0.06)
-                : Colors.black.withOpacity(0.10),
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.10),
             const Alignment(1, -0.2),
             280,
           ),
           _blob(
             dark
-                ? Colors.white.withOpacity(0.05)
-                : Colors.black.withOpacity(0.08),
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.black.withValues(alpha: 0.08),
             const Alignment(-0.6, 0.9),
             300,
           ),
@@ -584,7 +584,7 @@ class _Backdrop extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: RadialGradient(
-            colors: [c, c.withOpacity(0)],
+            colors: [c, c.withValues(alpha: 0)],
             stops: const [0, 0.7],
           ),
         ),
@@ -735,18 +735,18 @@ class _CircleBtn extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: dark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.white.withOpacity(0.6),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white.withValues(alpha: 0.6),
               border: Border.all(
                 color: dark
-                    ? Colors.white.withOpacity(0.10)
-                    : Colors.white.withOpacity(0.95),
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : Colors.white.withValues(alpha: 0.95),
               ),
               boxShadow: [
                 BoxShadow(
                   color: dark
-                      ? Colors.black.withOpacity(0.7)
-                      : const Color(0xFF14161E).withOpacity(0.18),
+                      ? Colors.black.withValues(alpha: 0.7)
+                      : const Color(0xFF14161E).withValues(alpha: 0.18),
                   blurRadius: 24,
                   offset: const Offset(0, 10),
                   spreadRadius: -14,
@@ -790,8 +790,8 @@ class _SegmentedTabs extends StatelessWidget {
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             color: dark
-                ? Colors.white.withOpacity(0.06)
-                : Colors.white.withOpacity(0.6),
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.6),
             border: Border.all(color: _Tk.glassBorder(dark)),
             borderRadius: BorderRadius.circular(999),
             boxShadow: [_Tk.cardShadow(dark)],
@@ -868,7 +868,7 @@ class _SegmentBtn extends StatelessWidget {
                 style: _Tk.manrope(
                   size: 11,
                   weight: FontWeight.w700,
-                  color: (active ? activeFg : muted).withOpacity(0.7),
+                  color: (active ? activeFg : muted).withValues(alpha: 0.7),
                   letterSpacing: -0.11,
                 ),
               ),
@@ -907,8 +907,8 @@ class _SearchPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             color: dark
-                ? Colors.white.withOpacity(0.06)
-                : Colors.white.withOpacity(0.55),
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.55),
             border: Border.all(color: _Tk.glassBorder(dark)),
             borderRadius: BorderRadius.circular(999),
           ),
@@ -1000,12 +1000,12 @@ class _UserRowCard extends StatelessWidget {
                       colors: dark
                           ? [
                               Colors.transparent,
-                              Colors.white.withOpacity(0.14),
+                              Colors.white.withValues(alpha: 0.14),
                               Colors.transparent,
                             ]
                           : [
                               Colors.transparent,
-                              Colors.white.withOpacity(0.95),
+                              Colors.white.withValues(alpha: 0.95),
                               Colors.transparent,
                             ],
                     ),
@@ -1136,12 +1136,12 @@ class _FollowCta extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: dark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.white.withOpacity(0.6),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white.withValues(alpha: 0.6),
               border: Border.all(
                 color: dark
-                    ? Colors.white.withOpacity(0.18)
-                    : Colors.black.withOpacity(0.10),
+                    ? Colors.white.withValues(alpha: 0.18)
+                    : Colors.black.withValues(alpha: 0.10),
               ),
               borderRadius: BorderRadius.circular(999),
             ),

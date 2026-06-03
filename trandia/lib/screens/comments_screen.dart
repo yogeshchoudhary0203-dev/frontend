@@ -453,13 +453,13 @@ class _CommentsScreenState extends State<CommentsScreen>
                         horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: widget.dark
-                          ? Colors.white.withOpacity(0.08)
-                          : Colors.black.withOpacity(0.05),
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: widget.dark
-                            ? Colors.white.withOpacity(0.12)
-                            : Colors.black.withOpacity(0.06),
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : Colors.black.withValues(alpha: 0.06),
                         width: 0.8,
                       ),
                     ),
@@ -496,15 +496,15 @@ class _CommentsScreenState extends State<CommentsScreen>
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         decoration: BoxDecoration(
                           color: widget.dark
-                              ? Colors.white.withOpacity(0.08)
-                              : Colors.black.withOpacity(0.04),
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.black.withValues(alpha: 0.04),
                           borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(14)),
                           border: Border(
                             top: BorderSide(
                               color: widget.dark
-                                  ? Colors.white.withOpacity(0.10)
-                                  : Colors.black.withOpacity(0.06),
+                                  ? Colors.white.withValues(alpha: 0.10)
+                                  : Colors.black.withValues(alpha: 0.06),
                               width: 0.6,
                             ),
                           ),
@@ -554,8 +554,8 @@ class _CommentsScreenState extends State<CommentsScreen>
                 blurSigma: 28,
                 shadow: BoxShadow(
                   color: widget.dark
-                      ? Colors.black.withOpacity(0.6)
-                      : const Color(0xFF14161E).withOpacity(0.20),
+                      ? Colors.black.withValues(alpha: 0.6)
+                      : const Color(0xFF14161E).withValues(alpha: 0.20),
                   blurRadius: 30,
                   offset: const Offset(0, -10),
                   spreadRadius: -16,
@@ -633,7 +633,7 @@ class _CommentsScreenState extends State<CommentsScreen>
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(Icons.chat_bubble_outline_rounded,
-            size: 48, color: subColor.withOpacity(0.5)),
+            size: 48, color: subColor.withValues(alpha: 0.5)),
         const SizedBox(height: 12),
         Text('No comments yet',
             style: manrope(size: 15, weight: FontWeight.w700,
@@ -653,13 +653,13 @@ class _CommentsScreenState extends State<CommentsScreen>
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: widget.dark
-              ? Colors.white.withOpacity(0.04)
-              : Colors.black.withOpacity(0.02),
+              ? Colors.white.withValues(alpha: 0.04)
+              : Colors.black.withValues(alpha: 0.02),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: widget.dark
-                ? Colors.white.withOpacity(0.08)
-                : Colors.black.withOpacity(0.04),
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.04),
             width: 0.8,
           ),
         ),
@@ -689,14 +689,14 @@ class _CommentsScreenState extends State<CommentsScreen>
                 const Spacer(),
                 Text('Author',
                     style: manrope(size: 10.5, weight: FontWeight.w600,
-                        color: subColor.withOpacity(0.7),
+                        color: subColor.withValues(alpha: 0.7),
                         letterSpacing: 0.2)),
               ],
             ),
             const SizedBox(height: 10),
             Text(widget.postDescription,
                 style: manrope(size: 13, weight: FontWeight.w500,
-                    color: fgColor.withOpacity(0.85),
+                    color: fgColor.withValues(alpha: 0.85),
                     height: 1.45, letterSpacing: -0.05)),
           ],
         ),
@@ -731,8 +731,8 @@ class _CommentsScreenState extends State<CommentsScreen>
         ? const Color(0xFFFF3040)
         : const Color(0xFFED4956);
     final accentReplyColor = widget.dark
-        ? Colors.white.withOpacity(0.45)
-        : Colors.black.withOpacity(0.40);
+        ? Colors.white.withValues(alpha: 0.45)
+        : Colors.black.withValues(alpha: 0.40);
 
     return Padding(
       padding: EdgeInsets.only(bottom: isReply ? 6 : 12),
@@ -804,7 +804,7 @@ class _CommentsScreenState extends State<CommentsScreen>
                           style: manrope(
                               size:   isReply ? 11.5 : 12.5,
                               weight: FontWeight.w500,
-                              color:  fgColor.withOpacity(0.85),
+                              color:  fgColor.withValues(alpha: 0.85),
                               height: 1.4,
                               letterSpacing: -0.05)),
                     ],
@@ -829,7 +829,7 @@ class _CommentsScreenState extends State<CommentsScreen>
                             : Icons.favorite_outline_rounded,
                         color: isLiked
                             ? likedColor
-                            : subColor.withOpacity(0.6),
+                            : subColor.withValues(alpha: 0.6),
                         size: isReply ? 15 : 18,
                       ),
                     ),

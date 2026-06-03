@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -253,12 +253,12 @@ class _HomeScreenState extends State<HomeScreen>
     if (_loadingFeed) return;
     if (!refresh && _nextCursor == null && _posts.isNotEmpty) return;
 
-    // ── Stale-while-revalidate for first page (not pagination, not pull-refresh) ──
+    // -- Stale-while-revalidate for first page (not pagination, not pull-refresh) --
     final isFirstPage = !refresh && _nextCursor == null && _posts.isEmpty;
     if (isFirstPage) {
       final cached = await LocalDb.instance.loadFeedPosts();
       if (cached.isNotEmpty && mounted) {
-        // Render cached posts instantly — no spinner shown to user
+        // Render cached posts instantly � no spinner shown to user
         setState(() {
           _posts.addAll(cached);
           _feedError = false;
@@ -314,7 +314,7 @@ class _HomeScreenState extends State<HomeScreen>
         unawaited(LocalDb.instance.saveFeedPosts(result.posts));
       }
     } catch (_) {
-      // Silently ignore — user is already seeing stale data, which is fine
+      // Silently ignore � user is already seeing stale data, which is fine
     }
   }
 
@@ -645,7 +645,7 @@ class _HomeScreenState extends State<HomeScreen>
         Positioned.fill(child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
           child: Container(
-              color: (isDark ? Colors.black : Colors.white).withOpacity(0.1)),
+              color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.1)),
         )),
 
         Positioned.fill(
@@ -682,7 +682,7 @@ class _HomeScreenState extends State<HomeScreen>
                         child: Text('Tap to retry',
                           style: TextStyle(
                             color: (isDark ? Colors.white : Colors.black)
-                                .withOpacity(0.45),
+                                .withValues(alpha: 0.45),
                             fontSize: 14,
                           )),
                       )),
@@ -693,7 +693,7 @@ class _HomeScreenState extends State<HomeScreen>
                     child: Center(child: Text('No posts yet',
                       style: TextStyle(
                         color: (isDark ? Colors.white : Colors.black)
-                            .withOpacity(0.38),
+                            .withValues(alpha: 0.38),
                         fontSize: 14,
                     ))),
                   );
@@ -713,7 +713,7 @@ class _HomeScreenState extends State<HomeScreen>
                             width: 20, height: 20,
                             child: CircularProgressIndicator(
                               color: (isDark ? Colors.white : Colors.black)
-                                  .withOpacity(0.35),
+                                  .withValues(alpha: 0.35),
                               strokeWidth: 1.5,
                             )))
                         : const SizedBox.shrink(),

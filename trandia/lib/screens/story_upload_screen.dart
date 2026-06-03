@@ -114,8 +114,8 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           color: dark
-              ? Colors.white.withOpacity(0.07)
-              : Colors.black.withOpacity(0.05),
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.black.withValues(alpha: 0.05),
         ),
         child: Row(
           children: [
@@ -225,14 +225,14 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
             _gradient(
               begin: Alignment.topCenter,
               end:   const Alignment(0, -0.4),
-              color: Colors.black.withOpacity(0.60),
+              color: Colors.black.withValues(alpha: 0.60),
             ),
             Align(
               alignment: Alignment.bottomCenter,
               child: _gradient(
                 begin: Alignment.bottomCenter,
                 end:   Alignment.topCenter,
-                color: Colors.black.withOpacity(0.72),
+                color: Colors.black.withValues(alpha: 0.72),
                 height: 220,
               ),
             ),
@@ -255,8 +255,8 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
-                        color:  Colors.black.withOpacity(0.40),
-                        border: Border.all(color: Colors.white.withOpacity(0.30)),
+                        color:  Colors.black.withValues(alpha: 0.40),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
                       ),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         const Icon(Icons.access_time_rounded,
@@ -297,7 +297,7 @@ class _StoryUploadScreenState extends State<StoryUploadScreen> {
                         child: LinearProgressIndicator(
                           value:      _progress,
                           minHeight:  3,
-                          backgroundColor: Colors.white.withOpacity(0.15),
+                          backgroundColor: Colors.white.withValues(alpha: 0.15),
                           valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ),
@@ -360,8 +360,8 @@ class _EmptyState extends StatelessWidget {
             width: 88, height: 88,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color:  Colors.white.withOpacity(0.07),
-              border: Border.all(color: Colors.white.withOpacity(0.18)),
+              color:  Colors.white.withValues(alpha: 0.07),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
             ),
             child: const Icon(Icons.add_photo_alternate_rounded,
                 color: Colors.white, size: 36),
@@ -406,7 +406,7 @@ class _IconBtn extends StatelessWidget {
       width: 38, height: 38,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.black.withOpacity(0.42),
+        color: Colors.black.withValues(alpha: 0.42),
       ),
       child: Icon(icon, color: Colors.white, size: 20),
     ),
@@ -427,8 +427,8 @@ class _OutlineBtn extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(25),
-          color:  Colors.white.withOpacity(0.12),
-          border: Border.all(color: Colors.white.withOpacity(0.28)),
+          color:  Colors.white.withValues(alpha: 0.12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
         ),
         child: Text(label,
             style: GoogleFonts.manrope(
@@ -509,7 +509,7 @@ class _DurationSheet extends StatelessWidget {
           width: 36, height: 4,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(2),
-            color: (isDark ? Colors.white : Colors.black).withOpacity(0.15),
+            color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.15),
           ),
         ),
         const SizedBox(height: 24),
@@ -561,10 +561,10 @@ class _DurationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final bgColor = selected
         ? (isDark ? Colors.white : Colors.black)
-        : (isDark ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.05));
+        : (isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.05));
     final borderColor = selected
         ? Colors.transparent
-        : (isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.09));
+        : (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.09));
     final mainColor = selected
         ? (isDark ? Colors.black : Colors.white)
         : GlassTokens.fg(isDark);

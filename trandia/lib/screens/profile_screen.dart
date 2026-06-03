@@ -435,11 +435,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
     final muted = dark
-        ? Colors.white.withOpacity(0.72)
-        : Colors.black.withOpacity(0.72);
+        ? Colors.white.withValues(alpha: 0.72)
+        : Colors.black.withValues(alpha: 0.72);
     final hairline = dark
-        ? Colors.white.withOpacity(0.08)
-        : Colors.black.withOpacity(0.06);
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
 
     return Scaffold(
       backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
@@ -472,8 +472,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           decoration: BoxDecoration(
                             color: dark
-                                ? Colors.white.withOpacity(0.08)
-                                : Colors.black.withOpacity(0.08),
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
@@ -529,7 +529,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             Icons.lock_rounded,
                                             size: 16,
                                             color: (dark ? Colors.white : const Color(0xFF1A1A1A))
-                                                .withOpacity(0.55),
+                                                .withValues(alpha: 0.55),
                                           ),
                                         ),
                                       ),
@@ -612,10 +612,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         boxShadow: [
                                           BoxShadow(
                                             color: dark
-                                                ? Colors.black.withOpacity(0.8)
+                                                ? Colors.black.withValues(alpha: 0.8)
                                                 : const Color(
                                                     0xFF14161E,
-                                                  ).withOpacity(0.25),
+                                                  ).withValues(alpha: 0.25),
                                             blurRadius: 36,
                                             offset: const Offset(0, 18),
                                             spreadRadius: -16,
@@ -909,16 +909,16 @@ class _SocialButton extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: dark
-                ? Colors.white.withOpacity(0.06)
-                : Colors.white.withOpacity(0.8),
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.8),
             border: Border.all(
               color: dark
-                  ? Colors.white.withOpacity(0.12)
-                  : Colors.black.withOpacity(0.08),
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : Colors.black.withValues(alpha: 0.08),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(dark ? 0.28 : 0.08),
+                color: Colors.black.withValues(alpha: dark ? 0.28 : 0.08),
                 blurRadius: 14,
                 offset: const Offset(0, 6),
                 spreadRadius: -10,
@@ -1079,14 +1079,14 @@ class _CoverBand extends StatelessWidget {
         ),
         border: Border.all(
           color: dark
-              ? Colors.white.withOpacity(0.08)
-              : Colors.white.withOpacity(0.95),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.white.withValues(alpha: 0.95),
         ),
         boxShadow: [
           BoxShadow(
             color: dark
-                ? Colors.black.withOpacity(0.7)
-                : const Color(0xFF14161E).withOpacity(0.18),
+                ? Colors.black.withValues(alpha: 0.7)
+                : const Color(0xFF14161E).withValues(alpha: 0.18),
             blurRadius: 30,
             offset: const Offset(0, 14),
             spreadRadius: -16,
@@ -1109,7 +1109,7 @@ class _CoverBand extends StatelessWidget {
                     colors: dark
                         ? [
                             Colors.transparent,
-                            Colors.white.withOpacity(0.18),
+                            Colors.white.withValues(alpha: 0.18),
                             Colors.transparent,
                           ]
                         : [
@@ -1213,7 +1213,7 @@ class _DiagonalStripesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = (dark ? Colors.white : Colors.black).withOpacity(
+      ..color = (dark ? Colors.white : Colors.black).withValues(alpha: 
         dark ? 0.04 : 0.025,
       )
       ..strokeWidth = 1;
@@ -1313,12 +1313,12 @@ class _TitleChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: dark
-                ? Colors.white.withOpacity(0.06)
-                : Colors.white.withOpacity(0.6),
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.6),
             border: Border.all(
               color: dark
-                  ? Colors.white.withOpacity(0.10)
-                  : Colors.black.withOpacity(0.06),
+                  ? Colors.white.withValues(alpha: 0.10)
+                  : Colors.black.withValues(alpha: 0.06),
             ),
             borderRadius: BorderRadius.circular(999),
           ),
@@ -1330,7 +1330,7 @@ class _TitleChip extends StatelessWidget {
                 height: 5,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: fg.withOpacity(0.85),
+                  color: fg.withValues(alpha: 0.85),
                 ),
               ),
               const SizedBox(width: 7),
@@ -1385,12 +1385,12 @@ class _LocationChip extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: dark
-                  ? Colors.white.withOpacity(0.06)
-                  : Colors.white.withOpacity(0.6),
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.white.withValues(alpha: 0.6),
               border: Border.all(
                 color: dark
-                    ? Colors.white.withOpacity(0.10)
-                    : Colors.black.withOpacity(0.06),
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : Colors.black.withValues(alpha: 0.06),
               ),
               borderRadius: BorderRadius.circular(999),
             ),
@@ -1425,7 +1425,7 @@ class _LocationChip extends StatelessWidget {
                         style: manrope(
                           size: 12,
                           weight: FontWeight.w600,
-                          color: hasCity ? GlassTokens.fg(dark).withOpacity(0.8) : sub,
+                          color: hasCity ? GlassTokens.fg(dark).withValues(alpha: 0.8) : sub,
                           letterSpacing: -0.1,
                         ),
                       ),
@@ -1562,8 +1562,8 @@ class _PrimaryCta extends StatelessWidget {
               shape: const StadiumBorder(),
               shadowColor: Colors.transparent,
             ).copyWith(
-              overlayColor: MaterialStateProperty.all(
-                (dark ? Colors.black : Colors.white).withOpacity(0.06),
+              overlayColor: WidgetStateProperty.all(
+                (dark ? Colors.black : Colors.white).withValues(alpha: 0.06),
               ),
             ),
         onPressed: () {},
@@ -1598,12 +1598,12 @@ class _GhostCta extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: dark
-                ? Colors.white.withOpacity(0.08)
-                : Colors.white.withOpacity(0.6),
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.white.withValues(alpha: 0.6),
             border: Border.all(
               color: dark
-                  ? Colors.white.withOpacity(0.14)
-                  : Colors.black.withOpacity(0.08),
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : Colors.black.withValues(alpha: 0.08),
             ),
             borderRadius: BorderRadius.circular(999),
           ),
@@ -1648,18 +1648,18 @@ class _CircleGlassBtn extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: dark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.white.withOpacity(0.6),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white.withValues(alpha: 0.6),
               border: Border.all(
                 color: dark
-                    ? Colors.white.withOpacity(0.10)
-                    : Colors.white.withOpacity(0.95),
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : Colors.white.withValues(alpha: 0.95),
               ),
               boxShadow: [
                 BoxShadow(
                   color: dark
-                      ? Colors.black.withOpacity(0.7)
-                      : const Color(0xFF14161E).withOpacity(0.18),
+                      ? Colors.black.withValues(alpha: 0.7)
+                      : const Color(0xFF14161E).withValues(alpha: 0.18),
                   blurRadius: 24,
                   offset: const Offset(0, 10),
                   spreadRadius: -14,
@@ -1727,8 +1727,8 @@ class _HighlightsRow extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: dark
-                              ? Colors.white.withOpacity(0.14)
-                              : Colors.black.withOpacity(0.14),
+                              ? Colors.white.withValues(alpha: 0.14)
+                              : Colors.black.withValues(alpha: 0.14),
                         ),
                         child: Container(
                           padding: const EdgeInsets.all(2),
@@ -1797,12 +1797,12 @@ class _TabsPill extends StatelessWidget {
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             color: dark
-                ? Colors.white.withOpacity(0.06)
-                : Colors.white.withOpacity(0.6),
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.6),
             border: Border.all(
               color: dark
-                  ? Colors.white.withOpacity(0.10)
-                  : Colors.white.withOpacity(0.95),
+                  ? Colors.white.withValues(alpha: 0.10)
+                  : Colors.white.withValues(alpha: 0.95),
             ),
             borderRadius: BorderRadius.circular(999),
           ),
@@ -2024,7 +2024,7 @@ class _ProfileTileView extends StatelessWidget {
                           horizontal: 6,
                           vertical: 3,
                         ),
-                        color: Colors.black.withOpacity(0.42),
+                        color: Colors.black.withValues(alpha: 0.42),
                         child: const Icon(
                           Icons.play_arrow_rounded,
                           size: 11,
@@ -2279,7 +2279,7 @@ class _PostCardModalState extends State<_PostCardModal> {
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-              child: Container(color: Colors.black.withOpacity(0.55)),
+              child: Container(color: Colors.black.withValues(alpha: 0.55)),
             ),
           ),
 
@@ -2300,22 +2300,22 @@ class _PostCardModalState extends State<_PostCardModal> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Colors.white.withOpacity(0.18),
-                        Colors.white.withOpacity(0.07),
+                        Colors.white.withValues(alpha: 0.18),
+                        Colors.white.withValues(alpha: 0.07),
                       ],
                     ),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.30),
+                      color: Colors.white.withValues(alpha: 0.30),
                       width: 1.2,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.40),
+                        color: Colors.black.withValues(alpha: 0.40),
                         blurRadius: 42,
                         offset: const Offset(0, 20),
                       ),
                       BoxShadow(
-                        color: Colors.white.withOpacity(0.05),
+                        color: Colors.white.withValues(alpha: 0.05),
                         blurRadius: 1,
                         offset: const Offset(0, -1),
                       ),
@@ -2353,8 +2353,8 @@ class _PostCardModalState extends State<_PostCardModal> {
                 height: 36,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.15),
-                  border: Border.all(color: Colors.white.withOpacity(0.30)),
+                  color: Colors.white.withValues(alpha: 0.15),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
                 ),
                 child: const Icon(Icons.close, color: Colors.white, size: 18),
               ),
@@ -2376,7 +2376,7 @@ class _PostCardModalState extends State<_PostCardModal> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: Colors.white.withOpacity(0.50),
+                color: Colors.white.withValues(alpha: 0.50),
                 width: 1.5,
               ),
             ),
@@ -2408,7 +2408,7 @@ class _PostCardModalState extends State<_PostCardModal> {
                 Text(
                   '@${widget.post.userUsername}',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.55),
+                    color: Colors.white.withValues(alpha: 0.55),
                     fontSize: 11.5,
                   ),
                 ),
@@ -2418,7 +2418,7 @@ class _PostCardModalState extends State<_PostCardModal> {
           Text(
             widget.post.timeAgo,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.45),
+              color: Colors.white.withValues(alpha: 0.45),
               fontSize: 11,
             ),
           ),
@@ -2430,7 +2430,7 @@ class _PostCardModalState extends State<_PostCardModal> {
               padding: const EdgeInsets.all(4),
               child: Icon(
                 Icons.more_vert_rounded,
-                color: Colors.white.withOpacity(0.75),
+                color: Colors.white.withValues(alpha: 0.75),
                 size: 20,
               ),
             ),
@@ -2611,7 +2611,7 @@ class _PostCardModalState extends State<_PostCardModal> {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: Colors.white.withOpacity(0.82),
+          color: Colors.white.withValues(alpha: 0.82),
           fontSize: 13,
           height: 1.4,
         ),
@@ -2734,8 +2734,8 @@ class _CreatorDashboardCard extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: dark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.black.withOpacity(0.06),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.06),
             ),
             child: Icon(Icons.insights_rounded, color: fg, size: 20),
           ),

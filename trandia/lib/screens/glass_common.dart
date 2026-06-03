@@ -13,8 +13,8 @@ class GlassTokens {
   static const fgDark   = Color(0xFFFFFFFF);
   static const fgLight  = Color(0xFF0A0A0A);
   static Color fg(bool dark)  => dark ? fgDark : fgLight;
-  static Color sub(bool dark) => dark ? Colors.white.withOpacity(0.55) : Colors.black.withOpacity(0.55);
-  static Color text78(bool dark) => dark ? Colors.white.withOpacity(0.78) : Colors.black.withOpacity(0.78);
+  static Color sub(bool dark) => dark ? Colors.white.withValues(alpha: 0.55) : Colors.black.withValues(alpha: 0.55);
+  static Color text78(bool dark) => dark ? Colors.white.withValues(alpha: 0.78) : Colors.black.withValues(alpha: 0.78);
 
   // backgrounds
   static const bgDark  = Color(0xFF000000);
@@ -22,14 +22,14 @@ class GlassTokens {
 
   // glass surfaces
   static List<Color> glassBg(bool dark) => dark
-      ? [Colors.white.withOpacity(0.07), Colors.white.withOpacity(0.03)]
-      : [Colors.white.withOpacity(0.78), Colors.white.withOpacity(0.55)];
+      ? [Colors.white.withValues(alpha: 0.07), Colors.white.withValues(alpha: 0.03)]
+      : [Colors.white.withValues(alpha: 0.78), Colors.white.withValues(alpha: 0.55)];
 
   static Color glassBorder(bool dark) =>
-      dark ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95);
+      dark ? Colors.white.withValues(alpha: 0.10) : Colors.white.withValues(alpha: 0.95);
 
   static BoxShadow cardShadow(bool dark) => BoxShadow(
-    color: dark ? Colors.black.withOpacity(0.8) : const Color(0xFF14161E).withOpacity(0.18),
+    color: dark ? Colors.black.withValues(alpha: 0.8) : const Color(0xFF14161E).withValues(alpha: 0.18),
     blurRadius: 28, offset: const Offset(0, 10), spreadRadius: -16,
   );
 }
@@ -88,9 +88,9 @@ class GlassBackdrop extends StatelessWidget {
           ),
         ),
       ),
-      _blob(dark ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.95), const Alignment(-1, -0.8), 320),
-      _blob(dark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.10),  const Alignment( 1, -0.2), 280),
-      _blob(dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.08),  const Alignment(-0.6, 0.9), 300),
+      _blob(dark ? Colors.white.withValues(alpha: 0.10) : Colors.white.withValues(alpha: 0.95), const Alignment(-1, -0.8), 320),
+      _blob(dark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.10),  const Alignment( 1, -0.2), 280),
+      _blob(dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.08),  const Alignment(-0.6, 0.9), 300),
     ]);
   }
 
@@ -103,7 +103,7 @@ class GlassBackdrop extends StatelessWidget {
           width: size, height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [c, c.withOpacity(0)], stops: const [0, 0.7]),
+            gradient: RadialGradient(colors: [c, c.withValues(alpha: 0)], stops: const [0, 0.7]),
           ),
         ),
       ),
@@ -166,8 +166,8 @@ class GlassSurface extends StatelessWidget {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: dark
-                        ? [Colors.transparent, Colors.white.withOpacity(0.14), Colors.transparent]
-                        : [Colors.transparent, Colors.white.withOpacity(0.98), Colors.transparent],
+                        ? [Colors.transparent, Colors.white.withValues(alpha: 0.14), Colors.transparent]
+                        : [Colors.transparent, Colors.white.withValues(alpha: 0.98), Colors.transparent],
                   ),
                 ),
               ),
@@ -211,7 +211,7 @@ class GlassCircleButton extends StatelessWidget {
           width: size, height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: bg ?? (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06)),
+            color: bg ?? (dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06)),
           ),
           alignment: Alignment.center,
           child: Icon(icon, size: iconSize, color: fg ?? GlassTokens.fg(dark)),
@@ -310,7 +310,7 @@ class GlassHeader extends StatelessWidget {
         padding: padding,
         blurSigma: 28,
         shadow: BoxShadow(
-          color: dark ? Colors.black.withOpacity(0.7) : const Color(0xFF14161E).withOpacity(0.18),
+          color: dark ? Colors.black.withValues(alpha: 0.7) : const Color(0xFF14161E).withValues(alpha: 0.18),
           blurRadius: 30, offset: const Offset(0, 14), spreadRadius: -16,
         ),
         child: child,

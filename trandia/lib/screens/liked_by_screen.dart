@@ -225,10 +225,10 @@ class _LikedByScreenState extends State<LikedByScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+                      color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.06),
+                        color: dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
                         width: 0.8,
                       ),
                     ),
@@ -292,8 +292,8 @@ class _SearchPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             color: dark
-                ? Colors.white.withOpacity(0.06)
-                : Colors.white.withOpacity(0.55),
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.55),
             border: Border.all(color: GlassTokens.glassBorder(dark)),
             borderRadius: BorderRadius.circular(999),
           ),
@@ -384,12 +384,12 @@ class _UserRowCard extends StatelessWidget {
                       colors: dark
                           ? [
                               Colors.transparent,
-                              Colors.white.withOpacity(0.14),
+                              Colors.white.withValues(alpha: 0.14),
                               Colors.transparent,
                             ]
                           : [
                               Colors.transparent,
-                              Colors.white.withOpacity(0.95),
+                              Colors.white.withValues(alpha: 0.95),
                               Colors.transparent,
                             ],
                     ),
@@ -509,12 +509,12 @@ class _FollowButton extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: dark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.white.withOpacity(0.6),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white.withValues(alpha: 0.6),
               border: Border.all(
                 color: dark
-                  ? Colors.white.withOpacity(0.18)
-                  : Colors.black.withOpacity(0.10),
+                  ? Colors.white.withValues(alpha: 0.18)
+                  : Colors.black.withValues(alpha: 0.10),
               ),
               borderRadius: BorderRadius.circular(999),
             ),

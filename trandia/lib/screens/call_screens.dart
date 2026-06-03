@@ -752,7 +752,7 @@ class _VideoCallScreenState extends State<VideoCallScreen>
         color: const Color(0xFF1C1C1E),
         child: Center(
           child: Icon(Icons.videocam_off_rounded,
-              color: Colors.white.withOpacity(0.6), size: 28)),
+              color: Colors.white.withValues(alpha: 0.6), size: 28)),
       );
     }
     return AgoraVideoView(
@@ -792,7 +792,7 @@ class _VideoCallScreenState extends State<VideoCallScreen>
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: Colors.white.withOpacity(0.25), width: 1.5)),
+                        color: Colors.white.withValues(alpha: 0.25), width: 1.5)),
                 )),
                 Positioned(
                   bottom: 8, right: 8,
@@ -802,7 +802,7 @@ class _VideoCallScreenState extends State<VideoCallScreen>
                       width: 28, height: 28,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.black.withOpacity(0.5)),
+                        color: Colors.black.withValues(alpha: 0.5)),
                       child: const Icon(Icons.flip_camera_ios_rounded,
                           color: Colors.white, size: 16),
                     ),
@@ -828,7 +828,7 @@ class _VideoCallScreenState extends State<VideoCallScreen>
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.black.withOpacity(0.6), Colors.transparent
+                            Colors.black.withValues(alpha: 0.6), Colors.transparent
                           ],
                         ),
                       ),
@@ -844,7 +844,7 @@ class _VideoCallScreenState extends State<VideoCallScreen>
                                 ? _durationStr
                                 : widget.isCallee ? 'Connecting…' : 'Ringing…',
                             style: manrope(size: 13, weight: FontWeight.w500,
-                                color: Colors.white.withOpacity(0.7)),
+                                color: Colors.white.withValues(alpha: 0.7)),
                           ),
                         ],
                       ),
@@ -862,7 +862,7 @@ class _VideoCallScreenState extends State<VideoCallScreen>
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                           colors: [
-                            Colors.black.withOpacity(0.7), Colors.transparent
+                            Colors.black.withValues(alpha: 0.7), Colors.transparent
                           ],
                         ),
                       ),
@@ -915,15 +915,15 @@ class _LiquidBackground extends StatelessWidget {
       ),
       _blob(
           color: dark
-              ? const Color(0xFF2A2A5A).withOpacity(0.5)
-              : const Color(0xFF9898D8).withOpacity(0.3),
+              ? const Color(0xFF2A2A5A).withValues(alpha: 0.5)
+              : const Color(0xFF9898D8).withValues(alpha: 0.3),
           alignment:
               Alignment(math.sin(t * math.pi * 2) * 0.4 - 0.6, -0.6),
           size: 300),
       _blob(
           color: dark
-              ? const Color(0xFF1A1A40).withOpacity(0.4)
-              : const Color(0xFF7878C8).withOpacity(0.25),
+              ? const Color(0xFF1A1A40).withValues(alpha: 0.4)
+              : const Color(0xFF7878C8).withValues(alpha: 0.25),
           alignment:
               Alignment(math.cos(t * math.pi * 2) * 0.5 + 0.5, 0.2),
           size: 260),
@@ -944,7 +944,7 @@ class _LiquidBackground extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient:
-                    RadialGradient(colors: [color, color.withOpacity(0)]),
+                    RadialGradient(colors: [color, color.withValues(alpha: 0)]),
               ),
             ),
           ),
@@ -972,8 +972,8 @@ class _PulseRing extends StatelessWidget {
             shape: BoxShape.circle,
             border: Border.all(
               color: dark
-                  ? Colors.white.withOpacity(0.5)
-                  : Colors.black.withOpacity(0.2),
+                  ? Colors.white.withValues(alpha: 0.5)
+                  : Colors.black.withValues(alpha: 0.2),
               width: 1.5,
             ),
           ),
@@ -997,7 +997,7 @@ class _Avatar extends StatelessWidget {
       gradient: gradient,
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(dark ? 0.6 : 0.2),
+          color: Colors.black.withValues(alpha: dark ? 0.6 : 0.2),
           blurRadius: 40, offset: const Offset(0, 12)),
       ],
     ),
@@ -1023,18 +1023,18 @@ class _StatusChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: connected
               ? (dark
-                  ? Colors.green.withOpacity(0.25)
-                  : Colors.green.withOpacity(0.15))
+                  ? Colors.green.withValues(alpha: 0.25)
+                  : Colors.green.withValues(alpha: 0.15))
               : (dark
-                  ? Colors.white.withOpacity(0.10)
-                  : Colors.black.withOpacity(0.07)),
+                  ? Colors.white.withValues(alpha: 0.10)
+                  : Colors.black.withValues(alpha: 0.07)),
           borderRadius: BorderRadius.circular(50),
           border: Border.all(
             color: connected
-                ? Colors.green.withOpacity(0.35)
+                ? Colors.green.withValues(alpha: 0.35)
                 : (dark
-                    ? Colors.white.withOpacity(0.15)
-                    : Colors.black.withOpacity(0.10)),
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : Colors.black.withValues(alpha: 0.10)),
             width: 1,
           ),
         ),
@@ -1082,7 +1082,7 @@ class _WaitingOverlay extends StatelessWidget {
           style: manrope(size: 22, weight: FontWeight.w800, color: Colors.white)),
       const SizedBox(height: 8),
       Text('Waiting for video…',
-          style: manrope(size: 14, color: Colors.white.withOpacity(0.6))),
+          style: manrope(size: 14, color: Colors.white.withValues(alpha: 0.6))),
     ]),
   );
 }
@@ -1110,7 +1110,7 @@ class _VoiceWave extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 3),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(4),
-              color: color.withOpacity(0.6),
+              color: color.withValues(alpha: 0.6),
             ),
           );
         }),
@@ -1138,7 +1138,7 @@ class _RoundBtn extends StatelessWidget {
         width: 72, height: 72,
         decoration: BoxDecoration(shape: BoxShape.circle, color: bg,
             boxShadow: [
-              BoxShadow(color: bg.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8))
+              BoxShadow(color: bg.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8))
             ]),
         alignment: Alignment.center,
         child: Icon(icon, color: Colors.white, size: 32),
@@ -1219,12 +1219,12 @@ class _ControlBtn extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: active
-                  ? (dark ? Colors.white.withOpacity(0.22) : Colors.black.withOpacity(0.14))
-                  : (dark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.07)),
+                  ? (dark ? Colors.white.withValues(alpha: 0.22) : Colors.black.withValues(alpha: 0.14))
+                  : (dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.07)),
               border: Border.all(
                 color: active
-                    ? (dark ? Colors.white.withOpacity(0.35) : Colors.black.withOpacity(0.25))
-                    : (dark ? Colors.white.withOpacity(0.14) : Colors.black.withOpacity(0.10)),
+                    ? (dark ? Colors.white.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.25))
+                    : (dark ? Colors.white.withValues(alpha: 0.14) : Colors.black.withValues(alpha: 0.10)),
                 width: 1.2,
               ),
             ),
@@ -1257,7 +1257,7 @@ class _EndCallBtn extends StatelessWidget {
               begin: Alignment.topLeft, end: Alignment.bottomRight,
               colors: [Color(0xFFFF3B30), Color(0xFFCC2222)]),
           boxShadow: [
-            BoxShadow(color: const Color(0xFFFF3B30).withOpacity(0.45),
+            BoxShadow(color: const Color(0xFFFF3B30).withValues(alpha: 0.45),
                 blurRadius: 24, offset: const Offset(0, 8)),
           ],
         ),

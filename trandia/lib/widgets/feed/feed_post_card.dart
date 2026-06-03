@@ -121,9 +121,9 @@ class _PostCardState extends State<PostCard> {
                 child: InteractiveViewer(clipBehavior: Clip.none, minScale: 1.0, maxScale: 4.0,
                   child: Stack(fit: StackFit.expand, children: [
                     CachedNetworkImage(imageUrl: p.mediaUrl, fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(color: (dark ? Colors.white : Colors.black).withOpacity(0.05)),
-                      errorWidget: (_, __, ___) => Container(color: (dark ? Colors.white : Colors.black).withOpacity(0.05),
-                        child: Icon(Icons.broken_image_outlined, color: (dark ? Colors.white : Colors.black).withOpacity(0.25)))),
+                      placeholder: (_, __) => Container(color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.05)),
+                      errorWidget: (_, __, ___) => Container(color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.05),
+                        child: Icon(Icons.broken_image_outlined, color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.25)))),
                     Container(decoration: BoxDecoration(gradient: LinearGradient(
                       begin: Alignment.topCenter, end: Alignment.bottomCenter,
                       colors: [Colors.transparent, Colors.black.op(0.18)]))),

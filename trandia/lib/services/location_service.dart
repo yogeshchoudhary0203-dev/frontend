@@ -69,7 +69,7 @@ class LocationService {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: dark
-                          ? Colors.white.withOpacity(0.08)
+                          ? Colors.white.withValues(alpha: 0.08)
                           : const Color(0xFFF2F2F7),
                     ),
                     child: const Icon(
@@ -110,7 +110,7 @@ class LocationService {
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: dark
-                                  ? Colors.white.withOpacity(0.07)
+                                  ? Colors.white.withValues(alpha: 0.07)
                                   : const Color(0xFFF2F2F7),
                               borderRadius: BorderRadius.circular(12),
                             ),

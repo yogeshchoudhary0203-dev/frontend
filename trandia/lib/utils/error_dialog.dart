@@ -293,11 +293,11 @@ class _GlassConfirmDialog extends StatelessWidget {
     ];
 
     final cancelBg = isDark
-        ? Colors.white.withOpacity(0.08)
-        : Colors.black.withOpacity(0.05);
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.05);
     final cancelBorder = isDark
-        ? Colors.white.withOpacity(0.14)
-        : Colors.black.withOpacity(0.08);
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.08);
 
     final confirmBg = destructive
         ? const [Color(0xFFDC2626), Color(0xFFB91C1C)]
@@ -313,10 +313,10 @@ class _GlassConfirmDialog extends StatelessWidget {
     final iconColor = destructive ? const Color(0xFFEF4444) : fg;
     final iconBg = destructive
         ? (isDark ? const Color(0x1AEF4444) : const Color(0x14EF4444))
-        : (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05));
+        : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05));
     final iconBorder = destructive
         ? const Color(0x40EF4444)
-        : (isDark ? Colors.white.withOpacity(0.14) : Colors.black.withOpacity(0.08));
+        : (isDark ? Colors.white.withValues(alpha: 0.14) : Colors.black.withValues(alpha: 0.08));
 
     return Center(
       child: Material(

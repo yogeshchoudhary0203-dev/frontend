@@ -19,7 +19,6 @@ import '../l10n/app_localizations.dart';
 import '../utils/error_dialog.dart';
 import 'glass_common.dart';
 import 'call_screens.dart';
-import 'home/home_screen.dart';
 
 // ── Quick emoji choices ───────────────────────────────────────
 const _kQuickEmojis = ['❤️', '😂', '😮', '😢', '🔥', '👏', '🎉', '💯', '👍', '🥺'];
@@ -372,7 +371,9 @@ class _ChatScreenState extends State<ChatScreen>
     if (text.isEmpty) return false;
     if (text.startsWith('[Decryption error:') ||
         text.contains('Decryption error:') ||
-        text == '[Encrypted Message]') return false;
+        text == '[Encrypted Message]') {
+      return false;
+    }
     return !_looksLikeEncryptedPayload(text);
   }
 
@@ -511,18 +512,18 @@ class _ChatScreenState extends State<ChatScreen>
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: widget.dark
-                            ? const Color(0xFF1C1C1E).withOpacity(0.92)
-                            : Colors.white.withOpacity(0.96),
+                            ? const Color(0xFF1C1C1E).withValues(alpha: 0.92)
+                            : Colors.white.withValues(alpha: 0.96),
                         borderRadius: BorderRadius.circular(50),
                         border: Border.all(
                           color: widget.dark
-                              ? Colors.white.withOpacity(0.10)
-                              : Colors.black.withOpacity(0.06),
+                              ? Colors.white.withValues(alpha: 0.10)
+                              : Colors.black.withValues(alpha: 0.06),
                           width: 0.8,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(widget.dark ? 0.5 : 0.12),
+                            color: Colors.black.withValues(alpha: widget.dark ? 0.5 : 0.12),
                             blurRadius: 24,
                             offset: const Offset(0, 8),
                           ),
@@ -557,14 +558,14 @@ class _ChatScreenState extends State<ChatScreen>
                                     shape: BoxShape.circle,
                                     color: alreadyReacted
                                         ? (widget.dark
-                                            ? Colors.white.withOpacity(0.18)
-                                            : const Color(0xFF0095F6).withOpacity(0.12))
+                                            ? Colors.white.withValues(alpha: 0.18)
+                                            : const Color(0xFF0095F6).withValues(alpha: 0.12))
                                         : Colors.transparent,
                                     border: alreadyReacted
                                         ? Border.all(
                                             color: widget.dark
-                                                ? Colors.white.withOpacity(0.35)
-                                                : const Color(0xFF0095F6).withOpacity(0.5),
+                                                ? Colors.white.withValues(alpha: 0.35)
+                                                : const Color(0xFF0095F6).withValues(alpha: 0.5),
                                             width: 1.5,
                                           )
                                         : null,
@@ -598,18 +599,18 @@ class _ChatScreenState extends State<ChatScreen>
                     child: Container(
                       decoration: BoxDecoration(
                         color: widget.dark
-                            ? const Color(0xFF1C1C1E).withOpacity(0.92)
-                            : Colors.white.withOpacity(0.96),
+                            ? const Color(0xFF1C1C1E).withValues(alpha: 0.92)
+                            : Colors.white.withValues(alpha: 0.96),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
                           color: widget.dark
-                              ? Colors.white.withOpacity(0.10)
-                              : Colors.black.withOpacity(0.06),
+                              ? Colors.white.withValues(alpha: 0.10)
+                              : Colors.black.withValues(alpha: 0.06),
                           width: 0.8,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(widget.dark ? 0.5 : 0.10),
+                            color: Colors.black.withValues(alpha: widget.dark ? 0.5 : 0.10),
                             blurRadius: 20, offset: const Offset(0, 6),
                           ),
                         ],
@@ -631,8 +632,8 @@ class _ChatScreenState extends State<ChatScreen>
                             Divider(
                               height: 1, indent: 56,
                               color: widget.dark
-                                  ? Colors.white.withOpacity(0.08)
-                                  : Colors.black.withOpacity(0.06),
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.06),
                             ),
                             _SheetTile(
                               dark: widget.dark,
@@ -700,7 +701,7 @@ class _ChatScreenState extends State<ChatScreen>
     setState(() => _isStartingCall = false);
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, anim, __) => FadeTransition(
+        pageBuilder: (_, anim, _) => FadeTransition(
           opacity: anim,
           child: VoiceCallScreen(
             dark:           widget.dark,
@@ -743,7 +744,7 @@ class _ChatScreenState extends State<ChatScreen>
     setState(() => _isStartingCall = false);
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, anim, __) => FadeTransition(
+        pageBuilder: (_, anim, _) => FadeTransition(
           opacity: anim,
           child: VideoCallScreen(
             dark:           widget.dark,
@@ -861,8 +862,8 @@ class _ChatScreenState extends State<ChatScreen>
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: widget.dark
-                                ? Colors.white.withOpacity(0.5)
-                                : Colors.black.withOpacity(0.5),
+                                ? Colors.white.withValues(alpha: 0.5)
+                                : Colors.black.withValues(alpha: 0.5),
                           ),
                         ),
                       ),
@@ -1059,8 +1060,8 @@ class _ChatScreenState extends State<ChatScreen>
                   blurSigma: 28,
                   shadow: BoxShadow(
                     color: widget.dark
-                        ? Colors.black.withOpacity(0.6)
-                        : const Color(0xFF14161E).withOpacity(0.20),
+                        ? Colors.black.withValues(alpha: 0.6)
+                        : const Color(0xFF14161E).withValues(alpha: 0.20),
                     blurRadius: 30, offset: const Offset(0, -10), spreadRadius: -16,
                   ),
                   child: Row(children: [
@@ -1068,7 +1069,7 @@ class _ChatScreenState extends State<ChatScreen>
                     GlassCircleButton(
                       dark: widget.dark, icon: Icons.add_rounded,
                       size: 38, iconSize: 22,
-                      bg: widget.dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
+                      bg: widget.dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1132,12 +1133,12 @@ class _ReplyPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final accentBar  = dark ? Colors.white        : const Color(0xFF0A0A0A);
     final labelColor = dark
-        ? Colors.white.withOpacity(0.55)
-        : Colors.black.withOpacity(0.45);
+        ? Colors.white.withValues(alpha: 0.55)
+        : Colors.black.withValues(alpha: 0.45);
     final textColor  = dark ? Colors.white        : Colors.black87;
     final closeColor = dark
-        ? Colors.white.withOpacity(0.45)
-        : Colors.black.withOpacity(0.35);
+        ? Colors.white.withValues(alpha: 0.45)
+        : Colors.black.withValues(alpha: 0.35);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
@@ -1149,18 +1150,18 @@ class _ReplyPreview extends StatelessWidget {
           decoration: BoxDecoration(
             // 0.95 opacity → fully readable on glass backdrop
             color: dark
-                ? const Color(0xFF2A2A2E).withOpacity(0.95)
-                : Colors.white.withOpacity(0.96),
+                ? const Color(0xFF2A2A2E).withValues(alpha: 0.95)
+                : Colors.white.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: dark
-                  ? Colors.white.withOpacity(0.14)
-                  : Colors.black.withOpacity(0.08),
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : Colors.black.withValues(alpha: 0.08),
               width: 0.8,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(dark ? 0.40 : 0.10),
+                color: Colors.black.withValues(alpha: dark ? 0.40 : 0.10),
                 blurRadius: 16, offset: const Offset(0, 4),
               ),
             ],
@@ -1172,7 +1173,7 @@ class _ReplyPreview extends StatelessWidget {
               decoration: BoxDecoration(color: accentBar, borderRadius: BorderRadius.circular(4)),
             ),
             const SizedBox(width: 12),
-            Icon(Icons.reply_rounded, size: 15, color: accentBar.withOpacity(0.7)),
+            Icon(Icons.reply_rounded, size: 15, color: accentBar.withValues(alpha: 0.7)),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -1195,7 +1196,7 @@ class _ReplyPreview extends StatelessWidget {
                 width: 26, height: 26,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: dark ? Colors.white.withOpacity(0.14) : Colors.black.withOpacity(0.07),
+                  color: dark ? Colors.white.withValues(alpha: 0.14) : Colors.black.withValues(alpha: 0.07),
                 ),
                 alignment: Alignment.center,
                 child: Icon(Icons.close_rounded, size: 14, color: closeColor),
@@ -1294,7 +1295,7 @@ class _Bubble extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: dark
                                     ? (hasMyReaction
-                                        ? Colors.white.withOpacity(0.22)
+                                        ? Colors.white.withValues(alpha: 0.22)
                                         : const Color(0xFF2C2C2E))
                                     : (hasMyReaction
                                         ? const Color(0xFFE8F4FD)
@@ -1303,16 +1304,16 @@ class _Bubble extends StatelessWidget {
                                 border: Border.all(
                                   color: dark
                                       ? (hasMyReaction
-                                          ? Colors.white.withOpacity(0.40)
-                                          : Colors.white.withOpacity(0.12))
+                                          ? Colors.white.withValues(alpha: 0.40)
+                                          : Colors.white.withValues(alpha: 0.12))
                                       : (hasMyReaction
-                                          ? const Color(0xFF0095F6).withOpacity(0.40)
-                                          : Colors.black.withOpacity(0.08)),
+                                          ? const Color(0xFF0095F6).withValues(alpha: 0.40)
+                                          : Colors.black.withValues(alpha: 0.08)),
                                   width: 1,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(dark ? 0.35 : 0.08),
+                                    color: Colors.black.withValues(alpha: dark ? 0.35 : 0.08),
                                     blurRadius: 8, offset: const Offset(0, 2),
                                   ),
                                 ],
@@ -1330,7 +1331,7 @@ class _Bubble extends StatelessWidget {
                                     Text('$count',
                                         style: manrope(
                                           size: 11.5, weight: FontWeight.w700,
-                                          color: dark ? Colors.white.withOpacity(0.9) : Colors.black87,
+                                          color: dark ? Colors.white.withValues(alpha: 0.9) : Colors.black87,
                                         )),
                                   ],
                                 ],
@@ -1355,7 +1356,7 @@ class _Bubble extends StatelessWidget {
                             color: sub, letterSpacing: -0.05)),
                     if (m.encryptedAesKeys.isNotEmpty) ...[
                       const SizedBox(width: 4),
-                      Icon(Icons.lock_rounded, size: 9, color: sub.withOpacity(0.6)),
+                      Icon(Icons.lock_rounded, size: 9, color: sub.withValues(alpha: 0.6)),
                     ],
                     if (isMe) ...[
                       const SizedBox(width: 5),
@@ -1384,8 +1385,8 @@ class _Bubble extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: dark
-                  ? Colors.white.withOpacity(0.15)
-                  : const Color(0xFF14161E).withOpacity(0.25),
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : const Color(0xFF14161E).withValues(alpha: 0.25),
               blurRadius: 16, offset: const Offset(0, 6), spreadRadius: -8,
             ),
           ],
@@ -1399,13 +1400,13 @@ class _Bubble extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF242424).withOpacity(0.85) : Colors.white.withOpacity(0.95),
+        color: dark ? const Color(0xFF242424).withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.95),
         border: Border.all(
-            color: dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04)),
+            color: dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04)),
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: dark ? Colors.black.withOpacity(0.4) : const Color(0xFF14161E).withOpacity(0.08),
+            color: dark ? Colors.black.withValues(alpha: 0.4) : const Color(0xFF14161E).withValues(alpha: 0.08),
             blurRadius: 12, offset: const Offset(0, 4), spreadRadius: -4,
           ),
         ],
@@ -1444,20 +1445,20 @@ class _ReplyQuote extends StatelessWidget {
         : const Color(0xFFE8E8EC); // light: clearly visible on near-white bg
 
     final borderColor = dark
-        ? Colors.white.withOpacity(0.14)
-        : Colors.black.withOpacity(0.09);
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.09);
 
     final accentBar = dark
-        ? Colors.white.withOpacity(0.60)
-        : Colors.black.withOpacity(0.40);
+        ? Colors.white.withValues(alpha: 0.60)
+        : Colors.black.withValues(alpha: 0.40);
 
     final labelColor = dark
-        ? Colors.white.withOpacity(0.45)
-        : Colors.black.withOpacity(0.42);
+        ? Colors.white.withValues(alpha: 0.45)
+        : Colors.black.withValues(alpha: 0.42);
 
     final textColor = dark
-        ? Colors.white.withOpacity(0.92)   // bright white on dark card
-        : Colors.black.withOpacity(0.82);  // near-black on light card
+        ? Colors.white.withValues(alpha: 0.92)   // bright white on dark card
+        : Colors.black.withValues(alpha: 0.82);  // near-black on light card
 
     return Container(
       margin: const EdgeInsets.only(bottom: 5),
@@ -1468,7 +1469,7 @@ class _ReplyQuote extends StatelessWidget {
         border: Border.all(color: borderColor, width: 0.7),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(dark ? 0.28 : 0.07),
+            color: Colors.black.withValues(alpha: dark ? 0.28 : 0.07),
             blurRadius: 8, offset: const Offset(0, 2),
           ),
         ],
@@ -1559,13 +1560,13 @@ class _BubbleTyping extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: dark ? const Color(0xFF242424).withOpacity(0.85) : Colors.white.withOpacity(0.95),
+          color: dark ? const Color(0xFF242424).withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.95),
           border: Border.all(
-              color: dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04)),
+              color: dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04)),
           borderRadius: br,
           boxShadow: [
             BoxShadow(
-              color: dark ? Colors.black.withOpacity(0.4) : const Color(0xFF14161E).withOpacity(0.08),
+              color: dark ? Colors.black.withValues(alpha: 0.4) : const Color(0xFF14161E).withValues(alpha: 0.08),
               blurRadius: 12, offset: const Offset(0, 4), spreadRadius: -4,
             ),
           ],
@@ -1606,7 +1607,7 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
     final dark = Theme.of(context).brightness == Brightness.dark;
     return AnimatedBuilder(
       animation: _c,
-      builder: (_, __) {
+      builder: (_, _) {
         final t = ((_c.value * 1200) - widget.delay) % 1200 / 1200;
         final v = (t >= 0 && t <= 0.8) ? (t < 0.4 ? t / 0.4 : (0.8 - t) / 0.4) : 0.0;
         final scale   = 0.7 + 0.3 * v.clamp(0.0, 1.0);
@@ -1617,7 +1618,7 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
             width: 6, height: 6,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: (dark ? Colors.white : Colors.black).withOpacity(opacity),
+              color: (dark ? Colors.white : Colors.black).withValues(alpha: opacity),
             ),
           ),
         );
@@ -1632,7 +1633,7 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
 
 class _E2EBanner extends StatelessWidget {
   final bool dark;
-  const _E2EBanner({super.key, required this.dark});
+  const _E2EBanner({required this.dark});
 
   @override
   Widget build(BuildContext context) {
@@ -1646,8 +1647,8 @@ class _E2EBanner extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: dark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.black.withOpacity(0.05),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
             ),
             child: Icon(Icons.lock_rounded, size: 18, color: sub),
           ),
@@ -1667,15 +1668,15 @@ class _E2EBanner extends StatelessWidget {
             style: manrope(
                 size: 11,
                 weight: FontWeight.w500,
-                color: sub.withOpacity(0.7),
+                color: sub.withValues(alpha: 0.7),
                 height: 1.45),
           ),
           const SizedBox(height: 16),
           Divider(
               height: 1,
               color: dark
-                  ? Colors.white.withOpacity(0.07)
-                  : Colors.black.withOpacity(0.07)),
+                  ? Colors.white.withValues(alpha: 0.07)
+                  : Colors.black.withValues(alpha: 0.07)),
         ],
       ),
     );
@@ -1766,8 +1767,8 @@ class _SwipeToReplyState extends State<SwipeToReply> with SingleTickerProviderSt
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: widget.dark
-                            ? Colors.white.withOpacity(0.12)
-                            : Colors.black.withOpacity(0.08),
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : Colors.black.withValues(alpha: 0.08),
                       ),
                       child: Icon(Icons.reply_rounded,
                           color: widget.dark ? Colors.white : Colors.black87, size: 16),

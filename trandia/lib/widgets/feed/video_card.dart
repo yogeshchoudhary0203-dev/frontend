@@ -262,7 +262,7 @@ class _VideoCardState extends State<VideoCard> {
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.black.withOpacity(0.22)],
+                      colors: [Colors.transparent, Colors.black.withValues(alpha: 0.22)],
                     ),
                   ),
                 ),
@@ -289,7 +289,7 @@ class _VideoCardState extends State<VideoCard> {
                     width: 64, height: 64,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.black.withOpacity(0.55),
+                      color: Colors.black.withValues(alpha: 0.55),
                     ),
                     child: Icon(_overlayIcon, color: Colors.white, size: 34),
                   ),
@@ -306,7 +306,7 @@ class _VideoCardState extends State<VideoCard> {
                     width: 30, height: 30,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.black.withOpacity(0.50),
+                      color: Colors.black.withValues(alpha: 0.50),
                     ),
                     child: Icon(
                       _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
@@ -326,7 +326,7 @@ class _VideoCardState extends State<VideoCard> {
                   padding: EdgeInsets.zero,
                   colors: VideoProgressColors(
                     playedColor: Colors.white,
-                    bufferedColor: Colors.white.withOpacity(0.30),
+                    bufferedColor: Colors.white.withValues(alpha: 0.30),
                     backgroundColor: Colors.transparent,
                   ),
                 ),

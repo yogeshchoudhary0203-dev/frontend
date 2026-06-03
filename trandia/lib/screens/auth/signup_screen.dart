@@ -587,7 +587,7 @@ class _UsernameField extends StatelessWidget {
                   child: Text('@',
                     style: TextStyle(
                       fontSize: 18, fontWeight: FontWeight.w700,
-                      color: t.fg.withOpacity(0.7),
+                      color: t.fg.withValues(alpha: 0.7),
                     ),
                   ),
                 ),
@@ -693,11 +693,11 @@ class _USuggestions extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: t.fieldBorder.withOpacity(0.6)),
-                color: t.fieldFill.first.withOpacity(0.3),
+                border: Border.all(color: t.fieldBorder.withValues(alpha: 0.6)),
+                color: t.fieldFill.first.withValues(alpha: 0.3),
               ),
               child: Text('@$s',
-                style: TextStyle(fontSize: 12, color: t.fg.withOpacity(0.8), fontWeight: FontWeight.w500)),
+                style: TextStyle(fontSize: 12, color: t.fg.withValues(alpha: 0.8), fontWeight: FontWeight.w500)),
             ),
           )).toList(),
         ),

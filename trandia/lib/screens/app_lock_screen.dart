@@ -287,7 +287,7 @@ class _AppLockSetupScreenState extends State<AppLockSetupScreen>
                 end: Alignment.bottomRight,
               ),
               boxShadow: [
-                BoxShadow(color: Colors.green.withOpacity(0.45), blurRadius: 36, spreadRadius: 6),
+                BoxShadow(color: Colors.green.withValues(alpha: 0.45), blurRadius: 36, spreadRadius: 6),
               ],
             ),
             child: const Icon(Icons.check_rounded, color: Colors.white, size: 56),
@@ -342,7 +342,7 @@ class _AppLockSetupScreenState extends State<AppLockSetupScreen>
                       width: 48, height: 48,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.green.withOpacity(0.18),
+                        color: Colors.green.withValues(alpha: 0.18),
                       ),
                       child: const Icon(Icons.lock_rounded, color: Colors.green, size: 24),
                     ),
@@ -394,7 +394,7 @@ class _AppLockSetupScreenState extends State<AppLockSetupScreen>
                   child: Row(children: [
                     Container(
                       width: 38, height: 38,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.red.withOpacity(0.12)),
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.red.withValues(alpha: 0.12)),
                       child: const Icon(Icons.lock_open_rounded, size: 20, color: Colors.redAccent),
                     ),
                     const SizedBox(width: 12),
@@ -599,18 +599,18 @@ class _GlowIcon extends StatelessWidget {
         shape: BoxShape.circle,
         gradient: LinearGradient(
           colors: dark
-              ? [Colors.white.withOpacity(0.18), Colors.white.withOpacity(0.06)]
-              : [Colors.black.withOpacity(0.12), Colors.black.withOpacity(0.04)],
+              ? [Colors.white.withValues(alpha: 0.18), Colors.white.withValues(alpha: 0.06)]
+              : [Colors.black.withValues(alpha: 0.12), Colors.black.withValues(alpha: 0.04)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         border: Border.all(
-          color: dark ? Colors.white.withOpacity(0.20) : Colors.black.withOpacity(0.12),
+          color: dark ? Colors.white.withValues(alpha: 0.20) : Colors.black.withValues(alpha: 0.12),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+            color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
             blurRadius: 32, spreadRadius: 8,
           ),
         ],
@@ -649,11 +649,11 @@ class _PinDots extends StatelessWidget {
             shape: BoxShape.circle,
             color: isFilled ? dotColor : Colors.transparent,
             border: Border.all(
-              color: isFilled ? dotColor : dotColor.withOpacity(0.4),
+              color: isFilled ? dotColor : dotColor.withValues(alpha: 0.4),
               width: 2,
             ),
             boxShadow: isFilled
-                ? [BoxShadow(color: dotColor.withOpacity(0.5), blurRadius: 10, spreadRadius: 1)]
+                ? [BoxShadow(color: dotColor.withValues(alpha: 0.5), blurRadius: 10, spreadRadius: 1)]
                 : null,
           ),
         );
@@ -745,8 +745,8 @@ class _NumButtonState extends State<_NumButton> {
                     end: Alignment.bottomCenter,
                     colors: _pressed
                         ? (dark
-                            ? [Colors.white.withOpacity(0.22), Colors.white.withOpacity(0.10)]
-                            : [Colors.black.withOpacity(0.14), Colors.black.withOpacity(0.07)])
+                            ? [Colors.white.withValues(alpha: 0.22), Colors.white.withValues(alpha: 0.10)]
+                            : [Colors.black.withValues(alpha: 0.14), Colors.black.withValues(alpha: 0.07)])
                         : GlassTokens.glassBg(dark),
                   ),
                   border: Border.all(color: GlassTokens.glassBorder(dark), width: 1),
@@ -789,13 +789,13 @@ class _PinLengthCard extends StatelessWidget {
                 end: Alignment.bottomCenter,
                 colors: selected
                     ? (dark
-                        ? [Colors.white.withOpacity(0.16), Colors.white.withOpacity(0.08)]
-                        : [Colors.black.withOpacity(0.10), Colors.black.withOpacity(0.04)])
+                        ? [Colors.white.withValues(alpha: 0.16), Colors.white.withValues(alpha: 0.08)]
+                        : [Colors.black.withValues(alpha: 0.10), Colors.black.withValues(alpha: 0.04)])
                     : GlassTokens.glassBg(dark),
               ),
               border: Border.all(
                 color: selected
-                    ? (dark ? Colors.white.withOpacity(0.38) : Colors.black.withOpacity(0.28))
+                    ? (dark ? Colors.white.withValues(alpha: 0.38) : Colors.black.withValues(alpha: 0.28))
                     : GlassTokens.glassBorder(dark),
                 width: selected ? 1.5 : 1,
               ),
@@ -821,7 +821,7 @@ class _PinLengthCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.07),
+                      color: dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(99),
                     ),
                     child: Text('Selected', style: manrope(size: 10, weight: FontWeight.w800, color: fg)),
@@ -872,7 +872,7 @@ class _IconCircle extends StatelessWidget {
       width: 38, height: 38,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: dark ? Colors.white.withOpacity(0.09) : Colors.black.withOpacity(0.06),
+        color: dark ? Colors.white.withValues(alpha: 0.09) : Colors.black.withValues(alpha: 0.06),
       ),
       child: Icon(icon, size: 20, color: GlassTokens.fg(dark)),
     );

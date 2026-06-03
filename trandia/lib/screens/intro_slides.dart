@@ -93,7 +93,7 @@ class _IntroSlidesScreenState extends State<IntroSlidesScreen> {
                   decoration: BoxDecoration(
                     color: i == _page
                         ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface.withOpacity(0.3),
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.3),
                     shape: BoxShape.circle,
                   ),
                 ),

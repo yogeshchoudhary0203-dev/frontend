@@ -535,7 +535,7 @@ class _ShotsScreenState extends State<ShotsScreen>
   void _setFeed(ShotsFeed f) {
     if (f == _feed) return;
     HapticFeedback.selectionClick();
-    _ctrls[_curIdx]?.pause();
+    _pool.controllerAt(_curIdx)?.pause();
     _quizFallbackTimer?.cancel();
     _quizTimeoutTimer?.cancel();
     FcmService.setQuizReadyHandler(null);
@@ -618,7 +618,7 @@ class _ShotsScreenState extends State<ShotsScreen>
                   ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    color: Colors.white.withOpacity(0.07),
+                    color: Colors.white.withValues(alpha: 0.07),
                   ),
                   child: const Row(
                     children: [
@@ -671,7 +671,7 @@ class _ShotsScreenState extends State<ShotsScreen>
                   ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    color: Colors.white.withOpacity(0.07),
+                    color: Colors.white.withValues(alpha: 0.07),
                   ),
                   child: const Row(
                     children: [
@@ -709,7 +709,7 @@ class _ShotsScreenState extends State<ShotsScreen>
     await showGeneralDialog<bool>(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.55),
+      barrierColor: Colors.black.withValues(alpha: 0.55),
       transitionDuration: const Duration(milliseconds: 340),
       transitionBuilder: (_, anim, __, child) {
         final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
@@ -795,7 +795,7 @@ class _ShotsScreenState extends State<ShotsScreen>
                   height: 34,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.black.withOpacity(0.45),
+                    color: Colors.black.withValues(alpha: 0.45),
                   ),
                   child: Icon(
                     _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
@@ -877,7 +877,7 @@ class _ShotsScreenState extends State<ShotsScreen>
             Text(
               'Could not load shots',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.45),
+                color: Colors.white.withValues(alpha: 0.45),
                 fontSize: 14,
               ),
             ),
@@ -890,7 +890,7 @@ class _ShotsScreenState extends State<ShotsScreen>
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
+                  color: Colors.white.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: const Text(
@@ -926,7 +926,7 @@ class _ShotsScreenState extends State<ShotsScreen>
                   : 'No learn videos yet.\nBe the first to post!',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.38),
+                color: Colors.white.withValues(alpha: 0.38),
                 fontSize: 14,
                 height: 1.5,
               ),
@@ -1015,15 +1015,15 @@ class _LearnFeedNudge extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.fromLTRB(24, 32, 24, 28),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.13),
+                color: Colors.white.withValues(alpha: 0.13),
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.22),
+                  color: Colors.white.withValues(alpha: 0.22),
                   width: 1.2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                     blurRadius: 40,
                     spreadRadius: -4,
                     offset: const Offset(0, 12),
@@ -1046,7 +1046,7 @@ class _LearnFeedNudge extends StatelessWidget {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF6C63FF).withOpacity(0.45),
+                          color: const Color(0xFF6C63FF).withValues(alpha: 0.45),
                           blurRadius: 22,
                           offset: const Offset(0, 8),
                         ),
@@ -1078,7 +1078,7 @@ class _LearnFeedNudge extends StatelessWidget {
                     style: manrope(
                       size: 14,
                       weight: FontWeight.w500,
-                      color: Colors.white.withOpacity(0.72),
+                      color: Colors.white.withValues(alpha: 0.72),
                       letterSpacing: -0.1,
                       height: 1.5,
                     ),
@@ -1100,7 +1100,7 @@ class _LearnFeedNudge extends StatelessWidget {
                         borderRadius: BorderRadius.circular(999),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6C63FF).withOpacity(0.4),
+                            color: const Color(0xFF6C63FF).withValues(alpha: 0.4),
                             blurRadius: 16,
                             offset: const Offset(0, 6),
                           ),
@@ -1127,10 +1127,10 @@ class _LearnFeedNudge extends StatelessWidget {
                       width: double.infinity,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.10),
+                        color: Colors.white.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.20),
+                          color: Colors.white.withValues(alpha: 0.20),
                           width: 1,
                         ),
                       ),
@@ -1140,7 +1140,7 @@ class _LearnFeedNudge extends StatelessWidget {
                         style: manrope(
                           size: 14,
                           weight: FontWeight.w600,
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withValues(alpha: 0.85),
                           letterSpacing: -0.1,
                         ),
                       ),
@@ -1221,7 +1221,7 @@ class _ShotVideoPage extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.4),
+                        color: Colors.black.withValues(alpha: 0.4),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -1241,7 +1241,7 @@ class _ShotVideoPage extends StatelessWidget {
                   width: 30,
                   height: 30,
                   child: CircularProgressIndicator(
-                    color: Colors.white.withOpacity(0.35),
+                    color: Colors.white.withValues(alpha: 0.35),
                     strokeWidth: 2,
                   ),
                 ),
@@ -1259,7 +1259,7 @@ class _ShotVideoPage extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   colors: VideoProgressColors(
                     playedColor: Colors.white,
-                    bufferedColor: Colors.white.withOpacity(0.30),
+                    bufferedColor: Colors.white.withValues(alpha: 0.30),
                     backgroundColor: Colors.transparent,
                   ),
                 ),
@@ -1319,8 +1319,8 @@ class _FeedPill extends StatelessWidget {
           height: pillHeight,
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.32),
-            border: Border.all(color: Colors.white.withOpacity(0.16)),
+            color: Colors.black.withValues(alpha: 0.32),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
             borderRadius: BorderRadius.circular(999),
           ),
           child: Stack(
@@ -1389,7 +1389,7 @@ class _PillTab extends StatelessWidget {
             weight: active ? FontWeight.w800 : FontWeight.w600,
             color: active
                 ? const Color(0xFF0A0A0A)
-                : Colors.white.withOpacity(0.85),
+                : Colors.white.withValues(alpha: 0.85),
             letterSpacing: -0.13,
           ),
         ),
@@ -1594,7 +1594,7 @@ class _CaptionBlock extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Material(
-              color: followed ? Colors.white.withOpacity(0.2) : Colors.white,
+              color: followed ? Colors.white.withValues(alpha: 0.2) : Colors.white,
               shape: const StadiumBorder(),
               elevation: 2,
               shadowColor: const Color(0x40000000),

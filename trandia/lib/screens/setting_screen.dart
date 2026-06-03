@@ -304,7 +304,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       if (!isSent) ...[
                         Container(
                           decoration: BoxDecoration(
-                            color: dark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.02),
+                            color: dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.02),
                             border: Border.all(color: dark ? Colors.white12 : Colors.black12),
                             borderRadius: BorderRadius.circular(16),
                           ),
@@ -378,7 +378,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             decoration: BoxDecoration(
-                              color: dark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                              color: dark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             alignment: Alignment.center,
@@ -489,8 +489,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         decoration: BoxDecoration(
                           color: isSelected
                               ? (dark
-                                  ? Colors.white.withOpacity(0.08)
-                                  : Colors.black.withOpacity(0.04))
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.04))
                               : Colors.transparent,
                           border: Border.all(
                             color: isSelected
@@ -507,9 +507,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: dark
-                                    ? Colors.white.withOpacity(
+                                    ? Colors.white.withValues(alpha: 
                                         isSelected ? 0.12 : 0.08)
-                                    : Colors.black.withOpacity(
+                                    : Colors.black.withValues(alpha: 
                                         isSelected ? 0.08 : 0.04),
                               ),
                               child: Icon(icon, size: 20, color: fg),
@@ -773,7 +773,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         margin: const EdgeInsets.only(right: 6),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.15),
+                          color: Colors.green.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(99),
                         ),
                         child: Text('ON',
@@ -996,12 +996,12 @@ class _SearchPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             color: dark
-                ? Colors.white.withOpacity(0.06)
-                : Colors.white.withOpacity(0.6),
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.6),
             border: Border.all(
               color: dark
-                  ? Colors.white.withOpacity(0.10)
-                  : Colors.white.withOpacity(0.95),
+                  ? Colors.white.withValues(alpha: 0.10)
+                  : Colors.white.withValues(alpha: 0.95),
             ),
             borderRadius: BorderRadius.circular(999),
           ),
@@ -1075,7 +1075,7 @@ class _AccountCard extends StatelessWidget {
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.white.withOpacity(0.6)),
+                          Colors.white.withValues(alpha: 0.6)),
                     ),
                   ),
                 )
@@ -1242,8 +1242,8 @@ class _BaseRow extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: dark
-                  ? Colors.white.withOpacity(0.09)
-                  : Colors.black.withOpacity(0.06),
+                  ? Colors.white.withValues(alpha: 0.09)
+                  : Colors.black.withValues(alpha: 0.06),
             ),
             child: Icon(icon, size: 20, color: fg),
           ),

@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
-import 'package:encrypt/encrypt.dart';
+import 'package:encrypt/encrypt.dart' as enc;
+import 'package:flutter/foundation.dart';
 import 'package:pointycastle/api.dart' as pc;
 import 'package:pointycastle/asymmetric/api.dart';
 import 'package:pointycastle/key_generators/api.dart';
@@ -9,6 +10,53 @@ import 'package:pointycastle/key_generators/rsa_key_generator.dart';
 import 'dart:developer' as developer;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_service.dart';
+
+/// Top-level function required by Flutter's [compute] for isolate execution.
+/// Generates a 2048-bit RSA key pair off the main thread and returns
+/// a map of {"public": base64Json, "private": base64Json}.
+Map<String, String> generateRSAKeyPairIsolate(void _) {
+  final secureRandom = pc.SecureRandom('Fortuna')
+    ..seed(pc.KeyParameter(Uint8List.fromList(
+        List.generate(32, (_) => Random.secure().nextInt(255)))));
+
+  final keyGen = RSAKeyGenerator()
+    ..init(pc.ParametersWithRandom(
+        RSAKeyGeneratorParameters(BigInt.parse('65537'), 2048, 64),
+        secureRandom));
+
+  final pair = keyGen.generateKeyPair();
+  final myPublic = pair.publicKey as RSAPublicKey;
+  final myPrivate = pair.privateKey as RSAPrivateKey;
+
+  String encodeBigInt(BigInt? number) {
+    if (number == null) return '';
+    var hex = number.toRadixString(16);
+    if (hex.length % 2 != 0) hex = '0$hex';
+    final l = hex.length ~/ 2;
+    final bytes = Uint8List(l);
+    for (var i = 0; i < l; i++) {
+      bytes[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return base64Encode(bytes);
+  }
+
+  final pubJson = jsonEncode({
+    'modulus': encodeBigInt(myPublic.modulus),
+    'exponent': encodeBigInt(myPublic.publicExponent),
+  });
+
+  final privJson = jsonEncode({
+    'modulus': encodeBigInt(myPrivate.modulus),
+    'privateExponent': encodeBigInt(myPrivate.privateExponent),
+    'p': encodeBigInt(myPrivate.p),
+    'q': encodeBigInt(myPrivate.q),
+  });
+
+  return {
+    'public': base64Encode(utf8.encode(pubJson)),
+    'private': base64Encode(utf8.encode(privJson)),
+  };
+}
 
 class CryptographyService {
   static final CryptographyService _instance = CryptographyService._internal();
@@ -26,37 +74,10 @@ class CryptographyService {
   // ── Key Generation & Serialization ───────────────────────────
 
   /// Generate a brand new RSA 2048-bit keypair on the device.
+  /// Runs in a separate isolate via [compute] to avoid blocking the UI thread.
   /// Returns a map of {"public": base64Json, "private": base64Json}.
   Future<Map<String, String>> generateRSAKeyPair() async {
-    final secureRandom = pc.SecureRandom('Fortuna')
-      ..seed(pc.KeyParameter(Uint8List.fromList(
-          List.generate(32, (_) => Random.secure().nextInt(255)))));
-
-    final keyGen = RSAKeyGenerator()
-      ..init(pc.ParametersWithRandom(
-          RSAKeyGeneratorParameters(BigInt.parse('65537'), 2048, 64),
-          secureRandom));
-
-    final pair = keyGen.generateKeyPair();
-    final myPublic = pair.publicKey as RSAPublicKey;
-    final myPrivate = pair.privateKey as RSAPrivateKey;
-
-    final pubJson = jsonEncode({
-      'modulus': _encodeBigInt(myPublic.modulus),
-      'exponent': _encodeBigInt(myPublic.publicExponent),
-    });
-
-    final privJson = jsonEncode({
-      'modulus': _encodeBigInt(myPrivate.modulus),
-      'privateExponent': _encodeBigInt(myPrivate.privateExponent),
-      'p': _encodeBigInt(myPrivate.p),
-      'q': _encodeBigInt(myPrivate.q),
-    });
-
-    final pubB64 = base64Encode(utf8.encode(pubJson));
-    final privB64 = base64Encode(utf8.encode(privJson));
-
-    return {'public': pubB64, 'private': privB64};
+    return compute(generateRSAKeyPairIsolate, null);
   }
 
   /// Initialize E2EE keys locally. Generates if not present, then returns public key.
@@ -145,9 +166,9 @@ class CryptographyService {
   /// Encrypts text using AES-256-CBC with a random IV.
   /// Returns a JSON string containing the ciphertext and IV: {"ct": "...", "iv": "..."}.
   String encryptAES(String plainText, String aesKeyBase64) {
-    final key = Key(base64Decode(aesKeyBase64));
-    final iv = IV.fromSecureRandom(16);
-    final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
+    final key = enc.Key(base64Decode(aesKeyBase64));
+    final iv = enc.IV.fromSecureRandom(16);
+    final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
 
     final encrypted = encrypter.encrypt(plainText, iv: iv);
     return jsonEncode({
@@ -158,13 +179,13 @@ class CryptographyService {
 
   /// Decrypts text using AES-256-CBC.
   String decryptAES(String encryptedJson, String aesKeyBase64) {
-    final key = Key(base64Decode(aesKeyBase64));
+    final key = enc.Key(base64Decode(aesKeyBase64));
     final data = jsonDecode(encryptedJson) as Map<String, dynamic>;
     final ct = data['ct'] as String;
-    final iv = IV.fromBase64(data['iv'] as String);
+    final iv = enc.IV.fromBase64(data['iv'] as String);
 
-    final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
-    return encrypter.decrypt(Encrypted.fromBase64(ct), iv: iv);
+    final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
+    return encrypter.decrypt(enc.Encrypted.fromBase64(ct), iv: iv);
   }
 
   // ── Asymmetric Cryptography (RSA-2048) ───────────────────────
@@ -172,7 +193,7 @@ class CryptographyService {
   /// Encrypts a symmetric AES key using a recipient's RSA Public Key.
   String encryptAESKeyWithRSA(String aesKeyBase64, String rsaPublicKeyBase64) {
     final pubKey = _parseRSAPublicKey(rsaPublicKeyBase64);
-    final encrypter = Encrypter(RSA(publicKey: pubKey));
+    final encrypter = enc.Encrypter(enc.RSA(publicKey: pubKey));
     final encrypted = encrypter.encrypt(aesKeyBase64);
     return encrypted.base64;
   }
@@ -180,8 +201,8 @@ class CryptographyService {
   /// Decrypts a symmetric AES key using the local RSA Private Key.
   String decryptAESKeyWithRSA(String encryptedAESKeyBase64, String rsaPrivateKeyBase64) {
     final privKey = _parseRSAPrivateKey(rsaPrivateKeyBase64);
-    final encrypter = Encrypter(RSA(privateKey: privKey));
-    final decryptedBytes = encrypter.decryptBytes(Encrypted.fromBase64(encryptedAESKeyBase64));
+    final encrypter = enc.Encrypter(enc.RSA(privateKey: privKey));
+    final decryptedBytes = encrypter.decryptBytes(enc.Encrypted.fromBase64(encryptedAESKeyBase64));
     return utf8.decode(decryptedBytes);
   }
 

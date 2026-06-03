@@ -26,6 +26,7 @@ import '../../widgets/feed/video_card.dart' show FeedVideoPool;
 import '../../widgets/stories/story_bar.dart';
 import '../../widgets/home/home_nav_bar.dart';
 import '../../widgets/home/suggested_users.dart';
+import '../../l10n/app_localizations.dart';
 import 'skill_score.dart';
 import 'infinity_btn.dart';
 import 'trandia_island.dart';
@@ -258,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (isFirstPage) {
       final cached = await LocalDb.instance.loadFeedPosts();
       if (cached.isNotEmpty && mounted) {
-        // Render cached posts instantly — no spinner shown to user
+        // Render cached posts instantly ï¿½ no spinner shown to user
         setState(() {
           _posts.addAll(cached);
           _feedError = false;
@@ -314,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen>
         unawaited(LocalDb.instance.saveFeedPosts(result.posts));
       }
     } catch (_) {
-      // Silently ignore — user is already seeing stale data, which is fine
+      // Silently ignore ï¿½ user is already seeing stale data, which is fine
     }
   }
 
@@ -679,7 +680,7 @@ class _HomeScreenState extends State<HomeScreen>
                       height: 200,
                       child: Center(child: GestureDetector(
                         onTap: () => _loadFeed(refresh: true),
-                        child: Text('Tap to retry',
+                        child: Text('Tap to retry'.tr(ctx),
                           style: TextStyle(
                             color: (isDark ? Colors.white : Colors.black)
                                 .withValues(alpha: 0.45),
@@ -690,7 +691,7 @@ class _HomeScreenState extends State<HomeScreen>
                   }
                   return SizedBox(
                     height: 200,
-                    child: Center(child: Text('No posts yet',
+                    child: Center(child: Text('No posts yet'.tr(ctx),
                       style: TextStyle(
                         color: (isDark ? Colors.white : Colors.black)
                             .withValues(alpha: 0.38),

@@ -34,6 +34,90 @@ class GlassTokens {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// iOS 26 motion system — spring curves + reusable press-scale + page route.
+// These are GPU-cheap (AnimatedScale / opacity-slide) so they stay smooth in lists.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// iOS spring-like easing (overshoots subtly, like Apple's interactive springs).
+const Curve kIOSSpring = Cubic(0.34, 1.56, 0.64, 1.0);
+
+/// Standard iOS ease for entrances / fades.
+const Curve kIOSEase = Cubic(0.4, 0.0, 0.2, 1.0);
+
+/// Wrap any tappable widget to add the iOS-style scale-down-on-press feedback.
+/// Cheap: uses AnimatedScale (single transform), no per-frame rebuilds.
+class PressableScale extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final double pressedScale;
+  final HitTestBehavior behavior;
+
+  const PressableScale({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+    this.pressedScale = 0.94,
+    this.behavior = HitTestBehavior.opaque,
+  });
+
+  @override
+  State<PressableScale> createState() => _PressableScaleState();
+}
+
+class _PressableScaleState extends State<PressableScale> {
+  bool _pressed = false;
+
+  void _set(bool v) {
+    if (_pressed != v) setState(() => _pressed = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onTap != null || widget.onLongPress != null;
+    return GestureDetector(
+      behavior: widget.behavior,
+      onTapDown: enabled ? (_) => _set(true) : null,
+      onTapUp: enabled ? (_) => _set(false) : null,
+      onTapCancel: enabled ? () => _set(false) : null,
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
+      child: AnimatedScale(
+        scale: _pressed ? widget.pressedScale : 1.0,
+        duration: const Duration(milliseconds: 140),
+        curve: kIOSSpring,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// iOS-style page route: horizontal slide + fade (use where you want an
+/// explicit transition; global transitions are set in main.dart theme).
+Route<T> iosPageRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    transitionDuration: const Duration(milliseconds: 360),
+    reverseTransitionDuration: const Duration(milliseconds: 300),
+    pageBuilder: (_, __, ___) => page,
+    transitionsBuilder: (_, animation, __, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: kIOSEase,
+        reverseCurve: kIOSEase.flipped,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(1.0, 0.0),
+          end: Offset.zero,
+        ).animate(curved),
+        child: FadeTransition(opacity: curved, child: child),
+      );
+    },
+  );
+}
+
 /// Manrope text shortcut (matches JSX font system).
 TextStyle manrope({
   double size = 14,
@@ -202,20 +286,18 @@ class GlassCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: size, height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: bg ?? (dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06)),
-          ),
-          alignment: Alignment.center,
-          child: Icon(icon, size: iconSize, color: fg ?? GlassTokens.fg(dark)),
+    // iOS-style press feedback (scale-down spring) instead of Material ripple.
+    return PressableScale(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: size, height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: bg ?? (dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06)),
         ),
+        alignment: Alignment.center,
+        child: Icon(icon, size: iconSize, color: fg ?? GlassTokens.fg(dark)),
       ),
     );
   }

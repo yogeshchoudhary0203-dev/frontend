@@ -10,11 +10,13 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
+import '../services/post_service.dart';
 import '../services/follow_state.dart';
 import '../services/block_service.dart';
 import '../l10n/app_localizations.dart';
@@ -22,6 +24,7 @@ import '../models/chat_model.dart';
 import '../utils/error_dialog.dart';
 import 'chat_screen.dart';
 import 'user_profile_screen.dart';
+import 'single_post_screen.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 /// ─── BUG FIX: _startChat ────────────────────────────────────────────────────
@@ -188,58 +191,8 @@ class SuggestedItem {
   const SuggestedItem({required this.name, required this.sub, this.followed = false});
 }
 
-enum TileKind { photo, reel, carousel }
-
-class DiscoverTile {
-  final int span;
-  final TileKind kind;
-  final int? count;
-  const DiscoverTile({required this.span, required this.kind, this.count});
-}
-
 const _filters = ['Top', 'People', 'Tags', 'Posts', 'Places'];
 
-
-const _tiles = <DiscoverTile>[
-  DiscoverTile(span: 2, kind: TileKind.photo),
-  DiscoverTile(span: 1, kind: TileKind.reel),
-  DiscoverTile(span: 1, kind: TileKind.photo),
-  DiscoverTile(span: 1, kind: TileKind.carousel, count: 5),
-  DiscoverTile(span: 2, kind: TileKind.photo),
-  DiscoverTile(span: 1, kind: TileKind.reel),
-  DiscoverTile(span: 1, kind: TileKind.photo),
-  DiscoverTile(span: 1, kind: TileKind.photo),
-  DiscoverTile(span: 1, kind: TileKind.carousel, count: 3),
-  DiscoverTile(span: 2, kind: TileKind.reel),
-  DiscoverTile(span: 1, kind: TileKind.photo),
-  DiscoverTile(span: 1, kind: TileKind.photo),
-];
-
-LinearGradient _tileGradient(bool dark, int i) {
-  final double a, b;
-  if (dark) {
-    a = (22 - (i % 5) * 3).toDouble();
-    b = (a - 12).clamp(4, 100).toDouble();
-  } else {
-    a = (92 - (i % 5) * 4).toDouble();
-    b = (a - 18).clamp(56, 100).toDouble();
-  }
-  final begin = (i % 4 == 0) ? Alignment.topLeft
-              : (i % 4 == 1) ? Alignment.topCenter
-              : (i % 4 == 2) ? Alignment.topRight
-              :                Alignment.centerLeft;
-  final end   = (i % 4 == 0) ? Alignment.bottomRight
-              : (i % 4 == 1) ? Alignment.bottomCenter
-              : (i % 4 == 2) ? Alignment.bottomLeft
-              :                Alignment.centerRight;
-  return LinearGradient(
-    begin: begin, end: end,
-    colors: [
-      HSLColor.fromAHSL(1, 0, 0, a / 100).toColor(),
-      HSLColor.fromAHSL(1, 0, 0, b / 100).toColor(),
-    ],
-  );
-}
 
 // ───────────────────────────────────────────────────────────────
 // SearchScreen
@@ -1256,27 +1209,72 @@ class _RealSuggestedCardState extends State<_RealSuggestedCard> {
 // Discover grid
 // ───────────────────────────────────────────────────────────────
 
-class _DiscoverGrid extends StatelessWidget {
+class _DiscoverGrid extends StatefulWidget {
   final bool dark;
   const _DiscoverGrid({required this.dark});
 
+  @override
+  State<_DiscoverGrid> createState() => _DiscoverGridState();
+}
+
+class _DiscoverGridState extends State<_DiscoverGrid> {
   static const double _rowH = 128;
   static const double _gap  = 6;
   static const int    _cols = 3;
 
+  List<PostModel> _posts = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await PostService.instance.getFeed(limit: 21);
+      if (mounted) setState(() { _posts = res.posts; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // Span pattern keeps the masonry look (some taller tiles, varied rhythm).
+  int _spanFor(int i) => (i % 4 == 0) ? 2 : 1;
+
   @override
   Widget build(BuildContext context) {
+    final dark = widget.dark;
+
+    if (_loading) {
+      return SizedBox(
+        height: 200,
+        child: Center(child: CircularProgressIndicator(
+          color: dark ? Colors.white : Colors.black, strokeWidth: 2)),
+      );
+    }
+    if (_posts.isEmpty) {
+      return SizedBox(
+        height: 120,
+        child: Center(child: Text(
+          'No posts to discover yet'.tr(context),
+          style: manrope(size: 14, color: GlassTokens.sub(dark)),
+        )),
+      );
+    }
+
     return LayoutBuilder(builder: (context, c) {
       final tileW = (c.maxWidth - _gap * (_cols - 1)) / _cols;
       final colHeights = List<double>.filled(_cols, 0);
       final positions  = <_Pos>[];
       double maxH = 0;
-      for (int i = 0; i < _tiles.length; i++) {
+      for (int i = 0; i < _posts.length; i++) {
         int col = 0;
         for (int k = 1; k < _cols; k++) {
           if (colHeights[k] < colHeights[col]) col = k;
         }
-        final span = _tiles[i].span;
+        final span = _spanFor(i);
         final h = _rowH * span + (span - 1) * _gap;
         final top = colHeights[col];
         positions.add(_Pos(col: col, top: top, height: h));
@@ -1287,13 +1285,13 @@ class _DiscoverGrid extends StatelessWidget {
       return SizedBox(
         height: maxH,
         child: Stack(children: [
-          for (int i = 0; i < _tiles.length; i++)
+          for (int i = 0; i < _posts.length; i++)
             Positioned(
               left: positions[i].col * (tileW + _gap),
               top: positions[i].top,
               width: tileW,
               height: positions[i].height,
-              child: _DiscoverTileView(t: _tiles[i], i: i, dark: dark),
+              child: _DiscoverTileView(post: _posts[i], dark: dark),
             ),
         ]),
       );
@@ -1309,72 +1307,73 @@ class _Pos {
 }
 
 class _DiscoverTileView extends StatelessWidget {
-  final DiscoverTile t;
-  final int i;
+  final PostModel post;
   final bool dark;
-  const _DiscoverTileView({required this.t, required this.i, required this.dark});
+  const _DiscoverTileView({required this.post, required this.dark});
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: _tileGradient(dark, i),
-          boxShadow: [
-            BoxShadow(
-              color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.5),
-              blurRadius: 0, offset: const Offset(0, 1), spreadRadius: 0,
-            ),
-          ],
-        ),
-        child: Stack(fit: StackFit.expand, children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: const Alignment(-0.4, -1), radius: 1.2,
-                colors: dark
-                  ? [Colors.white.withValues(alpha: 0.06), Colors.transparent]
-                  : [Colors.white.withValues(alpha: 0.55), Colors.transparent],
-                stops: const [0.0, 0.55],
-              ),
-            ),
+    final isVideo = post.isVideo;
+    // Videos: prefer thumbnail; fall back to media URL. Images: media URL.
+    final imageUrl =
+        (isVideo && post.thumbnailUrl != null && post.thumbnailUrl!.isNotEmpty)
+            ? post.thumbnailUrl!
+            : post.mediaUrl;
+
+    final placeholderColor = dark
+        ? Colors.white.withValues(alpha: 0.05)
+        : Colors.black.withValues(alpha: 0.05);
+
+    return PressableScale(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => SinglePostScreen(postId: post.id, dark: dark),
           ),
-          if (t.kind != TileKind.photo)
-            Positioned(
-              top: 6, right: 6,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    color: Colors.black.withValues(alpha: 0.42),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(t.kind == TileKind.reel ? Icons.movie_creation_outlined : Icons.collections_outlined,
-                        size: 12, color: Colors.white),
-                      if (t.kind == TileKind.carousel && t.count != null) ...[
-                        const SizedBox(width: 3),
-                        Text('${t.count}', style: manrope(size: 10, weight: FontWeight.w700, color: Colors.white, letterSpacing: -0.1)),
-                      ],
-                    ]),
-                  ),
+        );
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: placeholderColor,
+          ),
+          child: Stack(fit: StackFit.expand, children: [
+            CachedNetworkImage(
+              imageUrl: imageUrl,
+              fit: BoxFit.cover,
+              fadeInDuration: const Duration(milliseconds: 200),
+              placeholder: (_, __) => Container(color: placeholderColor),
+              errorWidget: (_, __, ___) => Container(
+                color: placeholderColor,
+                child: Icon(Icons.image_not_supported_outlined,
+                    size: 20, color: GlassTokens.sub(dark)),
+              ),
+            ),
+            // Subtle top sheen for depth
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.18),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.4],
                 ),
               ),
             ),
-          if (t.kind == TileKind.reel)
-            Center(child: ClipOval(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                child: Container(
-                  width: 30, height: 30, alignment: Alignment.center,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.35)),
-                  child: const Icon(Icons.play_arrow_rounded, size: 18, color: Colors.white),
-                ),
+            // Video play badge
+            if (isVideo)
+              const Positioned(
+                top: 6, right: 6,
+                child: Icon(Icons.play_circle_fill_rounded,
+                    size: 20, color: Colors.white),
               ),
-            )),
-        ]),
+          ]),
+        ),
       ),
     );
   }

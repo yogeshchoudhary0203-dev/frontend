@@ -26,6 +26,7 @@ import '../../widgets/feed/video_card.dart' show FeedVideoPool;
 import '../../widgets/stories/story_bar.dart';
 import '../../widgets/home/home_nav_bar.dart';
 import '../../widgets/home/suggested_users.dart';
+import '../../l10n/app_localizations.dart';
 import 'skill_score.dart';
 import 'infinity_btn.dart';
 import 'trandia_island.dart';
@@ -742,7 +743,7 @@ class _HomeScreenState extends State<HomeScreen>
                   }
                   return SizedBox(
                     height: 200,
-                    child: Center(child: Text('No posts yet',
+                    child: Center(child: Text('No posts yet'.tr(ctx),
                       style: TextStyle(
                         color: (isDark ? Colors.white : Colors.black)
                             .withValues(alpha: 0.38),

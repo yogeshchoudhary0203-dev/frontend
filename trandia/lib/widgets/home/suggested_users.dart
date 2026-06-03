@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/chat_model.dart';
 import '../../screens/user_profile_screen.dart' as user_profile;
 import '../../services/user_service.dart';
+import '../../l10n/app_localizations.dart';
 import '../shared/home_shared.dart';
 
 // ═════════════════════════════════════════════════════
@@ -91,10 +92,10 @@ class _FollowerSuggestionsTabState extends State<FollowerSuggestionsTab> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(padding: const EdgeInsets.only(right: 14),
           child: Row(children: [
-            Text('TUMHARE LIYE SUGGESTION',
+            Text('Suggested for you'.tr(context).toUpperCase(),
               style: TextStyle(color: fg.op(0.50), fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
             const Spacer(),
-            Text('Sab Dekho', style: TextStyle(color: fg.op(0.92), fontSize: 13, fontWeight: FontWeight.w800)),
+            Text('See all'.tr(context), style: TextStyle(color: fg.op(0.92), fontSize: 13, fontWeight: FontWeight.w800)),
           ])),
         const SizedBox(height: 10),
         SizedBox(
@@ -139,7 +140,7 @@ class _FollowerSuggestionsTabState extends State<FollowerSuggestionsTab> {
                     Text(user.username, maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: fg.op(0.92), fontSize: 15, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 3),
-                    Text(isFollowing ? 'Followed by you' : 'Suggested', maxLines: 1, overflow: TextOverflow.ellipsis,
+                    Text(isFollowing ? 'Followed by you'.tr(context) : 'Suggested'.tr(context), maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: fg.op(0.46), fontSize: 12, fontWeight: FontWeight.w600)),
                     const Spacer(),
                     GestureDetector(
@@ -155,7 +156,7 @@ class _FollowerSuggestionsTabState extends State<FollowerSuggestionsTab> {
                         child: isBusy
                             ? SizedBox(width: 15, height: 15,
                                 child: CircularProgressIndicator(strokeWidth: 1.6, color: isFollowing ? fg : cardBg))
-                            : Text(isFollowing ? 'Following' : 'Follow Karo', maxLines: 1, overflow: TextOverflow.ellipsis,
+                            : Text(isFollowing ? 'Following'.tr(context) : 'Follow Karo'.tr(context), maxLines: 1, overflow: TextOverflow.ellipsis,
                                 style: TextStyle(color: isFollowing ? fg.op(0.88) : cardBg, fontSize: 13, fontWeight: FontWeight.w800)),
                       ),
                     ),

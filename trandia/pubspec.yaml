@@ -44,6 +44,9 @@ dependencies:
   share_plus: ^12.0.2
   app_links: ^7.0.0
   speech_to_text: ^7.4.0
+  sqflite: ^2.3.3+2
+  path: ^1.9.1
+  video_thumbnail: ^0.5.3
 
 dev_dependencies:
   flutter_test:

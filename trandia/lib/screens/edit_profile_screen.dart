@@ -277,6 +277,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
 
       await ApiService.put('/users/me', body, requiresAuth: true);
+      UserService.invalidateProfileCache(); // force fresh fetch on next open
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

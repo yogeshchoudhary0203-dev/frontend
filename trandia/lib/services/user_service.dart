@@ -93,12 +93,44 @@ class UserService {
     }
   }
 
+  // ── In-memory profile cache ──────────────────────────────────────────────
+  // Avoids a fresh Railway round-trip on every profile screen open.
+  // TTL: 90 seconds — same as ApiService GET cache.
+  static UserProfile? _cachedProfile;
+  static DateTime? _profileCachedAt;
+  static const _kProfileCacheTtl = Duration(seconds: 90);
+
+  /// The last successfully fetched profile (may be stale).
+  /// Use this for instant render before the background refresh completes.
+  static UserProfile? get cachedProfile => _cachedProfile;
+
+  /// Invalidate the profile cache — call after edit-profile or logout.
+  static void invalidateProfileCache() {
+    _cachedProfile = null;
+    _profileCachedAt = null;
+  }
+
   // ── Profile and Follower Lists ──────────────────────────────────────────
 
-  static Future<UserProfile?> getMyProfile() async {
+  /// Fetches own profile.
+  /// • [forceRefresh] = false → returns cached data if < 90 s old (no network).
+  /// • [forceRefresh] = true  → always hits the server (pull-to-refresh).
+  /// On network error, returns stale cache instead of null so the UI never
+  /// goes blank.
+  static Future<UserProfile?> getMyProfile({bool forceRefresh = false}) async {
+    // ── Serve from cache if still fresh ─────────────────────────────────
+    if (!forceRefresh &&
+        _cachedProfile != null &&
+        _profileCachedAt != null &&
+        DateTime.now().difference(_profileCachedAt!) < _kProfileCacheTtl) {
+      developer.log('getMyProfile → cache hit');
+      return _cachedProfile;
+    }
+
+    // ── Fetch from network ───────────────────────────────────────────────
     try {
       final token = await ApiService.getToken();
-      if (token == null) return null;
+      if (token == null) return _cachedProfile; // return stale if no token
       final res = await http.get(
         Uri.parse('$baseUrl/users/me'),
         headers: {
@@ -109,12 +141,15 @@ class UserService {
       developer.log('getMyProfile → ${res.statusCode}');
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        return UserProfile.fromJson(decoded);
+        final profile = UserProfile.fromJson(decoded);
+        _cachedProfile = profile;
+        _profileCachedAt = DateTime.now();
+        return profile;
       }
-      return null;
+      return _cachedProfile; // return stale on non-200
     } catch (e) {
       developer.log('getMyProfile error: $e');
-      return null;
+      return _cachedProfile; // return stale on network error
     }
   }
 
@@ -215,30 +250,6 @@ class UserService {
     } catch (e) {
       developer.log('getSuggestedUsers error: $e');
       return [];
-    }
-  }
-
-  /// Returns the updated comments_count from server, or null on error.
-  static Future<int?> notifyComment(String postId, String commentText) async {
-    try {
-      final token = await ApiService.getToken();
-      if (token == null) return null;
-      final res = await http.post(
-        Uri.parse('$baseUrl/posts/$postId/comment_notify'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'comment_text': commentText}),
-      ).timeout(const Duration(seconds: 8));
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body) as Map<String, dynamic>;
-        return body['new_count'] as int?;
-      }
-      return null;
-    } catch (e) {
-      developer.log('notifyComment error: $e');
-      return null;
     }
   }
 

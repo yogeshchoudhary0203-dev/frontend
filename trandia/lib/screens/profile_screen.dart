@@ -5,17 +5,18 @@
 //
 // Drop in `lib/` alongside glass_common.dart.
 
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:video_player/video_player.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import 'followers_screen(1).dart';
 import 'setting_screen.dart';
-import 'creator_profile_screen.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../services/location_service.dart';
@@ -39,6 +40,85 @@ const _highlights = <HighlightItem>[
   HighlightItem('Reads', 4),
   HighlightItem('Type', 5),
 ];
+
+// ── In-memory thumbnail cache ─────────────────────────────────────────────
+// Prevents re-generating the same thumbnail on every grid rebuild.
+// Key = video URL, Value = raw JPEG bytes.
+final _thumbCache = <String, Uint8List>{};
+
+// ── Auto-generated video thumbnail tile ──────────────────────────────────
+class _VideoThumbnailTile extends StatefulWidget {
+  final String videoUrl;
+  const _VideoThumbnailTile({required this.videoUrl});
+
+  @override
+  State<_VideoThumbnailTile> createState() => _VideoThumbnailTileState();
+}
+
+class _VideoThumbnailTileState extends State<_VideoThumbnailTile> {
+  Uint8List? _bytes;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    // 1. Check in-memory cache first
+    final cached = _thumbCache[widget.videoUrl];
+    if (cached != null) {
+      if (mounted) setState(() { _bytes = cached; _loading = false; });
+      return;
+    }
+
+    // 2. Generate from video URL
+    try {
+      final bytes = await VideoThumbnail.thumbnailData(
+        video:    widget.videoUrl,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 300,
+        quality:  70,
+      );
+      if (bytes != null && bytes.isNotEmpty) {
+        _thumbCache[widget.videoUrl] = bytes; // cache for reuse
+      }
+      if (mounted) setState(() { _bytes = bytes; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      // Subtle shimmer — just a semi-transparent overlay on the gradient
+      return const Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: Colors.white38,
+          ),
+        ),
+      );
+    }
+    if (_bytes != null) {
+      return Image.memory(
+        _bytes!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    }
+    // Generation failed — fallback to centered play icon
+    return const Center(
+      child: Icon(Icons.play_circle_outline_rounded, color: Colors.white54, size: 30),
+    );
+  }
+}
 
 /// Wider tonal range tile gradient.
 LinearGradient _tileGradient(bool dark, int i) {
@@ -122,35 +202,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _loadProfile() async {
+  Future<void> _loadProfile({bool forceRefresh = false}) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+
+    // ── Step 1: Read SharedPreferences (fast, local) ──────────────────────
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
+    final savedOrder = prefs.getStringList('social_platform_order');
+    if (savedOrder != null && savedOrder.isNotEmpty) {
+      final validPlatforms = {'snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'};
+      final loadedOrder = savedOrder.where((e) => validPlatforms.contains(e)).toList();
+      for (final p in validPlatforms) {
+        if (!loadedOrder.contains(p)) loadedOrder.add(p);
+      }
+      _platformOrder = loadedOrder;
+    }
+    final accountType = prefs.getString('settings_account_type') ?? '';
+
+    // ── Step 2: Render cached profile instantly (no loader flash) ─────────
+    final cached = UserService.cachedProfile;
+    if (cached != null && !forceRefresh) {
+      setState(() {
+        _profile = cached;
+        _accountType = accountType;
+        _isPrivateAccount = accountType == 'Private';
+        _isLoading = false;
+      });
+      // Load posts from ApiService cache (also fast — 90s TTL)
+      if (_userPosts.isEmpty) _loadPosts(cached.id);
+    } else {
+      // No cache — show loader
+      setState(() {
+        _isLoading = true;
+        _accountType = accountType;
+        _isPrivateAccount = accountType == 'Private';
+      });
+    }
+
+    // ── Step 3: Background refresh from network ───────────────────────────
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedOrder = prefs.getStringList('social_platform_order');
-      if (savedOrder != null && savedOrder.isNotEmpty) {
-        final validPlatforms = {'snapchat', 'instagram', 'whatsapp', 'facebook', 'twitter', 'youtube'};
-        final loadedOrder = savedOrder.where((e) => validPlatforms.contains(e)).toList();
-        for (final p in validPlatforms) {
-          if (!loadedOrder.contains(p)) loadedOrder.add(p);
-        }
-        _platformOrder = loadedOrder;
-      }
-      final accountType = prefs.getString('settings_account_type') ?? '';
-      // Set accountType immediately so creator screen switches without waiting for API
-      if (mounted) {
-        setState(() {
-          _isPrivateAccount = accountType == 'Private';
-          _accountType = accountType;
-        });
-      }
-      final profile = await UserService.getMyProfile();
-      if (mounted) {
+      final profile = await UserService.getMyProfile(forceRefresh: forceRefresh);
+      if (!mounted) return;
+      if (profile != null) {
         setState(() {
           _profile = profile;
+          _accountType = accountType;
+          _isPrivateAccount = accountType == 'Private';
           _isLoading = false;
         });
-        if (profile != null) _loadPosts(profile.id);
+        // Reload posts if we had no cache before, or on forced refresh
+        if (cached == null || forceRefresh) _loadPosts(profile.id);
+      } else {
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -203,7 +307,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } else {
       setState(() => _isUpdatingLocation = true);
       final success = await LocationService.requestAndSaveLocation(context);
-      if (success && mounted) await _loadProfile();
+      if (success && mounted) await _loadProfile(forceRefresh: true);
       if (mounted) setState(() => _isUpdatingLocation = false);
     }
   }
@@ -247,7 +351,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.pop(ctx);
                   setState(() => _isUpdatingLocation = true);
                   await UserService.updateLocationPrivacy(!isPublic);
-                  await _loadProfile();
+                  UserService.invalidateProfileCache();
+                  await _loadProfile(forceRefresh: true);
                   if (mounted) setState(() => _isUpdatingLocation = false);
                 },
               ),
@@ -261,7 +366,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.pop(ctx);
                   setState(() => _isUpdatingLocation = true);
                   final success = await LocationService.requestAndSaveLocation(context);
-                  if (success && mounted) await _loadProfile();
+                  if (success && mounted) await _loadProfile(forceRefresh: true);
                   if (mounted) setState(() => _isUpdatingLocation = false);
                 },
               ),
@@ -275,7 +380,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.pop(ctx);
                   setState(() => _isUpdatingLocation = true);
                   await UserService.removeLocation();
-                  await _loadProfile();
+                  UserService.invalidateProfileCache();
+                  await _loadProfile(forceRefresh: true);
                   if (mounted) setState(() => _isUpdatingLocation = false);
                 },
               ),
@@ -320,53 +426,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  bool get _isCreatorAccount =>
+      ['Business', 'Creator', 'Professional'].contains(_accountType);
+
   @override
   Widget build(BuildContext context) {
-    if (_profile != null && ['Business', 'Creator', 'Professional'].contains(_accountType)) {
-      return CreatorProfileScreen(
-        dark: widget.dark,
-        displayName: _profile!.name,
-        handle: _profile!.username,
-        title: '$_accountType Account',
-        bio: _profile!.bio ?? '',
-        followers: _profile!.followersCount.toString(),
-        following: _profile!.followingCount.toString(),
-        posts: _userPosts.length.toString(),
-        postCount: _userPosts.length,
-        avatarUrl: _profile!.picture ?? '',
-        owner: true,
-        userPosts: _userPosts,
-        postsLoading: _postsLoading,
-        myUserId: _profile!.id,
-        reach: '',
-        profileViews: '',
-        engagement: '',
-        onOpenSettings: () {
-          Navigator.of(context).push(
-            PageRouteBuilder(
-              pageBuilder: (_, animation, __) => SettingsScreen(dark: widget.dark),
-              transitionDuration: const Duration(milliseconds: 320),
-              reverseTransitionDuration: const Duration(milliseconds: 260),
-              transitionsBuilder: (_, animation, __, child) {
-                final curved = CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOutCubic,
-                  reverseCurve: Curves.easeInCubic,
-                );
-                return SlideTransition(
-                  position: Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero).animate(curved),
-                  child: FadeTransition(opacity: curved, child: child),
-                );
-              },
-            ),
-          ).then((_) => _loadProfile());
-        },
-        onPostDeleted: (postId) {
-          setState(() => _userPosts.removeWhere((p) => p.id == postId));
-        },
-      );
-    }
-
     final dark = widget.dark;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
@@ -506,7 +570,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           );
                                         },
                                       ),
-                                    ).then((_) => _loadProfile());
+                                    ).then((_) => _loadProfile(forceRefresh: true));
                                   },
                                 ),
                               ],
@@ -598,32 +662,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
 
-                          const SizedBox(height: 8),
-
-                          // TITLE CHIP
-                          Center(
-                            child: _TitleChip(dark: dark, muted: muted, fg: fg),
-                          ),
-
-                          // BIO
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
-                            child: Text(
-                              _profile?.bio?.isNotEmpty == true
-                                  ? _profile!.bio!
-                                  : 'Designer & art director.\n'
-                                      'Currently leading visual identity at Studio Atelier — '
-                                      'type, motion & quiet things.',
-                              textAlign: TextAlign.center,
-                              style: manrope(
-                                size: 13.5,
-                                weight: FontWeight.w500,
-                                color: muted,
-                                letterSpacing: -0.07,
-                                height: 1.55,
+                          // ACCOUNT TYPE CHIP (creator/business/professional only)
+                          if (_isCreatorAccount) ...[
+                            const SizedBox(height: 8),
+                            Center(
+                              child: _TitleChip(
+                                dark: dark,
+                                muted: muted,
+                                fg: fg,
+                                label: '$_accountType Account',
                               ),
                             ),
-                          ),
+                          ],
+
+                          // BIO
+                          if (_profile?.bio?.isNotEmpty == true)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
+                              child: Text(
+                                _profile!.bio!,
+                                textAlign: TextAlign.center,
+                                style: manrope(
+                                  size: 13.5,
+                                  weight: FontWeight.w500,
+                                  color: muted,
+                                  letterSpacing: -0.07,
+                                  height: 1.55,
+                                ),
+                              ),
+                            ),
+
+                          // CREATOR DASHBOARD CARD (only for creator/business/professional)
+                          if (_isCreatorAccount) ...[
+                            const SizedBox(height: 14),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: _CreatorDashboardCard(
+                                dark: dark,
+                                fg: fg,
+                                sub: sub,
+                                accountType: _accountType,
+                              ),
+                            ),
+                          ],
 
                           // SOCIAL LINKS
                           Padding(
@@ -1218,7 +1299,8 @@ class _TitleChip extends StatelessWidget {
   final bool dark;
   final Color muted;
   final Color fg;
-  const _TitleChip({required this.dark, required this.muted, required this.fg});
+  final String label;
+  const _TitleChip({required this.dark, required this.muted, required this.fg, this.label = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -1253,7 +1335,7 @@ class _TitleChip extends StatelessWidget {
               ),
               const SizedBox(width: 7),
               Text(
-                'Designer · Studio Atelier',
+                label,
                 style: manrope(
                   size: 12,
                   weight: FontWeight.w600,
@@ -1911,11 +1993,24 @@ class _ProfileTileView extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox(),
-              ),
+              // Image post → network image
+              if (!isVideo)
+                Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox(),
+                )
+              // Video + backend-provided thumbnail
+              else if (post.thumbnailUrl != null && post.thumbnailUrl!.isNotEmpty)
+                Image.network(
+                  post.thumbnailUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      _VideoThumbnailTile(videoUrl: post.mediaUrl),
+                )
+              // Video + no thumbnail → auto-generate from video URL
+              else
+                _VideoThumbnailTile(videoUrl: post.mediaUrl),
               if (isVideo)
                 Positioned(
                   top: 6,
@@ -1972,6 +2067,7 @@ class _PostCardModalState extends State<_PostCardModal> {
   bool _liked = false;
   late int _likesCount;
   bool _muted = false;
+  bool _deleting = false; // true while delete API call is in progress
 
   @override
   void initState() {
@@ -2022,10 +2118,12 @@ class _PostCardModalState extends State<_PostCardModal> {
 
   void _showOptions() {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    // useRootNavigator: true — modal is on root navigator, sheet must be too
+    // so Navigator.of(sheetCtx).pop() closes only the sheet, nothing else.
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      useRootNavigator: false,
+      useRootNavigator: true,
       builder: (sheetCtx) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
@@ -2056,7 +2154,7 @@ class _PostCardModalState extends State<_PostCardModal> {
                   label: 'Delete Post',
                   color: Colors.redAccent,
                   onTap: () {
-                    Navigator.of(sheetCtx).pop(); // close only the sheet
+                    Navigator.of(sheetCtx, rootNavigator: true).pop();
                     _confirmDelete();
                   },
                 ),
@@ -2065,7 +2163,7 @@ class _PostCardModalState extends State<_PostCardModal> {
                 label: 'Copy Link',
                 color: dark ? Colors.white : Colors.black87,
                 onTap: () {
-                  Navigator.of(sheetCtx).pop();
+                  Navigator.of(sheetCtx, rootNavigator: true).pop();
                   HapticFeedback.selectionClick();
                 },
               ),
@@ -2078,9 +2176,11 @@ class _PostCardModalState extends State<_PostCardModal> {
   }
 
   void _confirmDelete() {
+    if (!mounted) return;
     final dark = Theme.of(context).brightness == Brightness.dark;
     showDialog<void>(
       context: context,
+      useRootNavigator: true,
       barrierColor: Colors.black54,
       builder: (ctx) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
@@ -2097,17 +2197,18 @@ class _PostCardModalState extends State<_PostCardModal> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(),
               child: const Text('Cancel'),
             ),
             TextButton(
               onPressed: () async {
-                Navigator.pop(ctx); // close dialog
+                Navigator.of(ctx, rootNavigator: true).pop();
                 await _executeDelete();
               },
               child: const Text(
                 'Delete',
-                style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                    color: Colors.redAccent, fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -2117,17 +2218,49 @@ class _PostCardModalState extends State<_PostCardModal> {
   }
 
   Future<void> _executeDelete() async {
+    if (!mounted || widget.post.id.isEmpty) return;
+
+    // Show loading state on the modal while deleting
+    if (mounted) setState(() => _deleting = true);
+
     try {
       await PostService.instance.deletePost(widget.post.id);
+
+
       if (mounted) {
-        Navigator.of(context).pop();
+        // Close modal using root navigator to avoid tab-navigator confusion
+        Navigator.of(context, rootNavigator: true).pop();
         widget.onDeleted?.call();
         HapticFeedback.mediumImpact();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e')),
+        setState(() => _deleting = false);
+        // Use root navigator's context for the error dialog — ScaffoldMessenger
+        // is not reliably reachable from inside a GeneralDialog context.
+        showDialog<void>(
+          context: context,
+          useRootNavigator: true,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1C1C1E),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20)),
+            title: const Text('Delete Failed',
+                style: TextStyle(color: Colors.white,
+                    fontWeight: FontWeight.w700)),
+            content: Text(
+              e.toString().replaceFirst('ApiException: ', ''),
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(ctx, rootNavigator: true).pop(),
+                child: const Text('OK',
+                    style: TextStyle(color: Color(0xFF00E676))),
+              ),
+            ],
+          ),
         );
       }
     }
@@ -2566,6 +2699,74 @@ class _OptionTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+// Creator Dashboard Card (shown only for creator/business/professional)
+// ───────────────────────────────────────────────────────────────
+class _CreatorDashboardCard extends StatelessWidget {
+  final bool dark;
+  final Color fg;
+  final Color sub;
+  final String accountType;
+  const _CreatorDashboardCard({
+    required this.dark,
+    required this.fg,
+    required this.sub,
+    required this.accountType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassSurface(
+      dark: dark,
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      blurSigma: 24,
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.black.withOpacity(0.06),
+            ),
+            child: Icon(Icons.insights_rounded, color: fg, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$accountType Dashboard',
+                  style: manrope(
+                    size: 14,
+                    weight: FontWeight.w800,
+                    color: fg,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Analytics coming soon',
+                  style: manrope(
+                    size: 12,
+                    weight: FontWeight.w500,
+                    color: sub,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: sub, size: 20),
+        ],
       ),
     );
   }

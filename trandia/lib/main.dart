@@ -14,11 +14,13 @@ import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/app_lock_service.dart';
 import 'services/fcm_service.dart';
+import 'services/local_db.dart';
 import 'services/deep_link_service.dart';
 import 'l10n/app_localizations.dart';
 import 'utils/web_utils.dart';
 import 'utils/navigator_key.dart';
 import 'utils/route_observer.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 export 'utils/navigator_key.dart' show navigatorKey;
 
@@ -42,6 +44,9 @@ void main() async {
   // Register background message handler
   FirebaseMessaging.onBackgroundMessage(_bgMessageHandler);
 
+  // Pre-warm local SQLite database (opens file, creates tables if first run)
+  unawaited(LocalDb.instance.db);
+
   // Initialize local notifications and token handling
   await FcmService.init();
   FcmService.startForegroundListener();
@@ -54,7 +59,7 @@ void main() async {
 
   FlutterError.onError = (d) => FlutterError.presentError(d);
   runZonedGuarded(
-    () => runApp(const TrandiaApp()),
+    () => runApp(const ProviderScope(child: TrandiaApp())),
     (e, st) => debugPrint('[UNCAUGHT] $e\n$st'),
   );
 }

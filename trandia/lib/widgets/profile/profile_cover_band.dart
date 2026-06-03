@@ -4,6 +4,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../screens/glass_common.dart';
+import '../../l10n/app_localizations.dart';
 
 class ProfileCoverBand extends StatelessWidget {
   final bool dark;

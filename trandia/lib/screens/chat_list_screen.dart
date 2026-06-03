@@ -639,7 +639,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return ListView.builder(
       controller: _chatScroll,
-      physics: const AlwaysScrollableScrollPhysics(),
+      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
       padding: EdgeInsets.fromLTRB(0, 0, 0, 76 + bottomInset),
       itemCount: 1 + (list.isEmpty ? 1 : list.length),
       itemBuilder: (context, index) {
@@ -677,7 +677,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
           controller: _chatScroll,
           index: i,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
             child: _ChatRow(
               c: conv,
               i: i + 1,
@@ -911,7 +911,7 @@ class _ChatRow extends StatelessWidget {
       child: GlassSurface(
         dark: dark,
         radius: 999,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
         blurSigma: 44,
         bgColors: dark
             ? [Colors.white.withValues(alpha: 0.05), Colors.white.withValues(alpha: 0.02)]
@@ -926,7 +926,7 @@ class _ChatRow extends StatelessWidget {
             UserAvatar(
               pictureUrl: otherUser.picture,
               name: otherUser.name.isNotEmpty ? otherUser.name : otherUser.username,
-              size: 50,
+              size: 46,
               dark: dark,
               index: i,
             ),
@@ -1439,7 +1439,7 @@ class _ChatIslandScrollCardState extends State<_ChatIslandScrollCard> {
         final collapseRaw = (1.0 - (distanceToBottom / _collapseRange))
             .clamp(0.0, 1.0)
             .toDouble();
-        final collapseT = Curves.easeInCubic.transform(collapseRaw);
+        final collapseT = Curves.easeInOutCubic.transform(collapseRaw);
 
         // ── Bottom-entry: item entering from below screen ──
         final distanceFromBottom = screenHeight - itemTopY;
@@ -1450,38 +1450,37 @@ class _ChatIslandScrollCardState extends State<_ChatIslandScrollCard> {
         final entryT = Curves.easeOutCubic.transform(entryRaw);
 
         // Combine: entry wins when item is below screen, collapse wins near bottom edge
-        final slideUp = _lerp(28.0, 0.0, entryT);   // slides up from below
+        final slideUp      = _lerp(22.0, 0.0, entryT);
         final entryOpacity = _lerp(0.0, 1.0, entryT);
 
-        final collapseWidthFactor = _lerp(1.0, 0.56, collapseT);
-        final collapseScaleY     = _lerp(1.0, 0.68, collapseT);
-        final collapseDrop       = _lerp(0.0, 16.0, collapseT);
-        final collapseOpacity    = _lerp(1.0, 0.08, Curves.easeOut.transform(collapseT));
+        final collapseWidthFactor = _lerp(1.0, 0.60, collapseT);
+        final collapseScaleY     = _lerp(1.0, 0.72, collapseT);
+        final collapseDrop       = _lerp(0.0, 12.0, collapseT);
+        final collapseOpacity    = _lerp(1.0, 0.10, Curves.easeInOutCubic.transform(collapseT));
 
         final finalOpacity = (entryOpacity * collapseOpacity).clamp(0.0, 1.0);
         final finalSlide   = slideUp + collapseDrop;
 
         if (collapseT == 0 && entryT == 1.0) return child!;
 
-        return ClipRect(
-          child: Opacity(
-            opacity: finalOpacity,
-            child: Transform.translate(
-              offset: Offset(0, finalSlide),
-              child: Transform.scale(
-                alignment: Alignment.bottomCenter,
-                scaleY: collapseScaleY,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: FractionallySizedBox(
-                    widthFactor: collapseWidthFactor,
-                    child: child,
-                  ),
-                ),
+        Widget result = Transform.translate(
+          offset: Offset(0, finalSlide),
+          child: Transform.scale(
+            alignment: Alignment.bottomCenter,
+            scaleY: collapseScaleY,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: FractionallySizedBox(
+                widthFactor: collapseWidthFactor,
+                child: child,
               ),
             ),
           ),
         );
+        if (finalOpacity < 0.99) {
+          result = Opacity(opacity: finalOpacity, child: result);
+        }
+        return ClipRect(child: result);
       },
     );
   }

@@ -6,7 +6,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
-import 'followers_screen(1).dart';
+import 'followers_screen.dart';
 import 'setting_screen.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';

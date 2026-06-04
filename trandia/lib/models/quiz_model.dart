@@ -98,3 +98,24 @@ class QuizSubmitResult {
         skillScoreDelta: j['skill_score_delta'] ?? 0,
       );
 }
+
+/// Per-question reveal returned by POST /quiz/{id}/answer.
+/// Answers are no longer shipped up-front (anti-cheat) — the screen asks for
+/// the correct option only after the user commits to an answer.
+class QuizReveal {
+  final int correctIndex;
+  final String explanation;
+  final bool isCorrect;
+
+  const QuizReveal({
+    required this.correctIndex,
+    required this.explanation,
+    required this.isCorrect,
+  });
+
+  factory QuizReveal.fromJson(Map<String, dynamic> j) => QuizReveal(
+        correctIndex: j['correct_index'] ?? 0,
+        explanation: j['explanation'] ?? '',
+        isCorrect: j['is_correct'] ?? false,
+      );
+}

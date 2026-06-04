@@ -203,6 +203,10 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
   int _currentIndex = 0;
   final List<int?> _selectedAnswers = List.filled(5, null);
+  // Correct answer + explanation are fetched per-question from the server (the
+  // quiz GET no longer ships them — anti-cheat). null = not graded yet.
+  final List<int?> _revealedCorrect = List.filled(5, null);
+  final List<String> _revealedExplanation = List.filled(5, '');
   final List<double> _timePerQuestion = List.filled(5, 0);
   late DateTime _questionStartTime;
   bool _answered = false;
@@ -251,40 +255,76 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _autoAdvance() {
+  Future<void> _autoAdvance() async {
     if (_answered) return;
     HapticFeedback.heavyImpact();
     final elapsed = DateTime.now().difference(_questionStartTime).inMilliseconds / 1000;
+    final qIndex = _currentIndex;
     setState(() {
-      _timePerQuestion[_currentIndex] = elapsed;
+      _timePerQuestion[qIndex] = elapsed;
       _answered = true;
       // selectedAnswer stays null — means "timed out / skipped"
+    });
+    // Reveal the correct answer for display (records a no-answer for scoring).
+    final reveal = await QuizService.revealAnswer(
+      quizId: widget.quiz.quizId,
+      questionIndex: qIndex,
+      selected: null,
+    );
+    if (!mounted) return;
+    setState(() {
+      _revealedCorrect[qIndex] = reveal?.correctIndex;
+      _revealedExplanation[qIndex] = reveal?.explanation ?? '';
     });
   }
 
   // ── Answer selection ───────────────────────────────────────────
 
-  void _selectAnswer(int idx) {
+  Future<void> _selectAnswer(int idx) async {
     if (_answered) return;
     _countdownTimer?.cancel();
     HapticFeedback.selectionClick();
     final elapsed = DateTime.now().difference(_questionStartTime).inMilliseconds / 1000;
+    final qIndex = _currentIndex;
+    // Optimistic: highlight the tapped option immediately so the tap feels instant.
     setState(() {
-      _selectedAnswers[_currentIndex] = idx;
-      _timePerQuestion[_currentIndex] = elapsed;
+      _selectedAnswers[qIndex] = idx;
+      _timePerQuestion[qIndex] = elapsed;
       _answered = true;
+    });
+    // Fetch the correct answer for THIS question from the server (anti-cheat).
+    final reveal = await QuizService.revealAnswer(
+      quizId: widget.quiz.quizId,
+      questionIndex: qIndex,
+      selected: idx,
+    );
+    if (!mounted) return;
+    setState(() {
+      _revealedCorrect[qIndex] = reveal?.correctIndex;
+      _revealedExplanation[qIndex] = reveal?.explanation ?? '';
     });
   }
 
-  void _skipQuestion() {
+  Future<void> _skipQuestion() async {
     if (_answered) return;
     _countdownTimer?.cancel();
     HapticFeedback.selectionClick();
     final elapsed = DateTime.now().difference(_questionStartTime).inMilliseconds / 1000;
+    final qIndex = _currentIndex;
     setState(() {
-      _timePerQuestion[_currentIndex] = elapsed;
+      _timePerQuestion[qIndex] = elapsed;
       _answered = true;
       // selectedAnswer stays null
+    });
+    final reveal = await QuizService.revealAnswer(
+      quizId: widget.quiz.quizId,
+      questionIndex: qIndex,
+      selected: null,
+    );
+    if (!mounted) return;
+    setState(() {
+      _revealedCorrect[qIndex] = reveal?.correctIndex;
+      _revealedExplanation[qIndex] = reveal?.explanation ?? '';
     });
   }
 
@@ -515,7 +555,7 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
           const SizedBox(height: 16),
           ...List.generate(_current.options.length, (i) => _buildOption(i)),
           // Always show explanation after answering
-          if (_answered) _buildExplanation(),
+          if (_answered && _revealedCorrect[_currentIndex] != null) _buildExplanation(),
         ],
       ),
     );
@@ -523,25 +563,31 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
 
   Widget _buildOption(int i) {
     final selected = _selectedAnswers[_currentIndex] == i;
-    final correct  = _current.correctAnswerIndex == i;
+    final revealed = _revealedCorrect[_currentIndex];   // null until graded by server
+    final graded   = _answered && revealed != null;
+    final correct  = graded && revealed == i;
     Color borderColor;
     Color bgColor;
     Widget? trailing;
 
-    if (!_answered) {
-      borderColor = Colors.white.withValues(alpha: 0.12);
-      bgColor     = Colors.white.withValues(alpha: 0.05);
-    } else if (correct) {
+    if (correct) {
       borderColor = const Color(0xFF00E676);
       bgColor     = const Color(0xFF00E676).withValues(alpha: 0.12);
       trailing    = const Icon(Icons.check_circle_rounded, color: Color(0xFF00E676), size: 20);
-    } else if (selected) {
+    } else if (graded && selected) {
       borderColor = const Color(0xFFFF6B6B);
       bgColor     = const Color(0xFFFF6B6B).withValues(alpha: 0.12);
       trailing    = const Icon(Icons.cancel_rounded, color: Color(0xFFFF6B6B), size: 20);
-    } else {
+    } else if (graded) {
       borderColor = Colors.white.withValues(alpha: 0.06);
       bgColor     = Colors.transparent;
+    } else if (selected) {
+      // Tapped but the server grade hasn't arrived yet → neutral highlight.
+      borderColor = Colors.white.withValues(alpha: 0.35);
+      bgColor     = Colors.white.withValues(alpha: 0.10);
+    } else {
+      borderColor = Colors.white.withValues(alpha: 0.12);
+      bgColor     = Colors.white.withValues(alpha: 0.05);
     }
 
     return GestureDetector(
@@ -561,7 +607,7 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
               width: 28, height: 28,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: selected || (_answered && correct)
+                color: selected || correct
                     ? borderColor.withValues(alpha: 0.2)
                     : Colors.white.withValues(alpha: 0.06),
                 border: Border.all(color: borderColor),
@@ -598,7 +644,7 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _current.explanation,
+              _revealedExplanation[_currentIndex],
               style: manrope(size: 13, color: Colors.white70, height: 1.5),
             ),
           ),

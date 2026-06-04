@@ -78,4 +78,28 @@ class QuizService {
     if (resp.statusCode == 200) return QuizSubmitResult.fromJson(jsonDecode(resp.body));
     return null;
   }
+
+  /// Reveal the correct answer for ONE question, after the user commits.
+  /// Pass [selected] = null for a timed-out / skipped question.
+  static Future<QuizReveal?> revealAnswer({
+    required String quizId,
+    required int questionIndex,
+    int? selected,
+  }) async {
+    final token = await ApiService.getToken();
+    final resp = await http.post(
+      Uri.parse('$baseUrl/quiz/$quizId/answer'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'question_index': questionIndex,
+        'selected': selected,
+      }),
+    ).timeout(const Duration(seconds: 10));
+
+    if (resp.statusCode == 200) return QuizReveal.fromJson(jsonDecode(resp.body));
+    return null;
+  }
 }

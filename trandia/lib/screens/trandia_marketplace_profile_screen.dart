@@ -13,6 +13,7 @@
 //         eligibility pills) → Book / Message → Pricing list →
 //         Creator Stats grid → Recent Work grid.
 
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -148,6 +149,20 @@ class TrpTheme {
   /// Overlay used on thumbnail badges (matches the JSX rgba logic).
   Color get thumbOverlay =>
       dark ? const Color(0x8C000000) : const Color(0xB3FFFFFF);
+
+  // ── Glass tokens ──────────────────────────────────────────────────────────
+  Color get glassFill =>
+      dark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.55);
+  Color get glassFillStrong =>
+      dark ? Colors.white.withValues(alpha: 0.10) : Colors.white.withValues(alpha: 0.72);
+  Color get glassBorder =>
+      dark ? Colors.white.withValues(alpha: 0.16) : Colors.white.withValues(alpha: 0.90);
+  Color get glassBorderSoft =>
+      dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06);
+  Color get glassHighlight =>
+      dark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.55);
+  Color get glassShadow =>
+      dark ? Colors.black.withValues(alpha: 0.55) : Colors.black.withValues(alpha: 0.08);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,24 +194,29 @@ class TrandiaProfileScreen extends StatelessWidget {
           fontFamily: 'Inter',
           decoration: TextDecoration.none,
         ),
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.only(top: 12, bottom: 40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _TopBar(t: t),
-                _StatsCard(t: t),
-                _Hero(t: t),
-                _ActionRow(t: t),
-                _PricingCard(t: t),
-                _StatsGrid(t: t),
-                _RecentWork(t: t),
-              ],
+        child: Stack(
+          children: [
+            Positioned.fill(child: _AuroraBg(dark: dark)),
+            SafeArea(
+              bottom: false,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.only(top: 12, bottom: 40),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _TopBar(t: t),
+                    _StatsCard(t: t),
+                    _Hero(t: t),
+                    _ActionRow(t: t),
+                    _PricingCard(t: t),
+                    _StatsGrid(t: t),
+                    _RecentWork(t: t),
+                  ],
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -212,7 +232,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+      padding: const EdgeInsets.fromLTRB(18, 6, 18, 16),
       child: Row(
         children: [
           GestureDetector(
@@ -222,18 +242,35 @@ class _TopBar extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Container(
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: t.surf,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: t.line, width: 1),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [t.glassFillStrong, t.glassFill],
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: t.glassBorder, width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: t.glassShadow,
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Text('trandia.in/marketplace',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w700, color: t.fg,
+                          fontFamily: 'monospace', letterSpacing: -0.12)),
+                ),
               ),
-              child: Text('trandia.in/marketplace',
-                  style: TextStyle(
-                      fontSize: 12.5, fontWeight: FontWeight.w500, color: t.sub,
-                      fontFamily: 'monospace', letterSpacing: -0.12)),
             ),
           ),
           const SizedBox(width: 10),
@@ -247,21 +284,38 @@ class _TopBar extends StatelessWidget {
 }
 
 class _IconBtn extends StatelessWidget {
-  const _IconBtn({required this.t, required this.child, this.size = 36});
+  const _IconBtn({required this.t, required this.child, this.size = 40});
   final TrpTheme t;
   final Widget child;
   final double size;
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: t.line, width: 1),
+    return ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [t.glassFillStrong, t.glassFill],
+            ),
+            border: Border.all(color: t.glassBorder, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: t.glassShadow,
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: child,
+        ),
       ),
-      alignment: Alignment.center,
-      child: child,
     );
   }
 }
@@ -280,24 +334,41 @@ class _StatsCard extends StatelessWidget {
       ['1M+', 'MIN VIEWS'],
     ];
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
-        decoration: BoxDecoration(
-          color: t.surf,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: t.line, width: 1),
-        ),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (int i = 0; i < items.length; i++) ...[
-                if (i > 0)
-                  Container(width: 1, color: t.line, margin: const EdgeInsets.symmetric(vertical: 4)),
-                Expanded(child: _statCol(items[i][0], items[i][1])),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [t.glassFillStrong, t.glassFill],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: t.glassBorder, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: t.glassShadow,
+                  blurRadius: 22,
+                  offset: const Offset(0, 10),
+                ),
               ],
-            ],
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int i = 0; i < items.length; i++) ...[
+                    if (i > 0)
+                      Container(width: 1, color: t.glassBorderSoft, margin: const EdgeInsets.symmetric(vertical: 4)),
+                    Expanded(child: _statCol(items[i][0], items[i][1])),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -311,11 +382,11 @@ class _StatsCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(v,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.66, height: 1)),
+              style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.7, height: 1)),
           const SizedBox(height: 8),
           Text(l,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: t.sub, letterSpacing: 1.33)),
+              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: t.sub, letterSpacing: 1.33)),
         ],
       ),
     );
@@ -331,64 +402,85 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
-        decoration: BoxDecoration(
-          color: t.surf,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: t.line, width: 1),
-        ),
-        child: Column(
-          children: [
-            // avatar with dashed ring
-            _DashedRing(
-              size: 84,
-              color: t.line,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: t.dim,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: t.line, width: 1),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(22, 26, 22, 24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [t.glassFillStrong, t.glassFill],
+              ),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: t.glassBorder, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: t.glassShadow,
+                  blurRadius: 26,
+                  offset: const Offset(0, 12),
                 ),
-                alignment: Alignment.center,
-                child: Text('AS',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: t.sub, letterSpacing: -0.44)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Aryan Sharma',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.55, height: 1)),
-                const SizedBox(width: 8),
-                _Verified(s: 16, t: t),
               ],
             ),
-            const SizedBox(height: 12),
-            _Pill(t: t, dot: true, child: Text('Comedy Creator    ·    Hindi',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: t.fg, letterSpacing: -0.05))),
-            const SizedBox(height: 16),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 290),
-              child: Text(
-                'Verified Trandia creator. 5+ years making content that converts. Available for brand collabs — DM for custom packages.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13.5, height: 1.55, color: t.sub, fontWeight: FontWeight.w400, letterSpacing: -0.05),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
+            child: Column(
               children: [
-                _EligibilityPill(label: '5K+ Followers', t: t),
-                _EligibilityPill(label: '1M+ Views', t: t),
+                // avatar with dashed ring
+                _DashedRing(
+                  size: 92,
+                  color: t.glassBorder,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [t.glassHighlight, t.glassFill],
+                      ),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: t.glassBorder, width: 1),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text('AS',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.44)),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Aryan Sharma',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.6, height: 1)),
+                    const SizedBox(width: 8),
+                    _Verified(s: 17, t: t),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _Pill(t: t, dot: true, child: Text('Comedy Creator    ·    Hindi',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: t.fg, letterSpacing: -0.05))),
+                const SizedBox(height: 18),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 290),
+                  child: Text(
+                    'Verified Trandia creator. 5+ years making content that converts. Available for brand collabs — DM for custom packages.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13.5, height: 1.55, color: t.sub, fontWeight: FontWeight.w500, letterSpacing: -0.05),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    _EligibilityPill(label: '5K+ Followers', t: t),
+                    _EligibilityPill(label: '1M+ Views', t: t),
+                  ],
+                ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -404,37 +496,58 @@ class _ActionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
       child: Row(
         children: [
           Expanded(
             flex: 62,
             child: Container(
-              height: 48,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: t.ctaBg, borderRadius: BorderRadius.circular(999)),
-              child: Text('Book Creator',
-                  style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: t.ctaFg, letterSpacing: -0.14)),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 38,
-            child: Container(
-              height: 48,
+              height: 52,
               alignment: Alignment.center,
               decoration: BoxDecoration(
+                color: t.ctaBg,
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: t.line, width: 1),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.chat_bubble_outline_rounded, size: 15, color: t.fg),
-                  const SizedBox(width: 7),
-                  Text('Message',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: t.fg, letterSpacing: -0.14)),
+                boxShadow: [
+                  BoxShadow(
+                    color: t.glassShadow,
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
                 ],
+              ),
+              child: Text('Book Creator',
+                  style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: t.ctaFg, letterSpacing: -0.14)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 38,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  height: 52,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [t.glassFillStrong, t.glassFill],
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: t.glassBorder, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.chat_bubble_outline_rounded, size: 16, color: t.fg),
+                      const SizedBox(width: 8),
+                      Text('Message',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.14)),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -458,45 +571,62 @@ class _PricingCard extends StatelessWidget {
       ['Reel Integration', '₹25,000'],
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: t.surf,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: t.line, width: 1),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text('Pricing',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.14)),
-                  Text('3 packages',
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: t.sub, letterSpacing: -0.05)),
-                ],
+      padding: const EdgeInsets.fromLTRB(18, 22, 18, 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [t.glassFillStrong, t.glassFill],
               ),
-            ),
-            for (final r in rows)
-              Container(
-                decoration: BoxDecoration(border: Border(top: BorderSide(color: t.line, width: 1))),
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(r[0],
-                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w400, color: t.fg, letterSpacing: -0.05)),
-                    Text(r[1],
-                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.14)),
-                  ],
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: t.glassBorder, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: t.glassShadow,
+                  blurRadius: 22,
+                  offset: const Offset(0, 10),
                 ),
-              ),
-          ],
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text('Pricing',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.14)),
+                      Text('3 packages',
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: t.sub, letterSpacing: -0.05)),
+                    ],
+                  ),
+                ),
+                for (final r in rows)
+                  Container(
+                    decoration: BoxDecoration(border: Border(top: BorderSide(color: t.glassBorderSoft, width: 1))),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(r[0],
+                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.05)),
+                        Text(r[1],
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.14)),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -512,24 +642,24 @@ class _StatsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+      padding: const EdgeInsets.fromLTRB(18, 26, 18, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 14),
             child: Text('Creator Stats',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.14)),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.14)),
           ),
           Row(children: [
             Expanded(child: _StatTile(value: '125K', label: 'FOLLOWERS', t: t)),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(child: _StatTile(value: '2.3M', label: 'BEST VIEWS', t: t)),
           ]),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(children: [
             Expanded(child: _StatTile(value: '4.9★', label: 'RATING', t: t)),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(child: _StatTile(value: '48', label: 'BRAND DEALS', t: t)),
           ]),
         ],
@@ -544,22 +674,39 @@ class _StatTile extends StatelessWidget {
   final TrpTheme t;
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      decoration: BoxDecoration(
-        color: t.surf,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: t.line, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.66, height: 1)),
-          const SizedBox(height: 8),
-          Text(label,
-              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: t.sub, letterSpacing: 1.33)),
-        ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [t.glassFillStrong, t.glassFill],
+            ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: t.glassBorder, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: t.glassShadow,
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value,
+                  style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.7, height: 1)),
+              const SizedBox(height: 8),
+              Text(label,
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: t.sub, letterSpacing: 1.33)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -579,21 +726,21 @@ class _RecentWork extends StatelessWidget {
       {'bottomLeft': true}, {}, {},
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+      padding: const EdgeInsets.fromLTRB(18, 26, 18, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 14),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text('Recent Work',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.14)),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.14)),
                 Text('12',
-                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: t.sub, letterSpacing: -0.05)),
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: t.sub, letterSpacing: -0.05)),
               ],
             ),
           ),
@@ -603,8 +750,8 @@ class _RecentWork extends StatelessWidget {
             itemCount: tiles.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
-              mainAxisSpacing: 6,
-              crossAxisSpacing: 6,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
               childAspectRatio: 1,
             ),
             itemBuilder: (_, i) => _Thumb(
@@ -628,45 +775,56 @@ class _Thumb extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: t.dim,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: t.line, width: 1),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [t.glassHighlight, t.glassFill],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: t.glassBorder, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: t.glassShadow,
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
           Center(
             child: Opacity(
-              opacity: 0.35,
-              child: Icon(Icons.play_arrow_rounded, size: 22, color: t.fg),
+              opacity: 0.45,
+              child: Icon(Icons.play_arrow_rounded, size: 24, color: t.fg),
             ),
           ),
           if (topRight != null)
             Positioned(
-              top: 6, right: 6,
+              top: 7, right: 7,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: t.thumbOverlay,
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: t.line, width: 1),
+                  border: Border.all(color: t.glassBorderSoft, width: 1),
                 ),
                 child: Text(topRight!,
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.05)),
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.05)),
               ),
             ),
           if (bottomLeft)
             Positioned(
-              bottom: 6, left: 6,
+              bottom: 7, left: 7,
               child: Container(
-                width: 18, height: 18,
+                width: 20, height: 20,
                 decoration: BoxDecoration(
                   color: t.thumbOverlay,
                   shape: BoxShape.circle,
-                  border: Border.all(color: t.line, width: 1),
+                  border: Border.all(color: t.glassBorderSoft, width: 1),
                 ),
                 alignment: Alignment.center,
-                child: Icon(Icons.play_arrow_rounded, size: 11, color: t.fg),
+                child: Icon(Icons.play_arrow_rounded, size: 12, color: t.fg),
               ),
             ),
         ],
@@ -701,15 +859,23 @@ class _Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(color: t.tag, borderRadius: BorderRadius.circular(999)),
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [t.glassFillStrong, t.glassFill],
+        ),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: t.glassBorder, width: 1),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (dot) ...[
-            Container(width: 4, height: 4, decoration: BoxDecoration(color: t.sub, shape: BoxShape.circle)),
-            const SizedBox(width: 6),
+            Container(width: 5, height: 5, decoration: BoxDecoration(color: t.fg, shape: BoxShape.circle)),
+            const SizedBox(width: 8),
           ],
           child,
         ],
@@ -725,25 +891,29 @@ class _EligibilityPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 30,
-      padding: const EdgeInsets.fromLTRB(11, 0, 12, 0),
+      height: 34,
+      padding: const EdgeInsets.fromLTRB(12, 0, 14, 0),
       decoration: BoxDecoration(
-        color: t.tag,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [t.glassFillStrong, t.glassFill],
+        ),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: t.line, width: 1),
+        border: Border.all(color: t.glassBorder, width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 14, height: 14,
+            width: 16, height: 16,
             decoration: BoxDecoration(color: t.badgeBg, shape: BoxShape.circle),
             alignment: Alignment.center,
-            child: Icon(Icons.check_rounded, size: 9, color: t.badgeFg),
+            child: Icon(Icons.check_rounded, size: 10, color: t.badgeFg),
           ),
-          const SizedBox(width: 7),
+          const SizedBox(width: 8),
           Text(label,
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: t.fg, letterSpacing: -0.05)),
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.05)),
         ],
       ),
     );
@@ -801,4 +971,43 @@ class _DashedRingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DashedRingPainter old) => old.color != color;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AURORA BACKGROUND
+// ─────────────────────────────────────────────────────────────────────────────
+class _AuroraBg extends StatelessWidget {
+  const _AuroraBg({required this.dark});
+  final bool dark;
+  @override
+  Widget build(BuildContext context) {
+    final c1 = dark ? const Color(0x33FFFFFF) : const Color(0x22000000);
+    final c2 = dark ? const Color(0x22FFFFFF) : const Color(0x14000000);
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned(top: -120, right: -90, child: _Blob(size: 320, color: c1)),
+          Positioned(top: 240, left: -120, child: _Blob(size: 280, color: c2)),
+          Positioned(bottom: -100, right: -70, child: _Blob(size: 300, color: c2)),
+        ],
+      ),
+    );
+  }
+}
+
+class _Blob extends StatelessWidget {
+  const _Blob({required this.size, required this.color});
+  final double size;
+  final Color color;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
+      ),
+    );
+  }
 }

@@ -16,6 +16,7 @@
 //   ───────────────────────────────────────────────────
 //   Starts at  ₹15,000  ₹18,750         [20% OFF]  [Book]
 
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'trandia_marketplace_profile_screen.dart';
@@ -100,9 +101,11 @@ class _ThemeToggle extends StatelessWidget {
 // THEME — paired light & dark. Same structural roles, inverted surface.
 // ─────────────────────────────────────────────────────────────────────────────
 class TrmTheme {
+  final bool dark;
   final Color bg, surf, surf2, line, fg, sub, tag, dim;
   final Color ctaBg, ctaFg, badgeBg, badgeFg;
   const TrmTheme({
+    required this.dark,
     required this.bg,
     required this.surf,
     required this.surf2,
@@ -117,7 +120,8 @@ class TrmTheme {
     required this.badgeFg,
   });
 
-  static const dark = TrmTheme(
+  static const _darkT = TrmTheme(
+    dark: true,
     bg: Color(0xFF000000),
     surf: Color(0xFF0E0E0E),
     surf2: Color(0xFF141414),
@@ -130,7 +134,8 @@ class TrmTheme {
     badgeBg: Color(0xFFFFFFFF), badgeFg: Color(0xFF000000),
   );
 
-  static const light = TrmTheme(
+  static const _lightT = TrmTheme(
+    dark: false,
     bg: Color(0xFFFFFFFF),
     surf: Color(0xFFFAFAFA),
     surf2: Color(0xFFF2F2F2),
@@ -143,7 +148,21 @@ class TrmTheme {
     badgeBg: Color(0xFF0A0A0A), badgeFg: Color(0xFFFFFFFF),
   );
 
-  static TrmTheme of(bool dark) => dark ? TrmTheme.dark : TrmTheme.light;
+  static TrmTheme of(bool dark) => dark ? _darkT : _lightT;
+
+  // ── Glass tokens (translucent overlays on top of the aurora bg) ───────────
+  Color get glassFill =>
+      dark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.55);
+  Color get glassFillStrong =>
+      dark ? Colors.white.withValues(alpha: 0.10) : Colors.white.withValues(alpha: 0.72);
+  Color get glassBorder =>
+      dark ? Colors.white.withValues(alpha: 0.16) : Colors.white.withValues(alpha: 0.90);
+  Color get glassBorderSoft =>
+      dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06);
+  Color get glassHighlight =>
+      dark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.55);
+  Color get glassShadow =>
+      dark ? Colors.black.withValues(alpha: 0.55) : Colors.black.withValues(alpha: 0.08);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,47 +303,51 @@ class TrandiaMarketplaceScreen extends StatelessWidget {
           fontFamily: 'Inter',
           decoration: TextDecoration.none,
         ),
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.only(top: 12, bottom: 48),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _TopBar(t: t),
-                _SearchBar(t: t),
-                _Filters(t: t),
-                _SortRow(t: t),
-                const SizedBox(height: 14),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    children: [
-                      for (final c in _creators) ...[
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => _openCreatorProfile(context),
-                          child: _CreatorCard(c: c, t: t),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Center(
-                  child: Text(
-                    '— END OF RESULTS —',
-                    style: TextStyle(
-                      fontSize: 11, color: t.sub, fontWeight: FontWeight.w500,
-                      letterSpacing: 0.9,
+        child: Stack(
+          children: [
+            Positioned.fill(child: _AuroraBg(dark: dark)),
+            SafeArea(
+              bottom: false,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.only(top: 12, bottom: 48),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _TopBar(t: t),
+                    _SearchBar(t: t),
+                    _Filters(t: t),
+                    _SortRow(t: t),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      child: Column(
+                        children: [
+                          for (final c in _creators) ...[
+                            _TapScale(
+                              onTap: () => _openCreatorProfile(context),
+                              child: _CreatorCard(c: c, t: t),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Text(
+                        '— END OF RESULTS —',
+                        style: TextStyle(
+                          fontSize: 11, color: t.sub, fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -340,7 +363,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
+      padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
       child: Row(
         children: [
           GestureDetector(
@@ -353,12 +376,12 @@ class _TopBar extends StatelessWidget {
               children: [
                 Text('Marketplace',
                     style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600, color: t.fg,
-                        letterSpacing: -0.2, height: 1)),
+                        fontSize: 16, fontWeight: FontWeight.w800, color: t.fg,
+                        letterSpacing: -0.25, height: 1)),
                 const SizedBox(height: 5),
                 Text('247 creators available',
                     style: TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w500, color: t.sub,
+                        fontSize: 11, fontWeight: FontWeight.w600, color: t.sub,
                         letterSpacing: -0.05, height: 1)),
               ],
             ),
@@ -371,21 +394,38 @@ class _TopBar extends StatelessWidget {
 }
 
 class _IconBtn extends StatelessWidget {
-  const _IconBtn({required this.t, required this.child, this.size = 36});
+  const _IconBtn({required this.t, required this.child, this.size = 40});
   final TrmTheme t;
   final Widget child;
   final double size;
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: t.line, width: 1),
+    return ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [t.glassFillStrong, t.glassFill],
+            ),
+            border: Border.all(color: t.glassBorder, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: t.glassShadow,
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: child,
+        ),
       ),
-      alignment: Alignment.center,
-      child: child,
     );
   }
 }
@@ -399,38 +439,55 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: t.surf,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: t.line, width: 1),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.search_rounded, size: 18, color: t.sub),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text('Search by name, category, niche…',
-                  style: TextStyle(fontSize: 13.5, color: t.sub, letterSpacing: -0.05)),
-            ),
-            Container(width: 1, height: 18, color: t.line, margin: const EdgeInsets.only(right: 8)),
-            Container(
-              height: 18,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: t.tag,
-                borderRadius: BorderRadius.circular(4),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: 50,
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [t.glassFillStrong, t.glassFill],
               ),
-              child: Text('⌘K',
-                  style: TextStyle(
-                      fontSize: 10, color: t.sub, fontWeight: FontWeight.w600,
-                      letterSpacing: 0.4, fontFamily: 'monospace')),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: t.glassBorder, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: t.glassShadow,
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-          ],
+            child: Row(
+              children: [
+                Icon(Icons.search_rounded, size: 19, color: t.fg),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('Search by name, category, niche…',
+                      style: TextStyle(fontSize: 13.5, color: t.sub, fontWeight: FontWeight.w500, letterSpacing: -0.05)),
+                ),
+                Container(
+                  height: 22,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: t.glassFillStrong,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: t.glassBorderSoft, width: 1),
+                  ),
+                  child: Text('⌘K',
+                      style: TextStyle(
+                          fontSize: 10, color: t.fg, fontWeight: FontWeight.w800,
+                          letterSpacing: 0.4, fontFamily: 'monospace')),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -453,10 +510,11 @@ class _FiltersState extends State<_Filters> {
   Widget build(BuildContext context) {
     final t = widget.t;
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(top: 16),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        physics: const BouncingScrollPhysics(),
         child: Row(
           children: [
             for (int i = 0; i < _cats.length; i++) ...[
@@ -483,22 +541,52 @@ class _Chip extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
+    final inner = AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        gradient: active
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [t.glassFillStrong, t.glassFill],
+              ),
+        color: active ? t.ctaBg : null,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: active ? t.ctaBg : t.glassBorder,
+          width: 1,
+        ),
+        boxShadow: active
+            ? [
+                BoxShadow(
+                  color: t.glassShadow,
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ]
+            : null,
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w800,
+              color: active ? t.ctaFg : t.fg, letterSpacing: -0.06)),
+    );
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        height: 34,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active ? t.ctaBg : t.tag,
-          borderRadius: BorderRadius.circular(999),
-          border: active ? null : Border.all(color: t.line, width: 1),
-        ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 12.5, fontWeight: FontWeight.w500,
-                color: active ? t.ctaFg : t.fg, letterSpacing: -0.06)),
-      ),
+      child: active
+          ? inner
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: inner,
+              ),
+            ),
     );
   }
 }
@@ -512,24 +600,24 @@ class _SortRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(children: [
             Text('247',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.05)),
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.05)),
             const SizedBox(width: 5),
             Text('results',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: t.sub, letterSpacing: -0.05)),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: t.sub, letterSpacing: -0.05)),
           ]),
           Row(children: [
             Text('Sort: ',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: t.fg, letterSpacing: -0.05)),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: t.sub, letterSpacing: -0.05)),
             Text('Trending',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.05)),
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.05)),
             const SizedBox(width: 3),
-            Icon(Icons.keyboard_arrow_down_rounded, size: 15, color: t.fg),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: t.fg),
           ]),
         ],
       ),
@@ -547,17 +635,32 @@ class _CreatorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(26),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        child: Container(
       decoration: BoxDecoration(
-        color: t.surf,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: t.line, width: 1),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [t.glassFillStrong, t.glassFill],
+        ),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: t.glassBorder, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: t.glassShadow,
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -580,8 +683,8 @@ class _CreatorCard extends StatelessWidget {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                          fontSize: 15, fontWeight: FontWeight.w600,
-                                          color: t.fg, letterSpacing: -0.22, height: 1.1)),
+                                          fontSize: 16, fontWeight: FontWeight.w800,
+                                          color: t.fg, letterSpacing: -0.25, height: 1.1)),
                                 ),
                                 if (c.verified) ...[
                                   const SizedBox(width: 6),
@@ -596,10 +699,10 @@ class _CreatorCard extends StatelessWidget {
                             const SizedBox(height: 6),
                             Row(children: [
                               Text(c.category,
-                                  style: TextStyle(fontSize: 12, color: t.sub, fontWeight: FontWeight.w500, letterSpacing: -0.05)),
+                                  style: TextStyle(fontSize: 12, color: t.sub, fontWeight: FontWeight.w700, letterSpacing: -0.05)),
                               _Dot(t: t),
                               Text(c.language,
-                                  style: TextStyle(fontSize: 12, color: t.sub, fontWeight: FontWeight.w500, letterSpacing: -0.05)),
+                                  style: TextStyle(fontSize: 12, color: t.sub, fontWeight: FontWeight.w700, letterSpacing: -0.05)),
                             ]),
                           ],
                         ),
@@ -607,13 +710,18 @@ class _CreatorCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      width: 32, height: 32,
+                      width: 34, height: 34,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: t.line, width: 1),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [t.glassFillStrong, t.glassFill],
+                        ),
+                        border: Border.all(color: t.glassBorder, width: 1),
                       ),
                       alignment: Alignment.center,
-                      child: Icon(Icons.chevron_right_rounded, size: 16, color: t.fg),
+                      child: Icon(Icons.chevron_right_rounded, size: 17, color: t.fg),
                     ),
                   ],
                 ),
@@ -628,15 +736,15 @@ class _CreatorCard extends StatelessWidget {
                     _statBit('${c.followers} ', 'Followers', t),
                     _Dot(t: t),
                     Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.star_rounded, size: 11, color: t.fg),
+                      Icon(Icons.star_rounded, size: 12, color: t.fg),
                       const SizedBox(width: 3),
-                      Text(c.rating, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: t.fg)),
+                      Text(c.rating, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: t.fg)),
                       const SizedBox(width: 3),
-                      Text('(${c.reviews})', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: t.sub)),
+                      Text('(${c.reviews})', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: t.sub)),
                     ]),
                     _Dot(t: t),
                     Text('Replies in ${c.reply}',
-                        style: TextStyle(fontSize: 11.5, color: t.sub, fontWeight: FontWeight.w500, letterSpacing: -0.05)),
+                        style: TextStyle(fontSize: 11.5, color: t.sub, fontWeight: FontWeight.w600, letterSpacing: -0.05)),
                   ],
                 ),
 
@@ -650,18 +758,19 @@ class _CreatorCard extends StatelessWidget {
                     children: [
                       Text('WORKED WITH',
                           style: TextStyle(
-                              fontSize: 10, color: t.sub, fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+                              fontSize: 10, color: t.sub, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
                       for (final b in c.brands!)
                         Container(
-                          height: 22,
-                          padding: const EdgeInsets.symmetric(horizontal: 9),
+                          height: 24,
+                          padding: const EdgeInsets.symmetric(horizontal: 11),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: t.tag,
-                            borderRadius: BorderRadius.circular(6),
+                            color: t.glassFillStrong,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: t.glassBorderSoft, width: 1),
                           ),
                           child: Text(b,
-                              style: TextStyle(fontSize: 11, color: t.fg, fontWeight: FontWeight.w500, letterSpacing: -0.05)),
+                              style: TextStyle(fontSize: 11, color: t.fg, fontWeight: FontWeight.w700, letterSpacing: -0.05)),
                         ),
                     ],
                   ),
@@ -674,9 +783,9 @@ class _CreatorCard extends StatelessWidget {
           // divider + footer
           Container(
             decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: t.line, width: 1)),
+              border: Border(top: BorderSide(color: t.glassBorderSoft, width: 1)),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -684,16 +793,16 @@ class _CreatorCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('STARTS AT',
-                        style: TextStyle(fontSize: 10, color: t.sub, fontWeight: FontWeight.w600, letterSpacing: 1.0, height: 1)),
-                    const SizedBox(height: 5),
+                        style: TextStyle(fontSize: 10, color: t.sub, fontWeight: FontWeight.w800, letterSpacing: 1.2, height: 1)),
+                    const SizedBox(height: 6),
                     Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
                       Text(c.price,
-                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.42, height: 1)),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.45, height: 1)),
                       if (c.priceWas != null) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 7),
                         Text(c.priceWas!,
                             style: TextStyle(
-                                fontSize: 12, color: t.sub, fontWeight: FontWeight.w500,
+                                fontSize: 12, color: t.sub, fontWeight: FontWeight.w600,
                                 decoration: TextDecoration.lineThrough,
                                 decorationColor: t.sub)),
                       ],
@@ -706,21 +815,30 @@ class _CreatorCard extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
                   Container(
-                    height: 34,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: t.ctaBg,
                       borderRadius: BorderRadius.circular(999),
+                      boxShadow: [
+                        BoxShadow(
+                          color: t.glassShadow,
+                          blurRadius: 14,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
                     child: Text('Book',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: t.ctaFg, letterSpacing: -0.12)),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: t.ctaFg, letterSpacing: -0.12)),
                   ),
                 ]),
               ],
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }
@@ -737,7 +855,7 @@ class _CreatorCard extends StatelessWidget {
 // SMALL BITS
 // ─────────────────────────────────────────────────────────────────────────────
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.initials, required this.t, this.size = 52});
+  const _Avatar({required this.initials, required this.t, this.size = 54});
   final String initials;
   final TrmTheme t;
   final double size;
@@ -747,13 +865,24 @@ class _Avatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: t.surf2,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: t.line, width: 1),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [t.glassHighlight, t.glassFill],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: t.glassBorder, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: t.glassShadow,
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       alignment: Alignment.center,
       child: Text(initials,
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.34)),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.34)),
     );
   }
 }
@@ -800,42 +929,123 @@ class _OfferPill extends StatelessWidget {
   Widget build(BuildContext context) {
     if (kind == TrmTagKind.neu) {
       return Container(
-        height: 22,
-        padding: const EdgeInsets.symmetric(horizontal: 9),
+        height: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         alignment: Alignment.center,
         decoration: BoxDecoration(color: t.badgeBg, borderRadius: BorderRadius.circular(999)),
         child: Text(label,
-            style: TextStyle(fontSize: 10, color: t.badgeFg, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
+            style: TextStyle(fontSize: 10, color: t.badgeFg, fontWeight: FontWeight.w800, letterSpacing: 0.7)),
       );
     }
     if (kind == TrmTagKind.hot) {
       return Container(
-        height: 22,
-        padding: const EdgeInsets.fromLTRB(7, 0, 9, 0),
+        height: 24,
+        padding: const EdgeInsets.fromLTRB(8, 0, 11, 0),
         decoration: BoxDecoration(
-          color: t.tag,
+          color: t.glassFillStrong,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: t.line, width: 1),
+          border: Border.all(color: t.glassBorder, width: 1),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.bolt_rounded, size: 11, color: t.fg),
+          Icon(Icons.bolt_rounded, size: 12, color: t.fg),
           const SizedBox(width: 3),
           Text(label,
-              style: TextStyle(fontSize: 10.5, color: t.fg, fontWeight: FontWeight.w600, letterSpacing: 0.4)),
+              style: TextStyle(fontSize: 10.5, color: t.fg, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
         ]),
       );
     }
     // offer (outline)
     return Container(
-      height: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 9),
+      height: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: t.fg, width: 1),
+        border: Border.all(color: t.fg, width: 1.2),
       ),
       child: Text(label,
-          style: TextStyle(fontSize: 10.5, color: t.fg, fontWeight: FontWeight.w600, letterSpacing: 0.4)),
+          style: TextStyle(fontSize: 10.5, color: t.fg, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AURORA BACKGROUND — soft blurred blobs so the glass blur has something to read
+// ─────────────────────────────────────────────────────────────────────────────
+class _AuroraBg extends StatelessWidget {
+  const _AuroraBg({required this.dark});
+  final bool dark;
+  @override
+  Widget build(BuildContext context) {
+    final c1 = dark ? const Color(0x33FFFFFF) : const Color(0x22000000);
+    final c2 = dark ? const Color(0x22FFFFFF) : const Color(0x14000000);
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned(
+            top: -120, right: -90,
+            child: _Blob(size: 320, color: c1),
+          ),
+          Positioned(
+            top: 220, left: -110,
+            child: _Blob(size: 260, color: c2),
+          ),
+          Positioned(
+            bottom: -90, right: -60,
+            child: _Blob(size: 280, color: c2),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Blob extends StatelessWidget {
+  const _Blob({required this.size, required this.color});
+  final double size;
+  final Color color;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [color, color.withValues(alpha: 0)],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAP SCALE — tiny micro-interaction for premium feel
+// ─────────────────────────────────────────────────────────────────────────────
+class _TapScale extends StatefulWidget {
+  const _TapScale({required this.child, required this.onTap});
+  final Widget child;
+  final VoidCallback onTap;
+  @override
+  State<_TapScale> createState() => _TapScaleState();
+}
+
+class _TapScaleState extends State<_TapScale> {
+  bool _down = false;
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _down = true),
+      onTapCancel: () => setState(() => _down = false),
+      onTapUp: (_) => setState(() => _down = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.98 : 1.0,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
     );
   }
 }

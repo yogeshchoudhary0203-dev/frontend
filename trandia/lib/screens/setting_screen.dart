@@ -13,6 +13,7 @@ import 'notification_settings_screen.dart';
 import 'saved_posts_screen.dart';
 import 'app_lock_screen.dart';
 import '../services/app_lock_service.dart';
+import 'trandia_marketplace_screen.dart';
 
 // Search item model ────────────────────────────────────────────────────────────
 class _SearchItem {
@@ -172,6 +173,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _openEditProfile(BuildContext ctx) {
     _openScreenSmoothly(ctx, EditProfileScreen(dark: widget.dark))
         .then((_) => _loadProfile());
+  }
+
+  bool get _isMarketplaceEligible =>
+      accountType == 'Business' || accountType == 'Professional';
+
+  void _openMarketplace(BuildContext ctx) {
+    _openScreenSmoothly(ctx, TrandiaMarketplaceScreen(dark: widget.dark));
   }
 
   void _openDummy(BuildContext ctx) {
@@ -572,6 +580,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: 'Switch to personal, private, creator, business, or professional account',
         onTap: () => _openAccountTypeSelector(ctx),
       ),
+      if (_isMarketplaceEligible)
+        _SearchItem(
+          icon: Icons.storefront_outlined,
+          title: 'Trandia Marketplace',
+          subtitle: 'Discover & connect with creators',
+          onTap: () => _openMarketplace(ctx),
+        ),
       _SearchItem(
         icon: Icons.lock_outline_rounded,
         title: 'Privacy',
@@ -734,6 +749,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '${accountType.tr(context)} ${'Account'.tr(context)}',
               ),
             ),
+            if (_isMarketplaceEligible)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openMarketplace(context),
+                child: _SettingRow(
+                  dark: dark,
+                  icon: Icons.storefront_outlined,
+                  title: 'Trandia Marketplace',
+                  subtitle: 'Discover & connect with creators',
+                ),
+              ),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => _openDummy(context),

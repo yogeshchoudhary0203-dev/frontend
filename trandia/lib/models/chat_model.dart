@@ -19,6 +19,7 @@ class UserProfile {
   final bool locationPublic;
   final double? locationLat;
   final double? locationLng;
+  final String accountType;
 
   UserProfile({
     required this.id,
@@ -41,6 +42,7 @@ class UserProfile {
     this.locationPublic = true,
     this.locationLat,
     this.locationLng,
+    this.accountType = 'personal',
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -65,6 +67,9 @@ class UserProfile {
       locationPublic: json['location_public'] as bool? ?? true,
       locationLat: (json['location_lat'] as num?)?.toDouble(),
       locationLng: (json['location_lng'] as num?)?.toDouble(),
+      accountType: (json['account_type'] as String?)?.trim().isNotEmpty == true
+          ? (json['account_type'] as String)
+          : 'personal',
     );
   }
 
@@ -90,6 +95,7 @@ class UserProfile {
       'location_public': locationPublic,
       'location_lat': locationLat,
       'location_lng': locationLng,
+      'account_type': accountType,
     };
   }
 }

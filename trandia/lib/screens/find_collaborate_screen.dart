@@ -16,9 +16,12 @@
 //         [Niche] [125K Followers] [2.3M Views]
 //   [ View Profile ]  [ Send Collab Request ]
 
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../models/chat_model.dart';
+import '../services/user_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUNNABLE DEMO — light + dark in one file. Tap the pill to switch themes.
@@ -189,48 +192,124 @@ class _Blob {
 // DATA
 // ─────────────────────────────────────────────────────────────────────────────
 class FcCreator {
-  final String name, niche, language, city, bio, followers, views;
+  final String id, name, niche, language, city, bio, followers, following;
   final bool verified;
+  final bool isFollowing;
   const FcCreator({
+    this.id = '',
     required this.name,
     required this.niche,
     required this.language,
     required this.city,
     required this.bio,
     required this.followers,
-    required this.views,
+    required this.following,
     this.verified = false,
+    this.isFollowing = false,
   });
+
+  /// Builds a display card model from a real backend [UserProfile].
+  factory FcCreator.fromProfile(UserProfile u) {
+    return FcCreator(
+      id: u.id,
+      name: u.name.isNotEmpty ? u.name : '@${u.username}',
+      niche: _accountTypeLabel(u.accountType),
+      language: '',
+      city: (u.locationCity ?? '').trim(),
+      bio: (u.bio ?? '').trim().isNotEmpty
+          ? u.bio!.trim()
+          : 'Open to collaborations',
+      followers: _compactCount(u.followersCount),
+      following: _compactCount(u.followingCount),
+      verified: u.followersCount >= 50000,
+      isFollowing: u.isFollowing,
+    );
+  }
 }
 
-const _creators = <FcCreator>[
-  FcCreator(name: 'Aryan Sharma', verified: true, niche: 'Comedy', language: 'Hindi', city: 'Mumbai, India',
-      bio: 'Comedy creator with 1M+ views. Let’s create something epic.', followers: '125K', views: '2.3M'),
-  FcCreator(name: 'Isha Verma', verified: true, niche: 'Lifestyle', language: 'Hindi', city: 'Delhi, India',
-      bio: 'Lifestyle & fashion creator. Open to brand collabs.', followers: '98K', views: '1.8M'),
-  FcCreator(name: 'Rohan Malhotra', verified: true, niche: 'Fitness', language: 'Hindi', city: 'Bangalore, India',
-      bio: 'Helping you become 1% better every day.', followers: '210K', views: '3.6M'),
-  FcCreator(name: 'Anjali Mehta', verified: true, niche: 'Food', language: 'Hindi', city: 'Pune, India',
-      bio: 'Food lover & recipe creator. Let’s cook up content!', followers: '76K', views: '1.2M'),
-  FcCreator(name: 'Kabir Singh', verified: true, niche: 'Travel', language: 'Hindi', city: 'Jaipur, India',
-      bio: 'Exploring the world and sharing real stories.', followers: '132K', views: '2.7M'),
-  FcCreator(name: 'Meera Nair', verified: false, niche: 'Tech', language: 'English', city: 'Kochi, India',
-      bio: 'Breaking down gadgets & apps in plain language.', followers: '54K', views: '900K'),
-];
+/// Human label for an account_type value.
+String _accountTypeLabel(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'business':
+      return 'Business';
+    case 'professional':
+      return 'Professional';
+    case 'creator':
+    default:
+      return 'Creator';
+  }
+}
 
-const _filters = ['All Niches', 'Followers', 'Views', 'Language', 'Sort'];
+/// 1500 → "1.5K", 1_200_000 → "1.2M".
+String _compactCount(int n) {
+  if (n >= 1000000) {
+    final v = (n / 1000000);
+    return '${v.toStringAsFixed(v >= 10 ? 0 : 1)}M';
+  }
+  if (n >= 1000) {
+    final v = (n / 1000);
+    return '${v.toStringAsFixed(v >= 10 ? 0 : 1)}K';
+  }
+  return '$n';
+}
+
+const _filters = ['All Niches', 'Followers', 'Following', 'Verified', 'Sort'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
-class FindCollaborateScreen extends StatelessWidget {
+class FindCollaborateScreen extends StatefulWidget {
   const FindCollaborateScreen({super.key, this.dark = true});
 
   /// Theme: true = dark, false = light.
   final bool dark;
 
   @override
+  State<FindCollaborateScreen> createState() => _FindCollaborateScreenState();
+}
+
+class _FindCollaborateScreenState extends State<FindCollaborateScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  Timer? _debounce;
+
+  List<FcCreator> _results = [];
+  bool _loading = true;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch('');
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _query = value;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      _fetch(value);
+    });
+  }
+
+  Future<void> _fetch(String query) async {
+    if (mounted) setState(() => _loading = true);
+    final profiles = await UserService.searchCollaborators(query);
+    if (!mounted) return;
+    setState(() {
+      _results = profiles.map(FcCreator.fromProfile).toList();
+      _loading = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final dark = widget.dark;
     final t = FcTheme.of(dark);
 
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
@@ -254,24 +333,81 @@ class FindCollaborateScreen extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.only(top: 6, bottom: 28),
                 children: [
-                  _UrlBar(t: t),
+                  _UrlBar(t: t, onBack: () => Navigator.maybePop(context)),
                   _Header(t: t),
-                  _SearchRow(t: t),
+                  _SearchRow(
+                    t: t,
+                    controller: _searchCtrl,
+                    onChanged: _onSearchChanged,
+                  ),
                   const SizedBox(height: 14),
                   _FilterChips(t: t),
                   const SizedBox(height: 16),
-                  for (int i = 0; i < _creators.length; i++)
+                  if (_loading)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      child: _CreatorCard(c: _creators[i], i: i, t: t),
+                      padding: const EdgeInsets.only(top: 48),
+                      child: Center(
+                        child: SizedBox(
+                          width: 26, height: 26,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            valueColor: AlwaysStoppedAnimation<Color>(t.fg),
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (_results.isEmpty)
+                    _EmptyState(t: t, query: _query)
+                  else
+                    for (int i = 0; i < _results.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: _CreatorCard(c: _results[i], i: i, t: t),
+                      ),
+                  if (!_loading) ...[
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                      child: _CollabBanner(t: t),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                    child: _CollabBanner(t: t),
-                  ),
+                  ],
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMPTY STATE
+// ─────────────────────────────────────────────────────────────────────────────
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.t, required this.query});
+  final FcTheme t;
+  final String query;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+      child: Column(
+        children: [
+          Icon(Icons.groups_outlined, size: 40, color: t.sub),
+          const SizedBox(height: 14),
+          Text(
+            query.trim().isEmpty
+                ? 'No collaborators yet'
+                : 'No creators found for “${query.trim()}”',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: t.fg, letterSpacing: -0.2),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Only creator, business & professional accounts appear here.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: t.sub, letterSpacing: -0.05),
           ),
         ],
       ),
@@ -457,15 +593,20 @@ class _TinyPill extends StatelessWidget {
 // SECTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 class _UrlBar extends StatelessWidget {
-  const _UrlBar({required this.t});
+  const _UrlBar({required this.t, this.onBack});
   final FcTheme t;
+  final VoidCallback? onBack;
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
       child: Row(
         children: [
-          _GlassCircleBtn(t: t, icon: Icons.arrow_back_ios_new_rounded),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onBack,
+            child: _GlassCircleBtn(t: t, icon: Icons.arrow_back_ios_new_rounded),
+          ),
           Expanded(
             child: Center(
               child: Text('trandia.in/marketplace/collab',
@@ -504,8 +645,10 @@ class _Header extends StatelessWidget {
 }
 
 class _SearchRow extends StatelessWidget {
-  const _SearchRow({required this.t});
+  const _SearchRow({required this.t, this.controller, this.onChanged});
   final FcTheme t;
+  final TextEditingController? controller;
+  final ValueChanged<String>? onChanged;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -523,9 +666,24 @@ class _SearchRow extends StatelessWidget {
                   Icon(Icons.search_rounded, size: 19, color: t.sub),
                   const SizedBox(width: 11),
                   Expanded(
-                    child: Text('Search creators, niches or keywords…',
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: t.sub, letterSpacing: -0.1)),
+                    child: TextField(
+                      controller: controller,
+                      onChanged: onChanged,
+                      textInputAction: TextInputAction.search,
+                      cursorColor: t.fg,
+                      style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w500, color: t.fg,
+                          fontFamily: 'Manrope', letterSpacing: -0.1),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        hintText: 'Search creators, niches or keywords…',
+                        hintStyle: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w500, color: t.sub,
+                            fontFamily: 'Manrope', letterSpacing: -0.1),
+                      ),
+                    ),
                   ),
                 ]),
               ),
@@ -641,13 +799,15 @@ class _CreatorCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Row(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.place_outlined, size: 12, color: t.sub),
-                          const SizedBox(width: 3),
-                          Text(c.city,
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.sub, letterSpacing: -0.05)),
-                        ]),
+                        if (c.city.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.place_outlined, size: 12, color: t.sub),
+                            const SizedBox(width: 3),
+                            Text(c.city,
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.sub, letterSpacing: -0.05)),
+                          ]),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 5),
@@ -662,7 +822,7 @@ class _CreatorCard extends StatelessWidget {
                       children: [
                         _TinyPill(t: t, child: Text(c.niche)),
                         _TinyPill(t: t, child: _statText('${c.followers} ', 'Followers')),
-                        _TinyPill(t: t, child: _statText('${c.views} ', 'Views')),
+                        _TinyPill(t: t, child: _statText('${c.following} ', 'Following')),
                       ],
                     ),
                   ],

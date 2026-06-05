@@ -93,6 +93,64 @@ class UserService {
     }
   }
 
+  // ── Account type ───────────────────────────────────────────────────────────
+
+  /// Persist the user's account type on the backend so it survives reinstalls
+  /// and syncs across devices. [accountType] may be any case (e.g. 'Creator');
+  /// it is lowercased before sending to match the server's stored format.
+  static Future<bool> updateAccountType(String accountType) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.put(
+        Uri.parse('$baseUrl/users/me/account-type'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'account_type': accountType.trim().toLowerCase()}),
+      ).timeout(const Duration(seconds: 10));
+      developer.log('updateAccountType "$accountType" → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        invalidateProfileCache();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      developer.log('updateAccountType error: $e');
+      return false;
+    }
+  }
+
+  // ── Collaborator discovery (Find & Collaborate) ────────────────────────────
+
+  /// Searches eligible collaborators (creator / business / professional accounts
+  /// only — personal & private are never returned). Empty [query] returns a
+  /// default eligible list.
+  static Future<List<UserProfile>> searchCollaborators(String query) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return [];
+      final encoded = Uri.encodeComponent(query.trim());
+      final uri = Uri.parse('$baseUrl/users/collaborators?q=$encoded');
+      final res = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 15));
+      developer.log('searchCollaborators "$query" → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final List decoded = jsonDecode(res.body) as List;
+        return decoded
+            .map((e) => UserProfile.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      developer.log('searchCollaborators error: $e');
+      return [];
+    }
+  }
+
   // ── In-memory profile cache ──────────────────────────────────────────────
   // Avoids a fresh Railway round-trip on every profile screen open.
   // TTL: 90 seconds — same as ApiService GET cache.

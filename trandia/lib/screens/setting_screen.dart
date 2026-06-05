@@ -85,7 +85,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadProfile() async {
     final p = await UserService.getMyProfile();
-    if (mounted && p != null) setState(() => _profile = p);
+    if (mounted && p != null) {
+      // Backend is the source of truth for account type — keep the local UI and
+      // SharedPreferences mirror in sync with whatever the server returned.
+      final backendType = _displayAccountType(p.accountType);
+      setState(() {
+        _profile = p;
+        accountType = backendType;
+        privateAccount = backendType == 'Private';
+        creatorAccount = backendType == 'Creator';
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('settings_account_type', backendType);
+      await prefs.setBool('settings_private_account', backendType == 'Private');
+      await prefs.setBool('settings_creator_account', backendType == 'Creator');
+    }
+  }
+
+  /// Maps the backend's lowercase account_type to the display label used by the
+  /// account-type selector ('creator' → 'Creator').
+  String _displayAccountType(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'private':
+        return 'Private';
+      case 'creator':
+        return 'Creator';
+      case 'business':
+        return 'Business';
+      case 'professional':
+        return 'Professional';
+      default:
+        return 'Personal';
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -152,6 +183,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         creatorAccount = isCreator;
       });
     }
+    // Persist on the backend so it survives reinstalls & syncs across devices.
+    // Fire-and-forget: the local UI is already updated; a failed sync just means
+    // the next profile refresh will reconcile.
+    UserService.updateAccountType(type);
   }
 
   Future<void> _openScreenSmoothly(BuildContext ctx, Widget screen) {

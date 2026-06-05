@@ -14,6 +14,8 @@ import 'saved_posts_screen.dart';
 import 'app_lock_screen.dart';
 import '../services/app_lock_service.dart';
 import 'trandia_marketplace_screen.dart';
+import 'trandia_marketplace_apply_screen.dart';
+import 'trandia_marketplace_dashboard_screen.dart';
 
 // Search item model ────────────────────────────────────────────────────────────
 class _SearchItem {
@@ -56,6 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String accountType = 'Personal';
   bool _appLockEnabled = false;
   int _appLockPinLength = 4;
+  bool _appliedToMarketplace = false;
   UserProfile? _profile;
 
   final TextEditingController _searchCtrl = TextEditingController();
@@ -96,6 +99,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       notifications = prefs.getBool('settings_notifications') ?? true;
       _appLockEnabled = lockEnabled;
       _appLockPinLength = lockLen;
+      _appliedToMarketplace =
+          prefs.getBool(TmApplyKeys.applied) ?? false;
       final savedType = prefs.getString('settings_account_type');
       if (savedType != null) {
         accountType = savedType;
@@ -178,8 +183,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool get _isMarketplaceEligible =>
       accountType == 'Business' || accountType == 'Professional';
 
+  bool get _isCreatorAccount => accountType == 'Creator';
+
   void _openMarketplace(BuildContext ctx) {
     _openScreenSmoothly(ctx, TrandiaMarketplaceScreen(dark: widget.dark));
+  }
+
+  Future<void> _openCreatorMarketplaceFlow(BuildContext ctx) async {
+    final prefs = await SharedPreferences.getInstance();
+    final applied = prefs.getBool(TmApplyKeys.applied) ?? false;
+    if (!ctx.mounted) return;
+    if (applied) {
+      _openScreenSmoothly(
+          ctx, TrandiaMarketplaceDashboardScreen(dark: widget.dark));
+    } else {
+      _openScreenSmoothly(
+          ctx, TrandiaMarketplaceApplyScreen(dark: widget.dark));
+    }
   }
 
   void _openDummy(BuildContext ctx) {
@@ -587,6 +607,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: 'Discover & connect with creators',
           onTap: () => _openMarketplace(ctx),
         ),
+      if (_isCreatorAccount)
+        _SearchItem(
+          icon: _appliedToMarketplace
+              ? Icons.dashboard_rounded
+              : Icons.workspace_premium_outlined,
+          title: _appliedToMarketplace
+              ? 'Marketplace Dashboard'
+              : 'Apply for Trandia Marketplace',
+          subtitle: _appliedToMarketplace
+              ? 'Requests, earnings & history'
+              : 'Get discovered by brands & earn',
+          onTap: () async {
+            await _openCreatorMarketplaceFlow(ctx);
+            _loadSettings();
+          },
+        ),
       _SearchItem(
         icon: Icons.lock_outline_rounded,
         title: 'Privacy',
@@ -758,6 +794,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.storefront_outlined,
                   title: 'Trandia Marketplace',
                   subtitle: 'Discover & connect with creators',
+                ),
+              ),
+            if (_isCreatorAccount)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () async {
+                  await _openCreatorMarketplaceFlow(context);
+                  _loadSettings();
+                },
+                child: _SettingRow(
+                  dark: dark,
+                  icon: _appliedToMarketplace
+                      ? Icons.dashboard_rounded
+                      : Icons.workspace_premium_outlined,
+                  title: _appliedToMarketplace
+                      ? 'Marketplace Dashboard'
+                      : 'Apply for Trandia Marketplace',
+                  subtitle: _appliedToMarketplace
+                      ? 'Requests, earnings & history'
+                      : 'Get discovered by brands & earn',
                 ),
               ),
             GestureDetector(

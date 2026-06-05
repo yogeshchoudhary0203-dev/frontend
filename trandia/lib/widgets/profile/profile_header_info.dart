@@ -222,6 +222,7 @@ class ProfileCreatorDashboardCard extends StatelessWidget {
   final Color fg;
   final Color sub;
   final String accountType;
+  final VoidCallback? onTap;
 
   const ProfileCreatorDashboardCard({
     super.key,
@@ -229,11 +230,12 @@ class ProfileCreatorDashboardCard extends StatelessWidget {
     required this.fg,
     required this.sub,
     required this.accountType,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GlassSurface(
+    final card = GlassSurface(
       dark: dark,
       radius: 20,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -281,5 +283,8 @@ class ProfileCreatorDashboardCard extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) return card;
+    return PressableScale(onTap: onTap, child: card);
   }
 }

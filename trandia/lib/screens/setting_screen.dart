@@ -16,6 +16,7 @@ import '../services/app_lock_service.dart';
 import 'trandia_marketplace_screen.dart';
 import 'trandia_marketplace_apply_screen.dart';
 import 'trandia_marketplace_dashboard_screen.dart';
+import 'find_collaborate_screen.dart';
 
 // Search item model ────────────────────────────────────────────────────────────
 class _SearchItem {
@@ -185,8 +186,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool get _isCreatorAccount => accountType == 'Creator';
 
+  bool get _isCollaboratorEligible =>
+      accountType == 'Creator' ||
+      accountType == 'Business' ||
+      accountType == 'Professional';
+
   void _openMarketplace(BuildContext ctx) {
     _openScreenSmoothly(ctx, TrandiaMarketplaceScreen(dark: widget.dark));
+  }
+
+  void _openFindCollaborate(BuildContext ctx) {
+    _openScreenSmoothly(ctx, FindCollaborateScreen(dark: widget.dark));
   }
 
   Future<void> _openCreatorMarketplaceFlow(BuildContext ctx) async {
@@ -623,6 +633,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _loadSettings();
           },
         ),
+      if (_isCollaboratorEligible)
+        _SearchItem(
+          icon: Icons.groups_2_outlined,
+          title: 'Find Collaborator',
+          subtitle: 'Connect & create with other creators',
+          onTap: () => _openFindCollaborate(ctx),
+        ),
       _SearchItem(
         icon: Icons.lock_outline_rounded,
         title: 'Privacy',
@@ -814,6 +831,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: _appliedToMarketplace
                       ? 'Requests, earnings & history'
                       : 'Get discovered by brands & earn',
+                ),
+              ),
+            if (_isCollaboratorEligible)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openFindCollaborate(context),
+                child: _SettingRow(
+                  dark: dark,
+                  icon: Icons.groups_2_outlined,
+                  title: 'Find Collaborator',
+                  subtitle: 'Connect & create with other creators',
                 ),
               ),
             GestureDetector(

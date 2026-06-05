@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import 'followers_screen.dart';
 import 'setting_screen.dart';
+import 'dashboard_screen.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../services/location_service.dart';
@@ -317,6 +318,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool get _isCreatorAccount =>
       ['Business', 'Creator', 'Professional'].contains(_accountType);
 
+  void _openDashboard() {
+    final handle = _profile?.username != null && _profile!.username.isNotEmpty
+        ? '@${_profile!.username}'
+        : '@user';
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => DashboardScreen(handle: handle),
+        transitionDuration: const Duration(milliseconds: 320),
+        reverseTransitionDuration: const Duration(milliseconds: 260),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.05),
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dark = widget.dark;
@@ -596,6 +624,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             fg: fg,
                             sub: sub,
                             accountType: _accountType,
+                            onTap: _openDashboard,
                           ),
                         ),
                       ],

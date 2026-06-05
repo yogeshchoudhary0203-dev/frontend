@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Production Railway URL — works on all platforms (web, Android, iOS)
-const String _prodUrl = 'https://web-production-c105c.up.railway.app';
+const String _prodUrl = 'https://web-production-eae2.up.railway.app';
 
 String get baseUrl => _prodUrl;
 String get wsUrl => _prodUrl.replaceFirst('http', 'ws');

@@ -13,7 +13,7 @@ const _kChannelName      = 'Trandia';
 const _kChannelDesc      = 'Trandia notifications';
 const _kTokenKey         = 'fcm_token';
 const _kJwtKey           = 'auth_token';
-const _kBackendUrl       = 'https://web-production-c105c.up.railway.app';
+const _kBackendUrl       = 'https://web-production-eae2.up.railway.app';
 // SharedPreferences keys — same keys used by NotificationSettingsScreen
 const _kMasterKey    = 'settings_notifications';
 const _kFollowsKey   = 'settings_notif_follows';

@@ -10,7 +10,7 @@ import '../utils/web_utils.dart';
 
 const String _webClientId =
     '461111861227-6lp4k1p2iuoe50sl46bvpdp2d6smvola.apps.googleusercontent.com';
-const String _backendUrl = 'https://web-production-c105c.up.railway.app';
+const String _backendUrl = 'https://web-production-eae2.up.railway.app';
 
 GoogleSignIn? _googleSignInInstance;
 GoogleSignIn get _googleSignIn {

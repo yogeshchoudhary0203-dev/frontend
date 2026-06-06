@@ -18,6 +18,7 @@ import 'services/fcm_service.dart';
 import 'services/local_db.dart';
 import 'services/deep_link_service.dart';
 import 'l10n/app_localizations.dart';
+import 'services/theme_manager.dart';
 import 'utils/web_utils.dart';
 import 'utils/navigator_key.dart';
 import 'utils/route_observer.dart';
@@ -33,6 +34,9 @@ Future<void> _bgMessageHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Theme settings
+  await ThemeManager.init();
 
   // Initialize Firebase
   try {
@@ -141,42 +145,47 @@ class _TrandiaAppState extends State<TrandiaApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _languageController,
-      builder: (context, _) => AppLanguageScope(
-        controller: _languageController,
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'Trandia',
-          navigatorKey: navigatorKey,
-          navigatorObservers: [appRouteObserver],
-          theme: ThemeData(
-            brightness: Brightness.light,
-            scaffoldBackgroundColor: const Color(0xFFFFFFFF),
-            colorScheme: const ColorScheme.light(surface: Color(0xFFFFFFFF)),
-            // iOS-style smooth slide transitions on every screen change
-            pageTransitionsTheme: const PageTransitionsTheme(
-              builders: {
-                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-              },
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeManager.themeModeNotifier,
+      builder: (context, currentThemeMode, _) {
+        return AnimatedBuilder(
+          animation: _languageController,
+          builder: (context, _) => AppLanguageScope(
+            controller: _languageController,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              title: 'Trandia',
+              navigatorKey: navigatorKey,
+              navigatorObservers: [appRouteObserver],
+              theme: ThemeData(
+                brightness: Brightness.light,
+                scaffoldBackgroundColor: const Color(0xFFFFFFFF),
+                colorScheme: const ColorScheme.light(surface: Color(0xFFFFFFFF)),
+                // iOS-style smooth slide transitions on every screen change
+                pageTransitionsTheme: const PageTransitionsTheme(
+                  builders: {
+                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                  },
+                ),
+              ),
+              darkTheme: ThemeData(
+                brightness: Brightness.dark,
+                scaffoldBackgroundColor: const Color(0xFF111111),
+                colorScheme: const ColorScheme.dark(surface: Color(0xFF111111)),
+                pageTransitionsTheme: const PageTransitionsTheme(
+                  builders: {
+                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                  },
+                ),
+              ),
+              themeMode: currentThemeMode,
+              home: const SplashScreen(nextScreen: _StartupRouter()),
             ),
           ),
-          darkTheme: ThemeData(
-            brightness: Brightness.dark,
-            scaffoldBackgroundColor: const Color(0xFF111111),
-            colorScheme: const ColorScheme.dark(surface: Color(0xFF111111)),
-            pageTransitionsTheme: const PageTransitionsTheme(
-              builders: {
-                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-              },
-            ),
-          ),
-          themeMode: ThemeMode.system,
-          home: const SplashScreen(nextScreen: _StartupRouter()),
-        ),
-      ),
+        );
+      },
     );
   }
 }

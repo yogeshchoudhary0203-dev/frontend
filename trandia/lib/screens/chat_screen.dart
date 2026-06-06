@@ -7,10 +7,12 @@
 //   • Tap own reaction chip to toggle it off
 
 import 'dart:ui';
+import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/chat_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/chat_service.dart';
 import '../services/fcm_service.dart';
 import '../services/agora_service.dart';
@@ -44,6 +46,82 @@ class _ChatScreenState extends State<ChatScreen>
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  Color? _customSenderColor;
+  Color? _customReceiverColor;
+  String _customBgType = 'default';
+  Color? _customBgColor;
+  String? _customBgImagePath;
+
+  Future<void> _loadCustomBubbleColors() async {
+    final prefs = await SharedPreferences.getInstance();
+    final senderHex = prefs.getString('chat_sender_bubble_color');
+    final receiverHex = prefs.getString('chat_receiver_bubble_color');
+    final bgType = prefs.getString('chat_background_type') ?? 'default';
+    final bgHex = prefs.getString('chat_background_color');
+    final bgImagePath = prefs.getString('chat_background_image_path');
+
+    if (mounted) {
+      setState(() {
+        _customSenderColor = senderHex != null ? _parseHex(senderHex) : null;
+        _customReceiverColor = receiverHex != null ? _parseHex(receiverHex) : null;
+        _customBgType = bgType;
+        _customBgColor = bgHex != null ? _parseHex(bgHex) : null;
+        _customBgImagePath = bgImagePath;
+      });
+    }
+  }
+
+  Color _parseHex(String hex) {
+    try {
+      String cleanHex = hex.replaceFirst('#', '');
+      if (cleanHex.length == 6) {
+        cleanHex = 'FF$cleanHex';
+      }
+      return Color(int.parse(cleanHex, radix: 16));
+    } catch (_) {
+      return Colors.transparent;
+    }
+  }
+
+  Widget _buildBackground(bool dark) {
+    if (_customBgType == 'image' && _customBgImagePath != null && File(_customBgImagePath!).existsSync()) {
+      return Image.file(
+        File(_customBgImagePath!),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    } else if (_customBgType == 'color' && _customBgColor != null) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(color: _customBgColor),
+          _blob(dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05), const Alignment(-1, -0.8), 320),
+          _blob(dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.06), const Alignment( 1, -0.2), 280),
+          _blob(dark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04), const Alignment(-0.6, 0.9), 300),
+        ],
+      );
+    }
+    return GlassBackdrop(dark: widget.dark);
+  }
+
+  Widget _blob(Color c, Alignment a, double size) => Align(
+    alignment: a,
+    child: IgnorePointer(
+      child: ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+        child: Container(
+          width: size, height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(colors: [c, c.withValues(alpha: 0)], stops: const [0, 0.7]),
+          ),
+        ),
+      ),
+    ),
+  );
+
+
   // ── Entrance animation ────────────────────────────────────
   late final AnimationController _entranceCtrl;
   late final Animation<double> _headerSlide;
@@ -76,6 +154,7 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   void initState() {
     super.initState();
+    _loadCustomBubbleColors();
 
     // ── Setup entrance animation ────────────────────────────
     _entranceCtrl = AnimationController(
@@ -910,6 +989,8 @@ class _ChatScreenState extends State<ChatScreen>
                           last: last, isPending: isPending,
                           myUserId: widget.myUserId,
                           onReact: (emoji) => _onReact(msg, emoji),
+                          customSenderColor: _customSenderColor,
+                          customReceiverColor: _customReceiverColor,
                         ),
                       ),
                     ),
@@ -941,7 +1022,7 @@ class _ChatScreenState extends State<ChatScreen>
       body: Stack(children: [
         Opacity(
           opacity: _bgFade.value,
-          child: GlassBackdrop(dark: widget.dark),
+          child: _buildBackground(widget.dark),
         ),
 
         // ── Messages list ──────────────────────────────────────
@@ -1221,11 +1302,15 @@ class _Bubble extends StatelessWidget {
   final bool isPending;
   final String myUserId;
   final void Function(String emoji) onReact;
+  final Color? customSenderColor;
+  final Color? customReceiverColor;
 
   const _Bubble({
     required this.m, required this.isMe, required this.dark,
     required this.last, required this.myUserId, required this.onReact,
     this.isPending = false,
+    this.customSenderColor,
+    this.customReceiverColor,
   });
 
   @override
@@ -1377,10 +1462,13 @@ class _Bubble extends StatelessWidget {
 
   Widget _bubbleBox(bool dark, BorderRadius radius, Color sub, Color fg) {
     if (isMe) {
+      final bgColor = customSenderColor ?? (dark ? Colors.white : const Color(0xFF0A0A0A));
+      final textCol = bgColor.computeLuminance() > 0.5 ? Colors.black : Colors.white;
+
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: dark ? Colors.white : const Color(0xFF0A0A0A),
+          color: bgColor,
           borderRadius: radius,
           boxShadow: [
             BoxShadow(
@@ -1393,14 +1481,19 @@ class _Bubble extends StatelessWidget {
         ),
         child: Text(m.text,
             style: manrope(size: 14.5, weight: FontWeight.w500,
-                color: dark ? const Color(0xFF0A0A0A) : Colors.white,
+                color: textCol,
                 letterSpacing: -0.07, height: 1.4)),
       );
     }
+    final bgColor = customReceiverColor ?? (dark ? const Color(0xFF242424).withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.95));
+    final textCol = customReceiverColor != null
+        ? (bgColor.computeLuminance() > 0.5 ? Colors.black : Colors.white)
+        : GlassTokens.fg(dark);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF242424).withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.95),
+        color: bgColor,
         border: Border.all(
             color: dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04)),
         borderRadius: radius,
@@ -1413,9 +1506,10 @@ class _Bubble extends StatelessWidget {
       ),
       child: Text(m.text,
           style: manrope(size: 14.5, weight: FontWeight.w500,
-              color: GlassTokens.fg(dark), letterSpacing: -0.07, height: 1.4)),
+              color: textCol, letterSpacing: -0.07, height: 1.4)),
     );
   }
+
 }
 
 // ─────────────────────────────────────────────────────────────

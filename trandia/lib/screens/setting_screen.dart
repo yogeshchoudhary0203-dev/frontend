@@ -17,6 +17,8 @@ import 'trandia_marketplace_screen.dart';
 import 'trandia_marketplace_apply_screen.dart';
 import 'trandia_marketplace_dashboard_screen.dart';
 import 'find_collaborate_screen.dart';
+import 'chat_color_settings_screen.dart';
+import '../services/theme_manager.dart';
 
 // Search item model ────────────────────────────────────────────────────────────
 class _SearchItem {
@@ -155,7 +157,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _openAppLock(BuildContext ctx) {
-    _openScreenSmoothly(ctx, AppLockSetupScreen(dark: widget.dark))
+    final dark = Theme.of(ctx).brightness == Brightness.dark;
+    _openScreenSmoothly(ctx, AppLockSetupScreen(dark: dark))
         .then((_) => _refreshAppLockState());
   }
 
@@ -212,7 +215,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _openEditProfile(BuildContext ctx) {
-    _openScreenSmoothly(ctx, EditProfileScreen(dark: widget.dark))
+    final dark = Theme.of(ctx).brightness == Brightness.dark;
+    _openScreenSmoothly(ctx, EditProfileScreen(dark: dark))
         .then((_) => _loadProfile());
   }
 
@@ -227,97 +231,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
       accountType == 'Professional';
 
   void _openMarketplace(BuildContext ctx) {
-    _openScreenSmoothly(ctx, TrandiaMarketplaceScreen(dark: widget.dark));
+    final dark = Theme.of(ctx).brightness == Brightness.dark;
+    _openScreenSmoothly(ctx, TrandiaMarketplaceScreen(dark: dark));
   }
 
   void _openFindCollaborate(BuildContext ctx) {
-    _openScreenSmoothly(ctx, FindCollaborateScreen(dark: widget.dark));
+    final dark = Theme.of(ctx).brightness == Brightness.dark;
+    _openScreenSmoothly(ctx, FindCollaborateScreen(dark: dark));
   }
 
   Future<void> _openCreatorMarketplaceFlow(BuildContext ctx) async {
     final prefs = await SharedPreferences.getInstance();
     final applied = prefs.getBool(TmApplyKeys.applied) ?? false;
     if (!ctx.mounted) return;
+    final dark = Theme.of(ctx).brightness == Brightness.dark;
     if (applied) {
       _openScreenSmoothly(
-          ctx, TrandiaMarketplaceDashboardScreen(dark: widget.dark));
+          ctx, TrandiaMarketplaceDashboardScreen(dark: dark));
     } else {
       _openScreenSmoothly(
-          ctx, TrandiaMarketplaceApplyScreen(dark: widget.dark));
+          ctx, TrandiaMarketplaceApplyScreen(dark: dark));
     }
   }
 
   void _openDummy(BuildContext ctx) {
     Navigator.of(ctx).push(MaterialPageRoute(
-      builder: (context) => Scaffold(
-        backgroundColor: widget.dark ? GlassTokens.bgDark : GlassTokens.bgLight,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new_rounded, color: GlassTokens.fg(widget.dark)),
-            onPressed: () => Navigator.pop(context),
+      builder: (context) {
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        return Scaffold(
+          backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back_ios_new_rounded, color: GlassTokens.fg(dark)),
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     ));
   }
 
   void _openSecurityScreen(BuildContext ctx) {
-    final dark = widget.dark;
     Navigator.of(ctx).push(MaterialPageRoute(
-      builder: (context) => Scaffold(
-        backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          title: Text(
-            'Security'.tr(context),
-            style: manrope(size: 17, weight: FontWeight.w800, color: GlassTokens.fg(dark)),
-          ),
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new_rounded, color: GlassTokens.fg(dark)),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        body: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            _SectionCard(
-              dark: dark,
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _openDummy(context),
-                  child: _SettingRow(
-                    dark: dark,
-                    icon: Icons.lock_outline_rounded,
-                    title: 'Reset Password',
-                    subtitle: 'Change your current password',
-                  ),
-                ),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _showForgotPasswordModal(context),
-                  child: _SettingRow(
-                    dark: dark,
-                    icon: Icons.help_outline_rounded,
-                    title: 'Forgot Password',
-                    subtitle: 'Recover your account access',
-                  ),
-                ),
-              ],
+      builder: (context) {
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        return Scaffold(
+          backgroundColor: dark ? GlassTokens.bgDark : GlassTokens.bgLight,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            title: Text(
+              'Security'.tr(context),
+              style: manrope(size: 17, weight: FontWeight.w800, color: GlassTokens.fg(dark)),
             ),
-          ],
-        ),
-      ),
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back_ios_new_rounded, color: GlassTokens.fg(dark)),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              _SectionCard(
+                dark: dark,
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _openDummy(context),
+                    child: _SettingRow(
+                      dark: dark,
+                      icon: Icons.lock_outline_rounded,
+                      title: 'Reset Password',
+                      subtitle: 'Change your current password',
+                    ),
+                  ),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _showForgotPasswordModal(context),
+                    child: _SettingRow(
+                      dark: dark,
+                      icon: Icons.help_outline_rounded,
+                      title: 'Forgot Password',
+                      subtitle: 'Recover your account access',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     ));
   }
 
   void _showForgotPasswordModal(BuildContext context) {
-    final dark = widget.dark;
-    final fg = GlassTokens.fg(dark);
-    final sub = GlassTokens.sub(dark);
     final emailCtrl = TextEditingController();
     bool isLoading = false;
     bool isSent = false;
@@ -326,8 +335,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
+      builder: (ctx) {
+        final dark = Theme.of(ctx).brightness == Brightness.dark;
+        final fg = GlassTokens.fg(dark);
+        final sub = GlassTokens.sub(dark);
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
           return Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(ctx).viewInsets.bottom,
@@ -469,10 +482,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           );
-        }
-      ),
-    );
-  }
+        },
+      );
+    },
+  );
+}
 
   void _openAccountTypeSelector(BuildContext context) {
     final dark = widget.dark;
@@ -631,7 +645,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   List<_SearchItem> _buildSearchItems(BuildContext ctx) {
-    final dark = widget.dark;
+    final dark = Theme.of(ctx).brightness == Brightness.dark;
     return [
       _SearchItem(
         icon: Icons.person_outline_rounded,
@@ -705,6 +719,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
 
       _SearchItem(
+        icon: Icons.color_lens_outlined,
+        title: 'Chat Bubble Colors',
+        subtitle: 'Customize message box backgrounds',
+        onTap: () => _openScreenSmoothly(
+          ctx,
+          ChatColorSettingsScreen(dark: dark),
+        ).then((_) => _loadProfile()),
+      ),
+      _SearchItem(
+        icon: Icons.brightness_6_outlined,
+        title: 'Mode',
+        subtitle: 'Toggle Light, Dark, or System Default theme',
+        onTap: () => _showThemeDialog(ctx),
+      ),
+      _SearchItem(
         icon: Icons.language,
         title: 'Language',
         subtitle: 'English, Hindi, Hinglish',
@@ -741,7 +770,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dark = widget.dark;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final fg = GlassTokens.fg(dark);
     final sub = GlassTokens.sub(dark);
     final languageController = AppLanguageScope.controllerOf(context);
@@ -975,6 +1004,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
+            Divider(
+              height: 1,
+              indent: 56,
+              color: dark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.06),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openScreenSmoothly(
+                context,
+                ChatColorSettingsScreen(dark: dark),
+              ).then((_) => _loadProfile()),
+              child: _BaseRow(
+                dark: dark,
+                icon: Icons.color_lens_outlined,
+                title: 'Chat Bubble Colors',
+                subtitle: 'Customize message box backgrounds',
+                trailing: Icon(Icons.chevron_right_rounded,
+                    color: sub, size: 24),
+              ),
+            ),
+            Divider(
+              height: 1,
+              indent: 56,
+              color: dark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.06),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _showThemeDialog(context),
+              child: _BaseRow(
+                dark: dark,
+                icon: Icons.brightness_6_outlined,
+                title: 'Mode',
+                subtitle: ThemeManager.getLabel(ThemeManager.themeModeNotifier.value),
+                trailing: Icon(Icons.chevron_right_rounded,
+                    color: sub, size: 24),
+              ),
+            ),
 
           ],
         ),
@@ -1058,7 +1128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildSearchResults(BuildContext context) {
-    final dark = widget.dark;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final sub = GlassTokens.sub(dark);
     final items = _buildSearchItems(context)
         .where((i) => i.matches(_searchQuery))
@@ -1117,6 +1187,119 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? GestureDetector(onTap: item.onTap, child: card)
             : card;
       },
+    );
+  }
+
+  void _showThemeDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black26,
+      builder: (ctx) {
+        final dark = Theme.of(ctx).brightness == Brightness.dark;
+        final fg = GlassTokens.fg(dark);
+        final sub = GlassTokens.sub(dark);
+        final currentMode = ThemeManager.themeModeNotifier.value;
+
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Container(
+              decoration: BoxDecoration(
+                color: dark ? const Color(0xE0121214) : const Color(0xF2F7F7F9),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: dark ? 0.4 : 0.08),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Theme Mode'.tr(ctx),
+                    style: manrope(size: 16, weight: FontWeight.w800, color: fg),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildThemeOption(ctx, ThemeMode.light, 'Light Mode', currentMode, dark),
+                  const SizedBox(height: 8),
+                  _buildThemeOption(ctx, ThemeMode.dark, 'Dark Mode', currentMode, dark),
+                  const SizedBox(height: 8),
+                  _buildThemeOption(ctx, ThemeMode.system, 'System Default', currentMode, dark),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildThemeOption(
+    BuildContext ctx,
+    ThemeMode mode,
+    String label,
+    ThemeMode currentMode,
+    bool dark,
+  ) {
+    final isSelected = currentMode == mode;
+    final fg = GlassTokens.fg(dark);
+    final sub = GlassTokens.sub(dark);
+
+    return InkWell(
+      onTap: () {
+        ThemeManager.setThemeMode(mode);
+        Navigator.pop(ctx);
+        if (mounted) setState(() {});
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (dark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04))
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected
+                ? (dark ? Colors.white24 : Colors.black12)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              mode == ThemeMode.light
+                  ? Icons.light_mode_outlined
+                  : (mode == ThemeMode.dark ? Icons.dark_mode_outlined : Icons.settings_brightness_outlined),
+              color: isSelected ? fg : sub,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label.tr(ctx),
+                style: manrope(
+                  size: 14,
+                  weight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  color: isSelected ? fg : sub,
+                ),
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: fg, size: 20),
+          ],
+        ),
+      ),
     );
   }
 }

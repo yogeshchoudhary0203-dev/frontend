@@ -20,6 +20,8 @@ class UserProfile {
   final double? locationLat;
   final double? locationLng;
   final String accountType;
+  final String? senderBubbleColor;
+  final String? receiverBubbleColor;
 
   UserProfile({
     required this.id,
@@ -43,6 +45,8 @@ class UserProfile {
     this.locationLat,
     this.locationLng,
     this.accountType = 'personal',
+    this.senderBubbleColor,
+    this.receiverBubbleColor,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -70,6 +74,8 @@ class UserProfile {
       accountType: (json['account_type'] as String?)?.trim().isNotEmpty == true
           ? (json['account_type'] as String)
           : 'personal',
+      senderBubbleColor: json['sender_bubble_color'] as String?,
+      receiverBubbleColor: json['receiver_bubble_color'] as String?,
     );
   }
 
@@ -96,8 +102,11 @@ class UserProfile {
       'location_lat': locationLat,
       'location_lng': locationLng,
       'account_type': accountType,
+      'sender_bubble_color': senderBubbleColor,
+      'receiver_bubble_color': receiverBubbleColor,
     };
   }
+
 }
 
 class ChatConversation {

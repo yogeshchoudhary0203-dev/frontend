@@ -17,50 +17,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/marketplace_service.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SAMPLE DATA (swap for your analytics source)
-// ─────────────────────────────────────────────────────────────────────────────
-class InsightsData {
-  const InsightsData();
-
-  String get reach => '48.2K';
-  String get reachDelta => '18.4';
-  String get profileViews => '3,920';
-  String get profileViewsDelta => '12.0';
-  String get engagement => '6.8%';
-  String get engagementDelta => '2.1';
-  String get followersNet => '+1,510';
-
-  // 12-point trend used by the hero area chart.
-  List<double> get reachTrend =>
-      const [3.1, 3.6, 3.2, 4.4, 4.0, 5.2, 4.8, 5.9, 6.3, 5.8, 7.0, 7.6];
-
-  // Weekly follower adds — bar chart.
-  List<double> get weeklyBars => const [22, 31, 27, 38, 34, 44, 52];
-  List<String> get weeklyLabels => const ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
-  List<TopPost> get topPosts => const [
-        TopPost(rank: 1, seed: 2, views: '48.2K', likes: '4,910', reel: true),
-        TopPost(rank: 2, seed: 0, views: '31.7K', likes: '3,204', reel: false),
-        TopPost(rank: 3, seed: 4, views: '22.9K', likes: '2,118', reel: true),
-        TopPost(rank: 4, seed: 1, views: '18.4K', likes: '1,640', reel: false),
-      ];
-}
-
-class TopPost {
-  final int rank;
-  final int seed;
-  final String views;
-  final String likes;
-  final bool reel;
-  const TopPost({
-    required this.rank,
-    required this.seed,
-    required this.views,
-    required this.likes,
-    required this.reel,
-  });
-}
+// Data model lives in marketplace_service.dart (DashboardData + DashboardTopPost).
+// The screen below fetches it from GET /marketplace/dashboard.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCREEN
@@ -68,12 +26,10 @@ class TopPost {
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
     super.key,
-    this.handle = '@yogesh01',
-    this.data = const InsightsData(),
+    this.handle = '',
   });
 
   final String handle;
-  final InsightsData data;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -81,12 +37,49 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   String _period = '30D';
+  DashboardData? _data;
+  bool _loading = true;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    final win = _period == '7D' ? 7 : (_period == '90D' ? 90 : 30);
+    final data = await MarketplaceService.getDashboard(window: win);
+    if (!mounted) return;
+    setState(() {
+      _data = data;
+      _loading = false;
+      _failed = data == null;
+    });
+  }
+
+  void _changePeriod(String v) {
+    if (v == _period) return;
+    setState(() => _period = v);
+    _fetch();
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final t = _DashTheme.of(isDark);
-    final d = widget.data;
+    // Use the live `_data` once it arrives; render an honest empty payload
+    // while loading / on failure so the layout stays stable.
+    final d = _data ?? _emptyDashboard();
+    // Pretty handle for the title bar.
+    final headerHandle = widget.handle.isNotEmpty
+        ? widget.handle
+        : (d.username.isNotEmpty ? '@${d.username}' : '');
 
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -120,7 +113,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'LAST 30 DAYS',
+                          _period == '7D'
+                              ? 'LAST 7 DAYS'
+                              : (_period == '90D' ? 'LAST 90 DAYS' : 'LAST 30 DAYS'),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -132,7 +127,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           t: t,
                           options: const ['7D', '30D', '90D'],
                           value: _period,
-                          onChange: (v) => setState(() => _period = v),
+                          onChange: _changePeriod,
                         ),
                       ],
                     ),
@@ -149,12 +144,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: Row(children: [
                       Expanded(
+                        // We do not record per-profile view counts. Surface the
+                        // honest metric we DO have — total posts published.
                         child: _KpiTile(
                           t: t,
-                          icon: Icons.visibility_outlined,
-                          label: 'Profile views',
-                          value: d.profileViews,
-                          delta: d.profileViewsDelta,
+                          icon: Icons.grid_on_rounded,
+                          label: 'Posts',
+                          value: '${d.postCount}',
+                          delta: '',
                           up: true,
                         ),
                       ),
@@ -164,9 +161,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           t: t,
                           icon: Icons.show_chart_rounded,
                           label: 'Engagement',
-                          value: d.engagement,
+                          value: d.engagementRate,
                           delta: d.engagementDelta,
-                          up: true,
+                          up: !d.engagementDelta.startsWith('-'),
                         ),
                       ),
                     ]),
@@ -220,16 +217,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             action: 'By reach',
                           ),
                           const SizedBox(height: 4),
-                          for (var i = 0; i < d.topPosts.length; i++) ...[
-                            if (i > 0)
-                              Container(
-                                height: 1,
-                                margin:
-                                    const EdgeInsets.symmetric(horizontal: 4),
-                                color: t.hair,
+                          if (d.topPosts.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 18, horizontal: 4),
+                              child: Text(
+                                _loading
+                                    ? 'Loading…'
+                                    : 'No posts yet — publish something to see your top performers here.',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: t.sub,
+                                  letterSpacing: -0.05,
+                                ),
                               ),
-                            _PostRow(t: t, post: d.topPosts[i]),
-                          ],
+                            )
+                          else
+                            for (var i = 0; i < d.topPosts.length; i++) ...[
+                              if (i > 0)
+                                Container(
+                                  height: 1,
+                                  margin: const EdgeInsets.symmetric(
+                                      horizontal: 4),
+                                  color: t.hair,
+                                ),
+                              _PostRow(t: t, post: d.topPosts[i]),
+                            ],
                         ],
                       ),
                     ),
@@ -240,7 +254,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
 
           // TOP BAR
-          SafeArea(
+          // Pin to top edge. Previously the SafeArea sat as a non-Positioned
+          // child of `Stack(fit: StackFit.expand)` which forced it to fill the
+          // entire screen — that made the inner Row take the full height and
+          // its crossAxis-center alignment pushed the back-button to the vertical
+          // middle of the screen.
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: SafeArea(
+            bottom: false,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: SizedBox(
@@ -266,7 +288,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 1),
                         Text(
-                          widget.handle,
+                          headerHandle,
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
@@ -279,16 +301,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _CircleIconButton(
                     t: t,
                     icon: Icons.ios_share_rounded,
-                    onTap: () {},
+                    onTap: _failed ? _fetch : () {},
                   ),
                 ]),
               ),
             ),
           ),
+          ),
         ]),
       ),
     );
   }
+
+  /// Neutral payload used while the API call is in flight or after a failure
+  /// so the existing widget tree never has to render against null fields.
+  DashboardData _emptyDashboard() => const DashboardData(
+        window: 30,
+        followers: 0,
+        following: 0,
+        postCount: 0,
+        reach: '0',
+        reachDelta: '0',
+        engagementRate: '0%',
+        engagementDelta: '0',
+        followersNet: '+0',
+        followersDelta: '0',
+        reachTrend: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+        weeklyBars: [0, 0, 0, 0, 0, 0, 0],
+        weeklyLabels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+        topPosts: [],
+        username: '',
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -297,10 +340,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class _HeroReach extends StatelessWidget {
   const _HeroReach({required this.t, required this.data});
   final _DashTheme t;
-  final InsightsData data;
+  final DashboardData data;
 
   @override
   Widget build(BuildContext context) {
+    final isDown = data.reachDelta.startsWith('-');
     return _GlassCard(
       t: t,
       radius: 26,
@@ -337,7 +381,7 @@ class _HeroReach extends StatelessWidget {
             const SizedBox(width: 10),
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: _DeltaPill(t: t, value: data.reachDelta, up: true),
+              child: _DeltaPill(t: t, value: data.reachDelta, up: !isDown),
             ),
           ]),
           const SizedBox(height: 10),
@@ -422,11 +466,13 @@ class _KpiTile extends StatelessWidget {
                   height: 1,
                 ),
               ),
-              const SizedBox(width: 6),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: _DeltaText(t: t, value: delta, up: up),
-              ),
+              if (delta.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: _DeltaText(t: t, value: delta, up: up),
+                ),
+              ],
             ],
           ),
         ],
@@ -441,11 +487,13 @@ class _KpiTile extends StatelessWidget {
 class _PostRow extends StatelessWidget {
   const _PostRow({required this.t, required this.post});
   final _DashTheme t;
-  final TopPost post;
+  final DashboardTopPost post;
 
   @override
   Widget build(BuildContext context) {
-    final i = post.seed;
+    // Stable, deterministic seed from the post id so the gradient is the same
+    // every render but varies across posts.
+    final i = post.id.isEmpty ? post.rank : post.id.codeUnitAt(0);
     final aPct = t.dark ? (26 - (i % 5) * 3) : (90 - (i % 5) * 4);
     final bPct =
         (aPct - (t.dark ? 12 : 16)).clamp(t.dark ? 6 : 58, 100).toDouble();
@@ -467,24 +515,48 @@ class _PostRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [g1, g2],
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 46, height: 46,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Real thumbnail when we have one; gradient fallback otherwise
+                // so the row never breaks while images load.
+                if (post.thumbnailUrl.isNotEmpty)
+                  Image.network(
+                    post.thumbnailUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [g1, g2],
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [g1, g2],
+                      ),
+                    ),
+                  ),
+                if (post.isReel)
+                  const Align(
+                    alignment: Alignment(0.6, -0.6),
+                    child: Icon(Icons.play_arrow_rounded,
+                        color: Colors.white, size: 14),
+                  ),
+              ],
             ),
           ),
-          child: post.reel
-              ? const Align(
-                  alignment: Alignment(0.6, -0.6),
-                  child: Icon(Icons.play_arrow_rounded,
-                      color: Colors.white, size: 14),
-                )
-              : null,
         ),
         const SizedBox(width: 12),
         Expanded(

@@ -347,6 +347,31 @@ class UserService {
     }
   }
 
+  static Future<bool> updateChatColors(String? senderColor, String? receiverColor) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.put(
+        Uri.parse('$baseUrl/users/me/chat-colors'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'sender_bubble_color': senderColor,
+          'receiver_bubble_color': receiverColor,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      developer.log('updateChatColors → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        invalidateProfileCache();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      developer.log('updateChatColors error: $e');
+      return false;
+    }
+  }
+
+
   static Future<bool> removeLocation() async {
     try {
       final token = await ApiService.getToken();

@@ -127,6 +127,69 @@ class MarketplaceService {
     }
   }
 
+  // ── Collab requests ────────────────────────────────────────────────────────
+
+  /// Sends a collab request. Returns null on failure, otherwise the new status
+  /// (usually 'pending'). Idempotent: re-sending while one is pending is a no-op.
+  static Future<String?> sendCollabRequest(String toUserId, {String message = ''}) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return null;
+      final res = await http.post(
+        Uri.parse('$baseUrl/marketplace/collab/request'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'to_user_id': toUserId, 'message': message}),
+      ).timeout(const Duration(seconds: 12));
+      developer.log('collab request → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+        return decoded['status'] as String? ?? 'pending';
+      }
+      return null;
+    } catch (e) {
+      developer.log('collab request error: $e');
+      return null;
+    }
+  }
+
+  /// Accept an incoming collab request. Returns the conversation_id on success.
+  static Future<String?> acceptCollabRequest(String requestId) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return null;
+      final res = await http.put(
+        Uri.parse('$baseUrl/marketplace/collab/requests/$requestId/accept'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 12));
+      developer.log('collab accept → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+        return decoded['conversation_id'] as String?;
+      }
+      return null;
+    } catch (e) {
+      developer.log('collab accept error: $e');
+      return null;
+    }
+  }
+
+  /// Decline an incoming collab request.
+  static Future<bool> declineCollabRequest(String requestId) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.put(
+        Uri.parse('$baseUrl/marketplace/collab/requests/$requestId/decline'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+      developer.log('collab decline → ${res.statusCode}');
+      return res.statusCode == 200;
+    } catch (e) {
+      developer.log('collab decline error: $e');
+      return false;
+    }
+  }
+
   /// 1500 → "1.5K", 1_200_000 → "1.2M".
   static String compactCount(int n) {
     if (n >= 1000000) {

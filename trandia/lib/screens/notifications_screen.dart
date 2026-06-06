@@ -15,6 +15,7 @@ import '../services/api_service.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
 import '../services/follow_state.dart';
+import '../services/marketplace_service.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/error_dialog.dart';
 import 'glass_common.dart';
@@ -22,7 +23,7 @@ import 'home/home_screen.dart';
 import 'notification_settings_screen.dart';
 import 'user_profile_screen.dart' as user_profile;
 
-enum NfKind { like, comment, follow, mention, live, msg, system }
+enum NfKind { like, comment, follow, mention, live, msg, system, collab, collabAccepted }
 
 class NfItem {
   final String id;
@@ -34,6 +35,11 @@ class NfItem {
   final String? fromPicture;
   final bool thumb;
   final bool unread;
+  // For collab notifications — the request id used by Accept/Decline calls.
+  final String? requestId;
+  // Local UI state once the user actions a collab request.
+  // 'pending' | 'accepted' | 'declined'
+  final String? collabStatus;
 
   const NfItem({
     this.id = '',
@@ -45,10 +51,33 @@ class NfItem {
     this.fromPicture,
     this.thumb = false,
     this.unread = false,
+    this.requestId,
+    this.collabStatus,
   });
+
+  NfItem copyWith({String? collabStatus}) => NfItem(
+        id: id,
+        kind: kind,
+        name: name,
+        text: text,
+        time: time,
+        fromUserId: fromUserId,
+        fromPicture: fromPicture,
+        thumb: thumb,
+        unread: unread,
+        requestId: requestId,
+        collabStatus: collabStatus ?? this.collabStatus,
+      );
 
   /// Build an NfItem from the real API JSON.
   factory NfItem.fromJson(Map<String, dynamic> json) {
+    final data = json['data'];
+    String? reqId;
+    String? status;
+    if (data is Map) {
+      reqId = data['request_id'] as String?;
+      status = data['status'] as String?;
+    }
     return NfItem(
       id: json['id'] ?? '',
       kind: _parseKind(json['type'] ?? 'follow'),
@@ -58,19 +87,23 @@ class NfItem {
       fromUserId: json['from_user_id'] ?? '',
       fromPicture: json['from_picture'] as String?,
       unread: !(json['read'] ?? false),
+      requestId: reqId,
+      collabStatus: status,
     );
   }
 
   static NfKind _parseKind(String type) {
     switch (type) {
-      case 'like':    return NfKind.like;
-      case 'comment': return NfKind.comment;
-      case 'follow':  return NfKind.follow;
-      case 'mention': return NfKind.mention;
-      case 'live':    return NfKind.live;
-      case 'message': return NfKind.msg;
-      case 'system':  return NfKind.system;
-      default:        return NfKind.follow;
+      case 'like':            return NfKind.like;
+      case 'comment':         return NfKind.comment;
+      case 'follow':          return NfKind.follow;
+      case 'mention':         return NfKind.mention;
+      case 'live':            return NfKind.live;
+      case 'message':         return NfKind.msg;
+      case 'system':          return NfKind.system;
+      case 'collab_request':  return NfKind.collab;
+      case 'collab_accepted': return NfKind.collabAccepted;
+      default:                return NfKind.follow;
     }
   }
 
@@ -97,13 +130,15 @@ class NfItem {
 
 IconData _kindIcon(NfKind k) {
   switch (k) {
-    case NfKind.like:    return Icons.favorite;
-    case NfKind.comment: return Icons.chat_bubble;
-    case NfKind.follow:  return Icons.person;
-    case NfKind.mention: return Icons.alternate_email;
-    case NfKind.live:    return Icons.radio_button_checked;
-    case NfKind.msg:     return Icons.mail_rounded;
-    case NfKind.system:  return Icons.shield_rounded;
+    case NfKind.like:           return Icons.favorite;
+    case NfKind.comment:        return Icons.chat_bubble;
+    case NfKind.follow:         return Icons.person;
+    case NfKind.mention:        return Icons.alternate_email;
+    case NfKind.live:           return Icons.radio_button_checked;
+    case NfKind.msg:            return Icons.mail_rounded;
+    case NfKind.system:         return Icons.shield_rounded;
+    case NfKind.collab:         return Icons.groups_2_rounded;
+    case NfKind.collabAccepted: return Icons.handshake_rounded;
   }
 }
 
@@ -313,6 +348,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  /// Replace a collab notification's local state (accepted/declined) so the
+  /// card flips its action buttons immediately.
+  void _updateCollabStatus(String notifId, String status) {
+    final idx = _items.indexWhere((n) => n.id == notifId);
+    if (idx == -1) return;
+    setState(() {
+      _items[idx] = _items[idx].copyWith(collabStatus: status);
+    });
+  }
+
   void _openHome() {
     if (widget.onClose != null) {
       widget.onClose!();
@@ -479,6 +524,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     i: i,
                     dark: dark,
                     onDelete: () => _deleteNotification(items[i]),
+                    onCollabUpdate: (status) =>
+                        _updateCollabStatus(items[i].id, status),
                   ),
                 ),
               ),
@@ -697,11 +744,13 @@ class _NfCardInner extends StatefulWidget {
   final int i;
   final bool dark;
   final VoidCallback onDelete;
+  final ValueChanged<String>? onCollabUpdate;
   const _NfCardInner({
     required this.n,
     required this.i,
     required this.dark,
     required this.onDelete,
+    this.onCollabUpdate,
   });
 
   @override
@@ -711,6 +760,7 @@ class _NfCardInner extends StatefulWidget {
 class _NfCardInnerState extends State<_NfCardInner> {
   bool _following = false;
   bool _followLoading = false;
+  bool _collabBusy = false;
 
   @override
   void initState() {
@@ -763,6 +813,41 @@ class _NfCardInnerState extends State<_NfCardInner> {
         if (!success) _following = wasFollowing;
         _followLoading = false;
       });
+    }
+  }
+
+  Future<void> _onCollabAccept() async {
+    final n = widget.n;
+    if (_collabBusy || n.requestId == null || n.requestId!.isEmpty) return;
+    setState(() => _collabBusy = true);
+    final convId = await MarketplaceService.acceptCollabRequest(n.requestId!);
+    if (!mounted) return;
+    setState(() => _collabBusy = false);
+    if (convId != null) {
+      widget.onCollabUpdate?.call('accepted');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Accepted • Message sent to ${n.name}')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not accept. Try again.')),
+      );
+    }
+  }
+
+  Future<void> _onCollabDecline() async {
+    final n = widget.n;
+    if (_collabBusy || n.requestId == null || n.requestId!.isEmpty) return;
+    setState(() => _collabBusy = true);
+    final ok = await MarketplaceService.declineCollabRequest(n.requestId!);
+    if (!mounted) return;
+    setState(() => _collabBusy = false);
+    if (ok) {
+      widget.onCollabUpdate?.call('declined');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not decline. Try again.')),
+      );
     }
   }
 
@@ -838,6 +923,38 @@ class _NfCardInnerState extends State<_NfCardInner> {
               dark: dark,
             ),
           )
+        else if (n.kind == NfKind.collab) ...[
+          // Accept/Decline pair when the request is still pending. Once acted
+          // upon, shows the resolved state instead.
+          if (n.collabStatus == 'accepted')
+            _ActionButton(label: 'Accepted', filled: false, dark: dark)
+          else if (n.collabStatus == 'declined')
+            _ActionButton(label: 'Declined', filled: false, dark: dark)
+          else if (_collabBusy)
+            SizedBox(
+              width: 30, height: 30,
+              child: Center(
+                child: SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(fg),
+                  ),
+                ),
+              ),
+            )
+          else ...[
+            GestureDetector(
+              onTap: _onCollabDecline,
+              child: _ActionButton(label: 'Decline', filled: false, dark: dark),
+            ),
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: _onCollabAccept,
+              child: _ActionButton(label: 'Accept', filled: true, dark: dark),
+            ),
+          ],
+        ]
         else if (n.thumb)
           Container(
             width: 44, height: 44,

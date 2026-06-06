@@ -22,6 +22,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
+import '../services/marketplace_service.dart';
+import 'user_profile_screen.dart' as user_profile;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUNNABLE DEMO — light + dark in one file. Tap the pill to switch themes.
@@ -253,7 +255,6 @@ String _compactCount(int n) {
   return '$n';
 }
 
-const _filters = ['All Niches', 'Followers', 'Following', 'Verified', 'Sort'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCREEN
@@ -268,13 +269,30 @@ class FindCollaborateScreen extends StatefulWidget {
   State<FindCollaborateScreen> createState() => _FindCollaborateScreenState();
 }
 
+/// Sort modes the user can toggle from the filter pills.
+enum _FcSort { none, followersDesc, followingDesc }
+
 class _FindCollaborateScreenState extends State<FindCollaborateScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
 
-  List<FcCreator> _results = [];
+  // Raw server data. `_visible` is what we render, computed by applying filters
+  // + sort over `_all`. Filters are pure client-side so toggles are instant.
+  List<FcCreator> _all = [];
+  List<FcCreator> _visible = [];
   bool _loading = true;
   String _query = '';
+
+  // Filter state
+  String _niche = 'All Niches';
+  _FcSort _sort = _FcSort.none;
+  bool _verifiedOnly = false;
+
+  // The niches we expose in the picker. Only labels that *can* exist on a real
+  // collaborator (account type + bio inference) — keeps the UI honest.
+  static const _niches = <String>[
+    'All Niches', 'Creator', 'Business', 'Professional',
+  ];
 
   @override
   void initState() {
@@ -302,8 +320,73 @@ class _FindCollaborateScreenState extends State<FindCollaborateScreen> {
     final profiles = await UserService.searchCollaborators(query);
     if (!mounted) return;
     setState(() {
-      _results = profiles.map(FcCreator.fromProfile).toList();
+      _all = profiles.map(FcCreator.fromProfile).toList();
       _loading = false;
+      _recomputeVisible();
+    });
+  }
+
+  void _recomputeVisible() {
+    final filtered = _all.where((c) {
+      if (_verifiedOnly && !c.verified) return false;
+      if (_niche != 'All Niches' && c.niche != _niche) return false;
+      return true;
+    }).toList();
+    int parse(String compact) {
+      // Used purely for sort key. Mirrors compactCount in marketplace_service.
+      final s = compact.trim();
+      if (s.isEmpty) return 0;
+      final mult = s.endsWith('M') ? 1000000 : (s.endsWith('K') ? 1000 : 1);
+      final n = double.tryParse(s.replaceAll(RegExp(r'[KM]'), '')) ?? 0;
+      return (n * mult).toInt();
+    }
+    if (_sort == _FcSort.followersDesc) {
+      filtered.sort((a, b) => parse(b.followers).compareTo(parse(a.followers)));
+    } else if (_sort == _FcSort.followingDesc) {
+      filtered.sort((a, b) => parse(b.following).compareTo(parse(a.following)));
+    }
+    _visible = filtered;
+  }
+
+  Future<void> _pickNiche() async {
+    final dark = widget.dark;
+    final t = FcTheme.of(dark);
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _FilterPicker(
+        t: t,
+        title: 'Niche',
+        options: _niches,
+        current: _niche,
+      ),
+    );
+    if (picked != null && picked != _niche) {
+      setState(() {
+        _niche = picked;
+        _recomputeVisible();
+      });
+    }
+  }
+
+  void _toggleFollowersSort() {
+    setState(() {
+      _sort = _sort == _FcSort.followersDesc ? _FcSort.none : _FcSort.followersDesc;
+      _recomputeVisible();
+    });
+  }
+
+  void _toggleFollowingSort() {
+    setState(() {
+      _sort = _sort == _FcSort.followingDesc ? _FcSort.none : _FcSort.followingDesc;
+      _recomputeVisible();
+    });
+  }
+
+  void _toggleVerified() {
+    setState(() {
+      _verifiedOnly = !_verifiedOnly;
+      _recomputeVisible();
     });
   }
 
@@ -333,7 +416,7 @@ class _FindCollaborateScreenState extends State<FindCollaborateScreen> {
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.only(top: 6, bottom: 28),
                 children: [
-                  _UrlBar(t: t, onBack: () => Navigator.maybePop(context)),
+                  _TopBar(t: t, onBack: () => Navigator.maybePop(context)),
                   _Header(t: t),
                   _SearchRow(
                     t: t,
@@ -341,7 +424,17 @@ class _FindCollaborateScreenState extends State<FindCollaborateScreen> {
                     onChanged: _onSearchChanged,
                   ),
                   const SizedBox(height: 14),
-                  _FilterChips(t: t),
+                  _FilterChips(
+                    t: t,
+                    nicheLabel: _niche,
+                    followersActive: _sort == _FcSort.followersDesc,
+                    followingActive: _sort == _FcSort.followingDesc,
+                    verifiedActive: _verifiedOnly,
+                    onNiche: _pickNiche,
+                    onFollowers: _toggleFollowersSort,
+                    onFollowing: _toggleFollowingSort,
+                    onVerified: _toggleVerified,
+                  ),
                   const SizedBox(height: 16),
                   if (_loading)
                     Padding(
@@ -356,13 +449,13 @@ class _FindCollaborateScreenState extends State<FindCollaborateScreen> {
                         ),
                       ),
                     )
-                  else if (_results.isEmpty)
+                  else if (_visible.isEmpty)
                     _EmptyState(t: t, query: _query)
                   else
-                    for (int i = 0; i < _results.length; i++)
+                    for (int i = 0; i < _visible.length; i++)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: _CreatorCard(c: _results[i], i: i, t: t),
+                        child: _CreatorCard(c: _visible[i], i: i, t: t),
                       ),
                   if (!_loading) ...[
                     const SizedBox(height: 4),
@@ -505,7 +598,11 @@ class _Glass extends StatelessWidget {
                   : null,
               border: Border.all(color: t.cardBorder, width: 1),
             ),
+            // Stack's default `alignment` is topStart which pushed pill text
+            // to the top edge of tall chips. Centering keeps the child glued to
+            // the visual middle without affecting `Positioned` children (sheen).
             child: Stack(
+              alignment: Alignment.center,
               children: [
                 if (sheen)
                   Positioned(
@@ -592,14 +689,14 @@ class _TinyPill extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTIONS
 // ─────────────────────────────────────────────────────────────────────────────
-class _UrlBar extends StatelessWidget {
-  const _UrlBar({required this.t, this.onBack});
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.t, this.onBack});
   final FcTheme t;
   final VoidCallback? onBack;
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
       child: Row(
         children: [
           GestureDetector(
@@ -607,16 +704,7 @@ class _UrlBar extends StatelessWidget {
             onTap: onBack,
             child: _GlassCircleBtn(t: t, icon: Icons.arrow_back_ios_new_rounded),
           ),
-          Expanded(
-            child: Center(
-              child: Text('trandia.in/marketplace/collab',
-                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: t.muted,
-                      fontFamily: 'monospace', letterSpacing: -0.1)),
-            ),
-          ),
-          _GlassCircleBtn(t: t, icon: Icons.ios_share_rounded),
-          const SizedBox(width: 10),
-          _GlassCircleBtn(t: t, icon: Icons.more_vert_rounded),
+          const Spacer(),
         ],
       ),
     );
@@ -705,30 +793,191 @@ class _SearchRow extends StatelessWidget {
 }
 
 class _FilterChips extends StatelessWidget {
-  const _FilterChips({required this.t});
+  const _FilterChips({
+    required this.t,
+    required this.nicheLabel,
+    required this.followersActive,
+    required this.followingActive,
+    required this.verifiedActive,
+    required this.onNiche,
+    required this.onFollowers,
+    required this.onFollowing,
+    required this.onVerified,
+  });
   final FcTheme t;
+  final String nicheLabel;
+  final bool followersActive, followingActive, verifiedActive;
+  final VoidCallback onNiche, onFollowers, onFollowing, onVerified;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 36,
-      child: ListView.separated(
+      height: 40,
+      child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _filters.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 9),
-        itemBuilder: (_, i) => _Glass(
-          t: t,
-          radius: 999,
-          shadow: false,
+        physics: const BouncingScrollPhysics(),
+        children: [
+          _FilterChip(
+            t: t, label: nicheLabel, hasArrow: true,
+            active: nicheLabel != 'All Niches',
+            onTap: onNiche,
+          ),
+          const SizedBox(width: 9),
+          _FilterChip(
+            t: t, label: 'Followers', hasArrow: true,
+            active: followersActive, onTap: onFollowers,
+          ),
+          const SizedBox(width: 9),
+          _FilterChip(
+            t: t, label: 'Following', hasArrow: true,
+            active: followingActive, onTap: onFollowing,
+          ),
+          const SizedBox(width: 9),
+          _FilterChip(
+            t: t, label: 'Verified', hasArrow: false,
+            active: verifiedActive, onTap: onVerified,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.t,
+    required this.label,
+    required this.active,
+    required this.hasArrow,
+    required this.onTap,
+  });
+  final FcTheme t;
+  final String label;
+  final bool active, hasArrow;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final inner = SizedBox(
+      height: 36,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: active ? t.ctaFg : t.fg,
+                  letterSpacing: -0.1)),
+          if (hasArrow) ...[
+            const SizedBox(width: 6),
+            Icon(Icons.keyboard_arrow_down_rounded,
+                size: 16, color: active ? t.ctaFg : t.sub),
+          ],
+        ],
+      ),
+    );
+
+    // Active chip uses the solid CTA pill for clear feedback; idle chip keeps
+    // the glass treatment.
+    if (active) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_filters[i],
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: t.fg, letterSpacing: -0.1)),
-              const SizedBox(width: 6),
-              Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: t.sub),
-            ],
+          decoration: BoxDecoration(
+            color: t.ctaBg,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: inner,
+        ),
+      );
+    }
+    return GestureDetector(
+      onTap: onTap,
+      child: _Glass(
+        t: t,
+        radius: 999,
+        shadow: false,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: inner,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTER PICKER BOTTOM SHEET (niche)
+// ─────────────────────────────────────────────────────────────────────────────
+class _FilterPicker extends StatelessWidget {
+  const _FilterPicker({
+    required this.t,
+    required this.title,
+    required this.options,
+    required this.current,
+  });
+  final FcTheme t;
+  final String title;
+  final List<String> options;
+  final String current;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          decoration: BoxDecoration(
+            color: t.dark
+                ? const Color(0xE00C0C0E)
+                : const Color(0xF2FDFDFD),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: t.dark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Text(title,
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w800,
+                        color: t.fg, letterSpacing: -0.2)),
+                const SizedBox(height: 12),
+                for (final opt in options)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.of(context).pop(opt),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(opt,
+                                style: TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: t.fg, letterSpacing: -0.1)),
+                          ),
+                          if (opt == current)
+                            Icon(Icons.check_rounded, size: 20, color: t.fg),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -739,14 +988,60 @@ class _FilterChips extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // CREATOR CARD
 // ─────────────────────────────────────────────────────────────────────────────
-class _CreatorCard extends StatelessWidget {
+class _CreatorCard extends StatefulWidget {
   const _CreatorCard({required this.c, required this.i, required this.t});
   final FcCreator c;
   final int i;
   final FcTheme t;
 
   @override
+  State<_CreatorCard> createState() => _CreatorCardState();
+}
+
+class _CreatorCardState extends State<_CreatorCard> {
+  bool _sending = false;
+  // 'idle' | 'pending' (request sent successfully)
+  String _state = 'idle';
+
+  void _openProfile() {
+    if (widget.c.id.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => user_profile.ProfileScreen(
+          userId: widget.c.id,
+          username: widget.c.name,
+          displayName: widget.c.name,
+          bio: widget.c.bio,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendRequest() async {
+    if (_sending || _state == 'pending' || widget.c.id.isEmpty) return;
+    setState(() => _sending = true);
+    final status = await MarketplaceService.sendCollabRequest(widget.c.id);
+    if (!mounted) return;
+    setState(() {
+      _sending = false;
+      if (status != null) _state = 'pending';
+    });
+    if (status == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not send request. Try again.')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Request sent to ${widget.c.name}')),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final c = widget.c;
+    final i = widget.i;
+    final t = widget.t;
     return _Glass(
       t: t,
       radius: 18,
@@ -835,29 +1130,50 @@ class _CreatorCard extends StatelessWidget {
           Row(children: [
             Expanded(
               flex: 10,
-              child: _Glass(
-                t: t,
-                radius: 999,
-                shadow: false,
-                sigma: 16,
-                child: const SizedBox(
-                  height: 36,
-                  child: Center(child: _BtnLabel('View Profile')),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _openProfile,
+                child: _Glass(
+                  t: t,
+                  radius: 999,
+                  shadow: false,
+                  sigma: 16,
+                  child: const SizedBox(
+                    height: 36,
+                    child: Center(child: _BtnLabel('View Profile')),
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               flex: 14,
-              child: Container(
-                height: 36,
-                decoration: BoxDecoration(
-                  color: t.ctaBg,
-                  borderRadius: BorderRadius.circular(999),
+              child: GestureDetector(
+                onTap: _sendRequest,
+                child: Container(
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: _state == 'pending'
+                        ? t.ctaBg.withValues(alpha: 0.55)
+                        : t.ctaBg,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  alignment: Alignment.center,
+                  child: _sending
+                      ? SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(t.ctaFg),
+                          ),
+                        )
+                      : Text(
+                          _state == 'pending' ? 'Request Sent' : 'Send Collab Request',
+                          style: TextStyle(
+                              fontSize: 12.5, fontWeight: FontWeight.w700,
+                              color: t.ctaFg, letterSpacing: -0.1),
+                        ),
                 ),
-                alignment: Alignment.center,
-                child: Text('Send Collab Request',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: t.ctaFg, letterSpacing: -0.1)),
               ),
             ),
           ]),
@@ -867,6 +1183,7 @@ class _CreatorCard extends StatelessWidget {
   }
 
   Widget _statText(String strong, String rest) {
+    final t = widget.t;
     return RichText(
       text: TextSpan(
         style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: t.muted, fontFamily: 'Manrope', letterSpacing: -0.05),

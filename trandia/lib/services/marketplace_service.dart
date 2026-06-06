@@ -53,6 +53,96 @@ class MarketplaceCreator {
   }
 }
 
+/// One row in the "Top posts" list returned by the dashboard endpoint.
+class DashboardTopPost {
+  final int rank;
+  final String id;
+  final String views;
+  final String likes;
+  final bool isReel;
+  final String thumbnailUrl;
+  const DashboardTopPost({
+    required this.rank,
+    required this.id,
+    required this.views,
+    required this.likes,
+    required this.isReel,
+    required this.thumbnailUrl,
+  });
+  factory DashboardTopPost.fromJson(Map<String, dynamic> j) => DashboardTopPost(
+        rank: (j['rank'] as num?)?.toInt() ?? 0,
+        id: j['id'] as String? ?? '',
+        views: j['views'] as String? ?? '0',
+        likes: j['likes'] as String? ?? '0',
+        isReel: j['is_reel'] == true,
+        thumbnailUrl: j['thumbnail_url'] as String? ?? '',
+      );
+}
+
+/// Honest analytics payload returned by GET /marketplace/dashboard.
+class DashboardData {
+  final int window;
+  final int followers;
+  final int following;
+  final int postCount;
+  final String reach;
+  final String reachDelta;
+  final String engagementRate;
+  final String engagementDelta;
+  final String followersNet;
+  final String followersDelta;
+  final List<double> reachTrend;
+  final List<double> weeklyBars;
+  final List<String> weeklyLabels;
+  final List<DashboardTopPost> topPosts;
+  final String username;
+
+  const DashboardData({
+    required this.window,
+    required this.followers,
+    required this.following,
+    required this.postCount,
+    required this.reach,
+    required this.reachDelta,
+    required this.engagementRate,
+    required this.engagementDelta,
+    required this.followersNet,
+    required this.followersDelta,
+    required this.reachTrend,
+    required this.weeklyBars,
+    required this.weeklyLabels,
+    required this.topPosts,
+    required this.username,
+  });
+
+  factory DashboardData.fromJson(Map<String, dynamic> j) {
+    List<double> dl(dynamic v) =>
+        (v as List?)?.map((e) => (e as num).toDouble()).toList() ?? const [];
+    List<String> sl(dynamic v) =>
+        (v as List?)?.map((e) => e.toString()).toList() ?? const [];
+    return DashboardData(
+      window: (j['window'] as num?)?.toInt() ?? 30,
+      followers: (j['followers'] as num?)?.toInt() ?? 0,
+      following: (j['following'] as num?)?.toInt() ?? 0,
+      postCount: (j['post_count'] as num?)?.toInt() ?? 0,
+      reach: j['reach'] as String? ?? '0',
+      reachDelta: j['reach_delta'] as String? ?? '0',
+      engagementRate: j['engagement_rate'] as String? ?? '0%',
+      engagementDelta: j['engagement_delta'] as String? ?? '0',
+      followersNet: j['followers_net'] as String? ?? '+0',
+      followersDelta: j['followers_delta'] as String? ?? '0',
+      reachTrend: dl(j['reach_trend']),
+      weeklyBars: dl(j['weekly_bars']),
+      weeklyLabels: sl(j['weekly_labels']),
+      topPosts: (j['top_posts'] as List?)
+              ?.map((e) => DashboardTopPost.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      username: j['username'] as String? ?? '',
+    );
+  }
+}
+
 class MarketplaceService {
   // ── Apply / re-apply (idempotent upsert on backend) ────────────────────────
   static Future<bool> apply({
@@ -187,6 +277,29 @@ class MarketplaceService {
     } catch (e) {
       developer.log('collab decline error: $e');
       return false;
+    }
+  }
+
+  // ── Creator dashboard analytics ────────────────────────────────────────────
+
+  /// Fetches honest analytics for the current user. Returns null on failure.
+  /// [window] is the period in days (7 / 30 / 90).
+  static Future<DashboardData?> getDashboard({int window = 30}) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return null;
+      final res = await http.get(
+        Uri.parse('$baseUrl/marketplace/dashboard?window=$window'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 15));
+      developer.log('dashboard($window) → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        return DashboardData.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+      }
+      return null;
+    } catch (e) {
+      developer.log('dashboard error: $e');
+      return null;
     }
   }
 

@@ -226,39 +226,54 @@ class GlassSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = bgColors ?? GlassTokens.glassBg(dark);
     final border = borderColor ?? GlassTokens.glassBorder(dark);
+
+    final inner = Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: bg,
+        ),
+        border: Border.all(color: border, width: borderWidth),
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [shadow ?? GlassTokens.cardShadow(dark)],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // top sheen line
+          Positioned(
+            top: 0, left: 18, right: 18, height: 1,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: dark
+                      ? [Colors.transparent, Colors.white.withValues(alpha: 0.14), Colors.transparent]
+                      : [Colors.transparent, Colors.white.withValues(alpha: 0.98), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+          Padding(padding: padding, child: child),
+        ],
+      ),
+    );
+
+    // Skip BackdropFilter entirely when blur is not needed.
+    // Even a 0-sigma BackdropFilter creates an extra compositing layer that
+    // costs GPU bandwidth on every scroll frame — this is the #1 jank source
+    // in glass-heavy scrolling lists.
+    if (blurSigma <= 0) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: inner,
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter, end: Alignment.bottomCenter,
-              colors: bg,
-            ),
-            border: Border.all(color: border, width: borderWidth),
-            borderRadius: BorderRadius.circular(radius),
-            boxShadow: [shadow ?? GlassTokens.cardShadow(dark)],
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-            // top sheen line
-            Positioned(
-              top: 0, left: 18, right: 18, height: 1,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: dark
-                        ? [Colors.transparent, Colors.white.withValues(alpha: 0.14), Colors.transparent]
-                        : [Colors.transparent, Colors.white.withValues(alpha: 0.98), Colors.transparent],
-                  ),
-                ),
-              ),
-            ),
-            Padding(padding: padding, child: child),
-          ]),
-        ),
+        child: inner,
       ),
     );
   }

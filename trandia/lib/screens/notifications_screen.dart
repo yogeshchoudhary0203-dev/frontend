@@ -485,12 +485,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       backgroundColor: dark ? const Color(0xFF1A1A1A) : Colors.white,
       child: ListView.builder(
         controller: _scroll,
-        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        // ClampingScrollPhysics gives the most fluid, Instagram-like 1:1 finger-tracking
+        // feel. AlwaysScrollable ensures pull-to-refresh still works.
+        physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         padding: EdgeInsets.only(top: listInnerTopPadding, bottom: 40, left: 10, right: 10),
         itemCount: items.length + (_isLoadingMore ? 1 : 0),
         addAutomaticKeepAlives: false,
-        addRepaintBoundaries: false,   // RepaintBoundary is applied manually per item
-        cacheExtent: 300,              // pre-render items just off-screen for smooth scroll
+        // Let ListView manage RepaintBoundaries — more efficient than manual per-item
+        addRepaintBoundaries: true,
+        // Large cache so cards are pre-laid-out well before they enter viewport
+        cacheExtent: 700,
         itemBuilder: (context, i) {
           if (i >= items.length) {
             return Padding(
@@ -508,25 +512,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             );
           }
           return _DynamicIslandScrollCard(
+            key: ValueKey(items[i].id.isEmpty ? i.toString() : items[i].id),
             controller: _scroll,
             index: i,
             listStartGlobalY: listStartGlobalY,
             screenHeight: screenH,
             bottomPad: botPad,
-            child: RepaintBoundary(
-              key: ValueKey(items[i].id.isEmpty ? i.toString() : items[i].id),
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: _kCardGap),
-                child: SizedBox(
-                  height: _kCardHeight,
-                  child: _NfCardInner(
-                    n: items[i],
-                    i: i,
-                    dark: dark,
-                    onDelete: () => _deleteNotification(items[i]),
-                    onCollabUpdate: (status) =>
-                        _updateCollabStatus(items[i].id, status),
-                  ),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: _kCardGap),
+              child: SizedBox(
+                height: _kCardHeight,
+                child: _NfCardInner(
+                  n: items[i],
+                  i: i,
+                  dark: dark,
+                  onDelete: () => _deleteNotification(items[i]),
+                  onCollabUpdate: (status) =>
+                      _updateCollabStatus(items[i].id, status),
                 ),
               ),
             ),
@@ -662,6 +664,7 @@ class _DynamicIslandScrollCard extends StatelessWidget {
   final Widget child;
 
   const _DynamicIslandScrollCard({
+    super.key,
     required this.controller,
     required this.index,
     required this.listStartGlobalY,
@@ -699,6 +702,10 @@ class _DynamicIslandScrollCard extends StatelessWidget {
         // entryRaw == 0 → fully off-screen below, 1 → fully entered
         final entryT = Curves.easeOutCubic.transform(entryRaw);
 
+        // ── Fast-path: normal scrolling range — skip ALL transforms ──
+        // This is the hot path during scroll. Only apply effects at edges.
+        if (collapseT == 0.0 && entryT == 1.0) return child!;
+
         // Combine both effects
         final slideUp      = _lerp(22.0, 0.0, entryT);
         final entryOpacity = _lerp(0.0, 1.0, entryT);
@@ -711,8 +718,18 @@ class _DynamicIslandScrollCard extends StatelessWidget {
         final finalOpacity = (entryOpacity * collapseOpacity).clamp(0.0, 1.0);
         final finalSlide   = slideUp + collapseDrop;
 
-        if (collapseT == 0 && entryT == 1.0) return child!;
+        // ── Entry-only path: just translate, no scale/width change ──
+        if (collapseT == 0.0) {
+          // Only entry animation active — cheapest path
+          if (finalSlide.abs() < 0.5 && finalOpacity > 0.99) return child!;
+          Widget result = finalSlide.abs() > 0.5
+              ? Transform.translate(offset: Offset(0, finalSlide), child: child)
+              : child!;
+          if (finalOpacity < 0.99) result = Opacity(opacity: finalOpacity, child: result);
+          return result;
+        }
 
+        // ── Collapse path: full transform (only few cards at bottom edge) ──
         Widget result = Transform.translate(
           offset: Offset(0, finalSlide),
           child: Transform.scale(
@@ -866,10 +883,14 @@ class _NfCardInnerState extends State<_NfCardInner> {
       child: GlassSurface(
       dark: dark, radius: 999,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      blurSigma: 44,
+      // blurSigma: 0 — BackdropFilter is the #1 GPU cost in a scrolling list.
+      // The card already has a semi-opaque solid background that gives the
+      // same frosted-glass look without re-blurring the backdrop every frame.
+      // This is the exact approach Instagram / Apple use in high-performance lists.
+      blurSigma: 0,
       bgColors: dark
-          ? [Colors.white.withValues(alpha: 0.05), Colors.white.withValues(alpha: 0.02)]
-          : [Colors.white.withValues(alpha: 0.65), Colors.white.withValues(alpha: 0.40)],
+          ? [Colors.white.withValues(alpha: 0.12), Colors.white.withValues(alpha: 0.07)]
+          : [Colors.white.withValues(alpha: 0.82), Colors.white.withValues(alpha: 0.68)],
       borderColor: dark
           ? Colors.white.withValues(alpha: 0.08)
           : Colors.white.withValues(alpha: 0.85),

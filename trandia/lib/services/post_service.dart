@@ -22,6 +22,7 @@ class PostModel {
   final int commentsCount;
   final int sharesCount;
   final bool isLiked;
+  final bool isSaved;
   final DateTime createdAt;
 
   const PostModel({
@@ -42,6 +43,7 @@ class PostModel {
     required this.commentsCount,
     required this.sharesCount,
     required this.isLiked,
+    required this.isSaved,
     required this.createdAt,
   });
 
@@ -69,6 +71,7 @@ class PostModel {
     sharesCount:
         ((j['shares_count'] ?? j['share_count']) as num?)?.toInt() ?? 0,
     isLiked: j['is_liked'] == true,
+    isSaved: j['is_saved'] == true,
     createdAt: DateTime.tryParse(j['created_at'] ?? '') ?? DateTime.now(),
   );
 
@@ -77,6 +80,7 @@ class PostModel {
     int? commentsCount,
     int? sharesCount,
     bool? isLiked,
+    bool? isSaved,
   }) => PostModel(
     id: id,
     userId: userId,
@@ -95,6 +99,7 @@ class PostModel {
     commentsCount: commentsCount ?? this.commentsCount,
     sharesCount: sharesCount ?? this.sharesCount,
     isLiked: isLiked ?? this.isLiked,
+    isSaved: isSaved ?? this.isSaved,
     createdAt: createdAt,
   );
 
@@ -205,6 +210,38 @@ class PostService {
 
   Future<void> unlikePost(String postId) async {
     await ApiService.delete('/posts/$postId/like', requiresAuth: true);
+  }
+
+  // ── Save / Unsave ─────────────────────────────────────────────────────────
+
+  Future<void> savePost(String postId) async {
+    await ApiService.post('/posts/$postId/save', {}, requiresAuth: true);
+  }
+
+  Future<void> unsavePost(String postId) async {
+    await ApiService.delete('/posts/$postId/save', requiresAuth: true);
+  }
+
+  Future<({List<PostModel> posts, String? nextCursor})> getSavedPosts({
+    String? cursor,
+    int limit = 20,
+    bool refresh = false,
+  }) async {
+    final path = cursor != null
+        ? '/posts/saved?cursor=$cursor&limit=$limit'
+        : '/posts/saved?limit=$limit';
+
+    final data = await ApiService.get(
+      path,
+      requiresAuth: true,
+      bypassCache: refresh || cursor != null,
+    );
+    final rawPosts = (data['posts'] as List?) ?? [];
+    final posts = rawPosts
+        .whereType<Map<String, dynamic>>()
+        .map(PostModel.fromJson)
+        .toList();
+    return (posts: posts, nextCursor: data['next_cursor'] as String?);
   }
 
   Future<void> deletePost(String postId) async {

@@ -17,12 +17,16 @@ class PostCard extends StatefulWidget {
   final PostModel post;
   final bool isDark;
   final VoidCallback onLike;
+  final VoidCallback onSave;
   final ValueChanged<PostModel>? onLearnWatched;
   final int postIndex;
   final List<PostModel> allPosts;
   const PostCard({
     super.key,
-    required this.post, required this.isDark, required this.onLike,
+    required this.post,
+    required this.isDark,
+    required this.onLike,
+    required this.onSave,
     this.onLearnWatched,
     required this.postIndex,
     required this.allPosts,
@@ -175,10 +179,17 @@ class _PostCardState extends State<PostCard> {
               onTap: () { HapticFeedback.lightImpact(); ShareHelper.showShareBottomSheet(context, p); },
               icon: Icon(Icons.near_me_rounded, size: 26, color: iconCol)),
             const Spacer(),
-            GestureDetector(onTap: () => HapticFeedback.lightImpact(),
-              child: SizedBox(width: 34, height: 32,
-                child: Center(child: SizedBox(width: 26, height: 26,
-                  child: CustomPaint(painter: _SaveCirclePainter(color: iconCol)))))),
+            SizedBox(width: 34, height: 32,
+              child: Center(
+                child: _SaveButton(
+                  isSaved: p.isSaved,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    widget.onSave();
+                  },
+                  iconColor: iconCol,
+                ),
+              )),
           ])),
 
         if (p.caption.isNotEmpty)
@@ -339,9 +350,48 @@ class _CommentBubblePainter extends CustomPainter {
   bool shouldRepaint(_CommentBubblePainter o) => o.color != color;
 }
 
+class _SaveButton extends StatefulWidget {
+  final bool isSaved;
+  final VoidCallback onTap;
+  final Color iconColor;
+  const _SaveButton({required this.isSaved, required this.onTap, required this.iconColor});
+  @override
+  State<_SaveButton> createState() => _SaveButtonState();
+}
+
+class _SaveButtonState extends State<_SaveButton> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(duration: const Duration(milliseconds: 250), vsync: this);
+    _scaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 1.3).chain(CurveTween(curve: Curves.easeOutBack)), weight: 40),
+      TweenSequenceItem(tween: Tween<double>(begin: 1.3, end: 0.95).chain(CurveTween(curve: Curves.easeIn)), weight: 35),
+      TweenSequenceItem(tween: Tween<double>(begin: 0.95, end: 1.0).chain(CurveTween(curve: Curves.easeOut)), weight: 25),
+    ]).animate(_controller);
+  }
+
+  @override
+  void dispose() { _controller.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () { widget.onTap(); _controller.forward(from: 0.0); },
+      child: ScaleTransition(scale: _scaleAnimation,
+        child: SizedBox(width: 26, height: 26,
+          child: CustomPaint(painter: _SaveCirclePainter(color: widget.iconColor, filled: widget.isSaved)))),
+    );
+  }
+}
+
 class _SaveCirclePainter extends CustomPainter {
   final Color color;
-  const _SaveCirclePainter({required this.color});
+  final bool filled;
+  const _SaveCirclePainter({required this.color, this.filled = false});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -353,9 +403,13 @@ class _SaveCirclePainter extends CustomPainter {
       ..lineTo(16.6 * sx, 2.7 * sy)
       ..cubicTo(19.0 * sx, 2.7 * sy, 21.0 * sx, 4.0 * sy, 21.0 * sx, 6.8 * sy)
       ..lineTo(21.0 * sx, 22.5 * sy)..lineTo(13.0 * sx, 15.6 * sy)..close();
-    canvas.drawPath(bookmark, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2.2..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+    if (filled) {
+      canvas.drawPath(bookmark, Paint()..color = color..style = PaintingStyle.fill);
+    } else {
+      canvas.drawPath(bookmark, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2.2..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+    }
   }
 
   @override
-  bool shouldRepaint(_SaveCirclePainter o) => o.color != color;
+  bool shouldRepaint(_SaveCirclePainter o) => o.color != color || o.filled != filled;
 }

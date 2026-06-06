@@ -362,6 +362,30 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  void _toggleSave(int index) async {
+    final post = _posts[index];
+    final wasSaved = post.isSaved;
+    setState(() {
+      _posts[index] = post.copyWith(
+        isSaved: !wasSaved,
+      );
+    });
+    try {
+      if (wasSaved) {
+        await PostService.instance.unsavePost(post.id);
+      } else {
+        await PostService.instance.savePost(post.id);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _posts[index] = post.copyWith(
+          isSaved: wasSaved,
+        );
+      });
+    }
+  }
+
   Future<void> _loadUnreadNotifCount() async {}
 
   void _listenForNewNotifications() {
@@ -778,6 +802,7 @@ class _HomeScreenState extends State<HomeScreen>
                   post: post,
                   isDark: isDark,
                   onLike: () => _toggleLike(postIdx),
+                  onSave: () => _toggleSave(postIdx),
                   onLearnWatched: _markLearnContentWatched,
                   postIndex: postIdx,
                   allPosts: _posts,

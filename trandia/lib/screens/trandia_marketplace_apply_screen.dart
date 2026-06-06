@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import 'trandia_marketplace_dashboard_screen.dart';
+import '../services/marketplace_service.dart';
 
 // SharedPreferences keys (also read by setting_screen.dart routing).
 class TmApplyKeys {
@@ -81,8 +82,37 @@ class _TrandiaMarketplaceApplyScreenState
   Future<void> _submit() async {
     if (!_isValid || _submitting) return;
     setState(() => _submitting = true);
-    // Simulated submit delay for nicer UX.
-    await Future.delayed(const Duration(milliseconds: 650));
+
+    // Parse the declared follower count (strip anything non-numeric).
+    final followers = int.tryParse(
+            _followersCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
+        0;
+
+    // Persist to the backend FIRST — this is what makes the creator discoverable
+    // in everyone else's marketplace search.
+    final ok = await MarketplaceService.apply(
+      phone: _phoneCtrl.text.trim(),
+      contentType: _selectedContent ?? '',
+      followers: followers,
+      languages: _selectedLangs.toList(),
+      bio: _bioCtrl.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    if (!ok) {
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not submit. Check your connection and try again.',
+              style: manrope(size: 13.5, weight: FontWeight.w600)),
+        ),
+      );
+      return;
+    }
+
+    // Mirror to SharedPreferences so the settings tab + dashboard route instantly
+    // (and offline) without a round-trip.
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(TmApplyKeys.applied, true);
     await prefs.setString(TmApplyKeys.phone, _phoneCtrl.text.trim());

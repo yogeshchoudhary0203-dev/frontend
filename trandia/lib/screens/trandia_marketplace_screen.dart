@@ -16,10 +16,12 @@
 //   ───────────────────────────────────────────────────
 //   Starts at  ₹15,000  ₹18,750         [20% OFF]  [Book]
 
+import 'dart:async';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'trandia_marketplace_profile_screen.dart';
+import '../services/marketplace_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUNNABLE DEMO — light + dark in one file. Tap the pill to switch themes.
@@ -177,6 +179,7 @@ class TrmTag {
 }
 
 class TrmCreator {
+  final String userId;
   final String initials, name, category, language, followers, rating;
   final int reviews;
   final String reply, price;
@@ -185,6 +188,7 @@ class TrmCreator {
   final List<String>? brands;
   final TrmTag? tag;
   const TrmCreator({
+    this.userId = '',
     required this.initials,
     required this.name,
     required this.category,
@@ -200,70 +204,81 @@ class TrmCreator {
     this.brands,
     this.tag,
   });
-}
 
-const _creators = <TrmCreator>[
-  TrmCreator(
-    initials: 'AS', name: 'Aryan Sharma', verified: true,
-    category: 'Comedy', language: 'Hindi',
-    followers: '125K', rating: '4.9', reviews: 48, reply: '2h',
-    price: '₹15,000', priceWas: '₹18,750', offer: '20% OFF',
-    brands: ['Boat', 'Zomato', 'CRED'],
-    tag: TrmTag(TrmTagKind.hot, 'TRENDING'),
-  ),
-  TrmCreator(
-    initials: 'PM', name: 'Priya Mehta', verified: true,
-    category: 'Fashion', language: 'English · Hindi',
-    followers: '480K', rating: '5.0', reviews: 112, reply: '1h',
-    price: '₹35,000',
-    brands: ['Myntra', 'Nykaa', 'H&M'],
-    tag: TrmTag(TrmTagKind.neu, 'TOP RATED'),
-  ),
-  TrmCreator(
-    initials: 'RK', name: 'Rohan Kapoor', verified: false,
-    category: 'Tech', language: 'Hindi',
-    followers: '92K', rating: '4.7', reviews: 24, reply: '4h',
-    price: '₹8,000',
-    brands: ['OnePlus', 'Realme'],
-  ),
-  TrmCreator(
-    initials: 'SI', name: 'Sneha Iyer', verified: true,
-    category: 'Lifestyle', language: 'English',
-    followers: '1.2M', rating: '4.9', reviews: 207, reply: '3h',
-    price: '₹85,000', priceWas: '₹1,00,000', offer: '15% OFF',
-    brands: ['Mamaearth', 'Plum', 'Wow'],
-  ),
-  TrmCreator(
-    initials: 'KS', name: 'Karan Singh', verified: true,
-    category: 'Gaming', language: 'Hindi',
-    followers: '340K', rating: '4.8', reviews: 76, reply: '6h',
-    price: '₹22,000',
-    brands: ['Logitech', 'BGMI'],
-    tag: TrmTag(TrmTagKind.hot, 'TRENDING'),
-  ),
-  TrmCreator(
-    initials: 'AR', name: 'Anika Roy', verified: false,
-    category: 'Food', language: 'Hindi · English',
-    followers: '210K', rating: '4.8', reviews: 51, reply: '5h',
-    price: '₹18,000', offer: 'NEW',
-    brands: ['Swiggy', 'Licious'],
-  ),
-];
+  /// Builds a listing card model from a real applied creator. Fields the apply
+  /// form doesn't collect (rating, reply time, price, brands) stay empty and the
+  /// card renders honest "New" / "On request" states instead of fake numbers.
+  factory TrmCreator.fromMarketplace(MarketplaceCreator c) => TrmCreator(
+        userId: c.userId,
+        initials: c.initials,
+        name: c.name,
+        category: c.category,
+        language: c.languageLabel,
+        followers: MarketplaceService.compactCount(c.followers),
+        rating: '',
+        reviews: 0,
+        reply: '',
+        price: '',
+        verified: c.verified,
+      );
+}
 
 const _cats = ['All', 'Comedy', 'Fashion', 'Tech', 'Lifestyle', 'Gaming', 'Food', 'Travel'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
-class TrandiaMarketplaceScreen extends StatelessWidget {
+class TrandiaMarketplaceScreen extends StatefulWidget {
   const TrandiaMarketplaceScreen({super.key, this.dark = true});
 
   /// Theme: true = dark, false = light.
   final bool dark;
 
-  void _openCreatorProfile(BuildContext context) {
+  @override
+  State<TrandiaMarketplaceScreen> createState() => _TrandiaMarketplaceScreenState();
+}
+
+class _TrandiaMarketplaceScreenState extends State<TrandiaMarketplaceScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  Timer? _debounce;
+
+  List<MarketplaceCreator> _results = [];
+  bool _loading = true;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch('');
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _query = value;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () => _fetch(value));
+  }
+
+  Future<void> _fetch(String query) async {
+    if (mounted) setState(() => _loading = true);
+    final creators = await MarketplaceService.searchCreators(query);
+    if (!mounted) return;
+    setState(() {
+      _results = creators;
+      _loading = false;
+    });
+  }
+
+  void _openCreatorProfile(BuildContext context, MarketplaceCreator c) {
     Navigator.of(context).push(PageRouteBuilder(
-      pageBuilder: (_, animation, __) => TrandiaProfileScreen(dark: dark),
+      pageBuilder: (_, animation, __) =>
+          TrandiaProfileScreen(dark: widget.dark, creator: c),
       transitionDuration: const Duration(milliseconds: 320),
       reverseTransitionDuration: const Duration(milliseconds: 260),
       transitionsBuilder: (_, animation, __, child) {
@@ -285,6 +300,7 @@ class TrandiaMarketplaceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = widget.dark;
     final t = TrmTheme.of(dark);
 
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
@@ -314,35 +330,57 @@ class TrandiaMarketplaceScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _TopBar(t: t),
-                    _SearchBar(t: t),
-                    _Filters(t: t),
-                    _SortRow(t: t),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                      child: Column(
-                        children: [
-                          for (final c in _creators) ...[
-                            _TapScale(
-                              onTap: () => _openCreatorProfile(context),
-                              child: _CreatorCard(c: c, t: t),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                        ],
-                      ),
+                    _TopBar(t: t, count: _results.length),
+                    _SearchBar(
+                      t: t,
+                      controller: _searchCtrl,
+                      onChanged: _onSearchChanged,
                     ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Text(
-                        '— END OF RESULTS —',
-                        style: TextStyle(
-                          fontSize: 11, color: t.sub, fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
+                    _Filters(t: t),
+                    _SortRow(t: t, count: _results.length),
+                    const SizedBox(height: 16),
+                    if (_loading)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 48),
+                        child: Center(
+                          child: SizedBox(
+                            width: 26, height: 26,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              valueColor: AlwaysStoppedAnimation<Color>(t.fg),
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (_results.isEmpty)
+                      _EmptyResults(t: t, query: _query)
+                    else ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: Column(
+                          children: [
+                            for (final c in _results) ...[
+                              _TapScale(
+                                onTap: () => _openCreatorProfile(context, c),
+                                child: _CreatorCard(
+                                    c: TrmCreator.fromMarketplace(c), t: t),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                          ],
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: Text(
+                          '— END OF RESULTS —',
+                          style: TextStyle(
+                            fontSize: 11, color: t.sub, fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -355,11 +393,46 @@ class TrandiaMarketplaceScreen extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// EMPTY RESULTS
+// ─────────────────────────────────────────────────────────────────────────────
+class _EmptyResults extends StatelessWidget {
+  const _EmptyResults({required this.t, required this.query});
+  final TrmTheme t;
+  final String query;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 56, 24, 24),
+      child: Column(
+        children: [
+          Icon(Icons.storefront_outlined, size: 42, color: t.sub),
+          const SizedBox(height: 14),
+          Text(
+            query.trim().isEmpty
+                ? 'No creators in the marketplace yet'
+                : 'No creators found for “${query.trim()}”',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.2),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Only creators who applied to the Trandia Marketplace appear here.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: t.sub, letterSpacing: -0.05),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TOP BAR
 // ─────────────────────────────────────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.t});
+  const _TopBar({required this.t, required this.count});
   final TrmTheme t;
+  final int count;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -379,7 +452,7 @@ class _TopBar extends StatelessWidget {
                         fontSize: 16, fontWeight: FontWeight.w800, color: t.fg,
                         letterSpacing: -0.25, height: 1)),
                 const SizedBox(height: 5),
-                Text('247 creators available',
+                Text('$count creator${count == 1 ? '' : 's'} available',
                     style: TextStyle(
                         fontSize: 11, fontWeight: FontWeight.w600, color: t.sub,
                         letterSpacing: -0.05, height: 1)),
@@ -434,8 +507,10 @@ class _IconBtn extends StatelessWidget {
 // SEARCH BAR
 // ─────────────────────────────────────────────────────────────────────────────
 class _SearchBar extends StatelessWidget {
-  const _SearchBar({required this.t});
+  const _SearchBar({required this.t, this.controller, this.onChanged});
   final TrmTheme t;
+  final TextEditingController? controller;
+  final ValueChanged<String>? onChanged;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -468,9 +543,26 @@ class _SearchBar extends StatelessWidget {
                 Icon(Icons.search_rounded, size: 19, color: t.fg),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text('Search by name, category, niche…',
-                      style: TextStyle(fontSize: 13.5, color: t.sub, fontWeight: FontWeight.w500, letterSpacing: -0.05)),
+                  child: TextField(
+                    controller: controller,
+                    onChanged: onChanged,
+                    textInputAction: TextInputAction.search,
+                    cursorColor: t.fg,
+                    style: TextStyle(
+                        fontSize: 13.5, color: t.fg, fontWeight: FontWeight.w600,
+                        fontFamily: 'Inter', letterSpacing: -0.05),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                      hintText: 'Search by name, category, niche…',
+                      hintStyle: TextStyle(
+                          fontSize: 13.5, color: t.sub, fontWeight: FontWeight.w500,
+                          fontFamily: 'Inter', letterSpacing: -0.05),
+                    ),
+                  ),
                 ),
+                const SizedBox(width: 10),
                 Container(
                   height: 22,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -595,8 +687,9 @@ class _Chip extends StatelessWidget {
 // SORT ROW
 // ─────────────────────────────────────────────────────────────────────────────
 class _SortRow extends StatelessWidget {
-  const _SortRow({required this.t});
+  const _SortRow({required this.t, required this.count});
   final TrmTheme t;
+  final int count;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -605,10 +698,10 @@ class _SortRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(children: [
-            Text('247',
+            Text('$count',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.05)),
             const SizedBox(width: 5),
-            Text('results',
+            Text('result${count == 1 ? '' : 's'}',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: t.sub, letterSpacing: -0.05)),
           ]),
           Row(children: [
@@ -698,11 +791,19 @@ class _CreatorCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 6),
                             Row(children: [
-                              Text(c.category,
-                                  style: TextStyle(fontSize: 12, color: t.sub, fontWeight: FontWeight.w700, letterSpacing: -0.05)),
-                              _Dot(t: t),
-                              Text(c.language,
-                                  style: TextStyle(fontSize: 12, color: t.sub, fontWeight: FontWeight.w700, letterSpacing: -0.05)),
+                              Flexible(
+                                child: Text(c.category,
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 12, color: t.sub, fontWeight: FontWeight.w700, letterSpacing: -0.05)),
+                              ),
+                              if (c.language.isNotEmpty) ...[
+                                _Dot(t: t),
+                                Flexible(
+                                  child: Text(c.language,
+                                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontSize: 12, color: t.sub, fontWeight: FontWeight.w700, letterSpacing: -0.05)),
+                                ),
+                              ],
                             ]),
                           ],
                         ),
@@ -735,16 +836,23 @@ class _CreatorCard extends StatelessWidget {
                   children: [
                     _statBit('${c.followers} ', 'Followers', t),
                     _Dot(t: t),
-                    Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.star_rounded, size: 12, color: t.fg),
-                      const SizedBox(width: 3),
-                      Text(c.rating, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: t.fg)),
-                      const SizedBox(width: 3),
-                      Text('(${c.reviews})', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: t.sub)),
-                    ]),
-                    _Dot(t: t),
-                    Text('Replies in ${c.reply}',
-                        style: TextStyle(fontSize: 11.5, color: t.sub, fontWeight: FontWeight.w600, letterSpacing: -0.05)),
+                    // Rating when the creator has reviews, otherwise an honest "New".
+                    if (c.rating.isNotEmpty)
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.star_rounded, size: 12, color: t.fg),
+                        const SizedBox(width: 3),
+                        Text(c.rating, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: t.fg)),
+                        const SizedBox(width: 3),
+                        Text('(${c.reviews})', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: t.sub)),
+                      ])
+                    else
+                      Text('New',
+                          style: TextStyle(fontSize: 11.5, color: t.sub, fontWeight: FontWeight.w700, letterSpacing: -0.05)),
+                    if (c.reply.isNotEmpty) ...[
+                      _Dot(t: t),
+                      Text('Replies in ${c.reply}',
+                          style: TextStyle(fontSize: 11.5, color: t.sub, fontWeight: FontWeight.w600, letterSpacing: -0.05)),
+                    ],
                   ],
                 ),
 
@@ -792,12 +900,12 @@ class _CreatorCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('STARTS AT',
+                    Text(c.price.isEmpty ? 'PRICING' : 'STARTS AT',
                         style: TextStyle(fontSize: 10, color: t.sub, fontWeight: FontWeight.w800, letterSpacing: 1.2, height: 1)),
                     const SizedBox(height: 6),
                     Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                      Text(c.price,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.45, height: 1)),
+                      Text(c.price.isEmpty ? 'On request' : c.price,
+                          style: TextStyle(fontSize: c.price.isEmpty ? 15 : 18, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.45, height: 1)),
                       if (c.priceWas != null) ...[
                         const SizedBox(width: 7),
                         Text(c.priceWas!,

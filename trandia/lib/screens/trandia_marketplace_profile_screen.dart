@@ -16,6 +16,7 @@
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/marketplace_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUNNABLE DEMO — light + dark in one file. Tap the pill to switch themes.
@@ -169,10 +170,29 @@ class TrpTheme {
 // SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 class TrandiaProfileScreen extends StatelessWidget {
-  const TrandiaProfileScreen({super.key, this.dark = true});
+  const TrandiaProfileScreen({super.key, this.dark = true, this.creator});
 
   /// Theme: true = dark, false = light.
   final bool dark;
+
+  /// The applied creator being viewed. When null, the screen renders neutral
+  /// placeholders (no fabricated data).
+  final MarketplaceCreator? creator;
+
+  String get _name => creator?.name ?? '';
+  String get _initials => creator?.initials ?? '?';
+  bool get _verified => creator?.verified ?? false;
+  String get _categoryLine {
+    final cat = creator?.category ?? '';
+    final lang = creator?.languageLabel ?? '';
+    final left = cat.isEmpty ? 'Creator' : '$cat Creator';
+    return lang.isEmpty ? left : '$left    ·    $lang';
+  }
+  String get _bio => (creator?.bio.trim().isNotEmpty == true)
+      ? creator!.bio.trim()
+      : 'Available on the Trandia Marketplace for collaborations.';
+  String get _followersLabel =>
+      MarketplaceService.compactCount(creator?.followers ?? 0);
 
   @override
   Widget build(BuildContext context) {
@@ -207,10 +227,18 @@ class TrandiaProfileScreen extends StatelessWidget {
                   children: [
                     _TopBar(t: t),
                     _StatsCard(t: t),
-                    _Hero(t: t),
+                    _Hero(
+                      t: t,
+                      initials: _initials,
+                      name: _name,
+                      verified: _verified,
+                      categoryLine: _categoryLine,
+                      bio: _bio,
+                      followersLabel: _followersLabel,
+                    ),
                     _ActionRow(t: t),
                     _PricingCard(t: t),
-                    _StatsGrid(t: t),
+                    _StatsGrid(t: t, followersLabel: _followersLabel),
                     _RecentWork(t: t),
                   ],
                 ),
@@ -397,8 +425,22 @@ class _StatsCard extends StatelessWidget {
 // HERO
 // ─────────────────────────────────────────────────────────────────────────────
 class _Hero extends StatelessWidget {
-  const _Hero({required this.t});
+  const _Hero({
+    required this.t,
+    required this.initials,
+    required this.name,
+    required this.verified,
+    required this.categoryLine,
+    required this.bio,
+    required this.followersLabel,
+  });
   final TrpTheme t;
+  final String initials;
+  final String name;
+  final bool verified;
+  final String categoryLine;
+  final String bio;
+  final String followersLabel;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -442,7 +484,7 @@ class _Hero extends StatelessWidget {
                       border: Border.all(color: t.glassBorder, width: 1),
                     ),
                     alignment: Alignment.center,
-                    child: Text('AS',
+                    child: Text(initials,
                         style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.44)),
                   ),
                 ),
@@ -450,20 +492,25 @@ class _Hero extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('Aryan Sharma',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.6, height: 1)),
-                    const SizedBox(width: 8),
-                    _Verified(s: 17, t: t),
+                    Flexible(
+                      child: Text(name.isEmpty ? 'Creator' : name,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.6, height: 1)),
+                    ),
+                    if (verified) ...[
+                      const SizedBox(width: 8),
+                      _Verified(s: 17, t: t),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 14),
-                _Pill(t: t, dot: true, child: Text('Comedy Creator    ·    Hindi',
+                _Pill(t: t, dot: true, child: Text(categoryLine,
                     style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: t.fg, letterSpacing: -0.05))),
                 const SizedBox(height: 18),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 290),
                   child: Text(
-                    'Verified Trandia creator. 5+ years making content that converts. Available for brand collabs — DM for custom packages.',
+                    bio,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 13.5, height: 1.55, color: t.sub, fontWeight: FontWeight.w500, letterSpacing: -0.05),
                   ),
@@ -474,8 +521,8 @@ class _Hero extends StatelessWidget {
                   runSpacing: 8,
                   alignment: WrapAlignment.center,
                   children: [
-                    _EligibilityPill(label: '5K+ Followers', t: t),
-                    _EligibilityPill(label: '1M+ Views', t: t),
+                    _EligibilityPill(label: '$followersLabel Followers', t: t),
+                    if (verified) _EligibilityPill(label: 'Verified', t: t),
                   ],
                 ),
               ],
@@ -565,10 +612,10 @@ class _PricingCard extends StatelessWidget {
   final TrpTheme t;
   @override
   Widget build(BuildContext context) {
+    // Pricing isn't collected at apply time yet — show an honest single row
+    // instead of fabricated packages.
     const rows = [
-      ['Promo Video (60s)', '₹15,000'],
-      ['Story Mention', '₹3,500'],
-      ['Reel Integration', '₹25,000'],
+      ['Custom packages', 'On request'],
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 0),
@@ -605,7 +652,7 @@ class _PricingCard extends StatelessWidget {
                     children: [
                       Text('Pricing',
                           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.14)),
-                      Text('3 packages',
+                      Text('Contact creator',
                           style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: t.sub, letterSpacing: -0.05)),
                     ],
                   ),
@@ -637,8 +684,9 @@ class _PricingCard extends StatelessWidget {
 // CREATOR STATS GRID
 // ─────────────────────────────────────────────────────────────────────────────
 class _StatsGrid extends StatelessWidget {
-  const _StatsGrid({required this.t});
+  const _StatsGrid({required this.t, required this.followersLabel});
   final TrpTheme t;
+  final String followersLabel;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -652,15 +700,15 @@ class _StatsGrid extends StatelessWidget {
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.14)),
           ),
           Row(children: [
-            Expanded(child: _StatTile(value: '125K', label: 'FOLLOWERS', t: t)),
+            Expanded(child: _StatTile(value: followersLabel, label: 'FOLLOWERS', t: t)),
             const SizedBox(width: 10),
-            Expanded(child: _StatTile(value: '2.3M', label: 'BEST VIEWS', t: t)),
+            Expanded(child: _StatTile(value: '—', label: 'BEST VIEWS', t: t)),
           ]),
           const SizedBox(height: 10),
           Row(children: [
-            Expanded(child: _StatTile(value: '4.9★', label: 'RATING', t: t)),
+            Expanded(child: _StatTile(value: '—', label: 'RATING', t: t)),
             const SizedBox(width: 10),
-            Expanded(child: _StatTile(value: '48', label: 'BRAND DEALS', t: t)),
+            Expanded(child: _StatTile(value: '—', label: 'BRAND DEALS', t: t)),
           ]),
         ],
       ),
@@ -720,10 +768,10 @@ class _RecentWork extends StatelessWidget {
   final TrpTheme t;
   @override
   Widget build(BuildContext context) {
-    // [topRight, bottomLeft] per tile
+    // Neutral preview placeholders — no fabricated view counts.
     final tiles = <Map<String, dynamic>>[
-      {'topRight': '12.4K'}, {}, {},
-      {'bottomLeft': true}, {}, {},
+      {}, {}, {},
+      {}, {}, {},
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 26, 18, 0),
@@ -739,7 +787,7 @@ class _RecentWork extends StatelessWidget {
               children: [
                 Text('Recent Work',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: t.fg, letterSpacing: -0.14)),
-                Text('12',
+                Text('Preview',
                     style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: t.sub, letterSpacing: -0.05)),
               ],
             ),

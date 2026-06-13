@@ -182,6 +182,13 @@ class ChatMessage {
   final String? replyToId;
   final String? replyToText;
 
+  // ── View-once media ──────────────────────────────────────────
+  final String? mediaUrl;        // CDN URL (null after erased)
+  final String? mediaType;       // "image" | "video"
+  final String? mediaPublicId;   // CDN public_id
+  final bool isViewOnce;
+  final List<String> viewOnceViewedBy;
+
   ChatMessage({
     required this.id,
     required this.conversationId,
@@ -193,6 +200,11 @@ class ChatMessage {
     this.reactions = const {},
     this.replyToId,
     this.replyToText,
+    this.mediaUrl,
+    this.mediaType,
+    this.mediaPublicId,
+    this.isViewOnce = false,
+    this.viewOnceViewedBy = const [],
   });
 
   /// Returns a copy with updated reactions (for real-time WS updates).
@@ -208,6 +220,36 @@ class ChatMessage {
       reactions: newReactions,
       replyToId: replyToId,
       replyToText: replyToText,
+      mediaUrl: mediaUrl,
+      mediaType: mediaType,
+      mediaPublicId: mediaPublicId,
+      isViewOnce: isViewOnce,
+      viewOnceViewedBy: viewOnceViewedBy,
+    );
+  }
+
+  /// Returns a copy with updated view-once state.
+  ChatMessage copyWithViewOnce({
+    List<String>? viewOnceViewedBy,
+    String? mediaUrl,
+    bool clearMediaUrl = false,
+  }) {
+    return ChatMessage(
+      id: id,
+      conversationId: conversationId,
+      senderId: senderId,
+      text: text,
+      createdAt: createdAt,
+      readBy: readBy,
+      encryptedAesKeys: encryptedAesKeys,
+      reactions: reactions,
+      replyToId: replyToId,
+      replyToText: replyToText,
+      mediaUrl: clearMediaUrl ? null : (mediaUrl ?? this.mediaUrl),
+      mediaType: mediaType,
+      mediaPublicId: mediaPublicId,
+      isViewOnce: isViewOnce,
+      viewOnceViewedBy: viewOnceViewedBy ?? this.viewOnceViewedBy,
     );
   }
 
@@ -239,6 +281,11 @@ class ChatMessage {
       reactions: reactions,
       replyToId: json['reply_to_id'] as String?,
       replyToText: json['reply_to_text'] as String?,
+      mediaUrl: json['media_url'] as String?,
+      mediaType: json['media_type'] as String?,
+      mediaPublicId: json['media_public_id'] as String?,
+      isViewOnce: json['is_view_once'] as bool? ?? false,
+      viewOnceViewedBy: List<String>.from(json['view_once_viewed_by'] ?? []),
     );
   }
 }

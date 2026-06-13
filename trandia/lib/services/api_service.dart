@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // Production Railway URL — works on all platforms (web, Android, iOS)
 const String _prodUrl = 'https://web-production-eae2.up.railway.app';
@@ -16,6 +17,13 @@ const int      _kCacheMaxSz = 40;   // max entries before LRU eviction
 // ── In-memory token caches ───────────────────────────────────────────────────
 String? _cachedToken;
 String? _cachedRefreshToken;
+
+// Auth tokens live in OS-backed encrypted storage (Android Keystore), NOT
+// plaintext SharedPreferences. A one-time migration moves any legacy prefs token
+// across so already-logged-in users are never forced to sign in again.
+const FlutterSecureStorage _secureStore = FlutterSecureStorage(
+  aOptions: AndroidOptions(encryptedSharedPreferences: true),
+);
 
 // ── In-memory GET response cache ────────────────────────────────────────────
 class _CacheEntry {
@@ -49,44 +57,81 @@ bool _isRefreshing = false;
 Completer<String?>? _refreshCompleter;
 
 class ApiService {
-  // ── Access token ─────────────────────────────────────────────────────────
+  // ── Access token (OS-encrypted storage + one-time prefs migration) ─────────
   static Future<String?> getToken() async {
     if (_cachedToken != null) return _cachedToken;
-    final prefs = await SharedPreferences.getInstance();
-    _cachedToken = prefs.getString('auth_token');
+    try {
+      _cachedToken = await _secureStore.read(key: 'auth_token');
+    } catch (_) {}
+    if (_cachedToken == null) {
+      // Migrate a token written by an older app version (plaintext prefs).
+      final prefs = await SharedPreferences.getInstance();
+      final legacy = prefs.getString('auth_token');
+      if (legacy != null && legacy.isNotEmpty) {
+        _cachedToken = legacy;
+        try {
+          await _secureStore.write(key: 'auth_token', value: legacy);
+          await prefs.remove('auth_token');
+        } catch (_) {}
+      }
+    }
     return _cachedToken;
   }
 
   static Future<void> saveToken(String token) async {
     _cachedToken = token;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', token);
+    try {
+      await _secureStore.write(key: 'auth_token', value: token);
+    } catch (_) {}
   }
 
   static Future<void> clearToken() async {
     _cachedToken = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
+    try {
+      await _secureStore.delete(key: 'auth_token');
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('auth_token');
+    } catch (_) {}
   }
 
-  // ── Refresh token ─────────────────────────────────────────────────────────
+  // ── Refresh token (OS-encrypted storage + one-time prefs migration) ────────
   static Future<String?> getRefreshToken() async {
     if (_cachedRefreshToken != null) return _cachedRefreshToken;
-    final prefs = await SharedPreferences.getInstance();
-    _cachedRefreshToken = prefs.getString('refresh_token');
+    try {
+      _cachedRefreshToken = await _secureStore.read(key: 'refresh_token');
+    } catch (_) {}
+    if (_cachedRefreshToken == null) {
+      final prefs = await SharedPreferences.getInstance();
+      final legacy = prefs.getString('refresh_token');
+      if (legacy != null && legacy.isNotEmpty) {
+        _cachedRefreshToken = legacy;
+        try {
+          await _secureStore.write(key: 'refresh_token', value: legacy);
+          await prefs.remove('refresh_token');
+        } catch (_) {}
+      }
+    }
     return _cachedRefreshToken;
   }
 
   static Future<void> saveRefreshToken(String token) async {
     _cachedRefreshToken = token;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('refresh_token', token);
+    try {
+      await _secureStore.write(key: 'refresh_token', value: token);
+    } catch (_) {}
   }
 
   static Future<void> clearRefreshToken() async {
     _cachedRefreshToken = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('refresh_token');
+    try {
+      await _secureStore.delete(key: 'refresh_token');
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('refresh_token');
+    } catch (_) {}
   }
 
   /// Clear ALL auth state (access + refresh tokens).

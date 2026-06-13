@@ -260,6 +260,7 @@ class MediaUploadService {
     request.fields['timestamp'] = sigParams['timestamp'].toString();
     request.fields['signature'] = sigParams['signature'].toString();
     request.fields['folder']   = sigParams['folder'].toString();
+    _addSignedPolicyFields(request, sigParams);
 
     // Delivery optimizations — auto format (WebP/AVIF on Android) + auto quality
     if (resourceType == 'image') {
@@ -304,6 +305,7 @@ class MediaUploadService {
     request.fields['timestamp'] = sigParams['timestamp'].toString();
     request.fields['signature'] = sigParams['signature'].toString();
     request.fields['folder']    = sigParams['folder'].toString();
+    _addSignedPolicyFields(request, sigParams);
 
     if (resourceType == 'image') {
       request.fields['quality']      = 'auto';
@@ -344,6 +346,23 @@ class MediaUploadService {
     };
     return mimes[ext] ??
         (resourceType == 'video' ? 'video/mp4' : 'image/jpeg');
+  }
+
+  void _addSignedPolicyFields(
+    http.MultipartRequest request,
+    Map<String, dynamic> sigParams,
+  ) {
+    const policyFields = {
+      'allowed_formats',
+      'max_file_size',
+      'moderation',
+    };
+    for (final field in policyFields) {
+      final value = sigParams[field];
+      if (value != null && value.toString().isNotEmpty) {
+        request.fields[field] = value.toString();
+      }
+    }
   }
 
   String _filename(String path) => path.split(RegExp(r'[/\\]')).last;

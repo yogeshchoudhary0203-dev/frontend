@@ -17,6 +17,26 @@ allprojects {
     // from third-party libraries compiled with older Java compatibility settings.
     tasks.withType<JavaCompile>().configureEach {
         options.compilerArgs.addAll(listOf("-Xlint:-options", "-Xlint:-deprecation"))
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
+    }
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+        val target = project.extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
+            ?.compileOptions?.targetCompatibility
+        val jvmTargetEnum = if (target != null) {
+            when (target.toString()) {
+                "1.8", "8" -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8
+                "11" -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+                "17" -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+                "21" -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+                else -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+            }
+        } else {
+            org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
+        compilerOptions {
+            jvmTarget.set(jvmTargetEnum)
+        }
     }
 }
 

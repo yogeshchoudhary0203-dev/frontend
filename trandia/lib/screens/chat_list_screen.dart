@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
+import '../services/app_badge_service.dart';
 import '../services/chat_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/fcm_service.dart';
 import '../services/block_service.dart';
 import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
+import '../utils/shared_post.dart';
 import 'glass_common.dart';
 import 'chat_screen.dart';
 import 'search_screen.dart';
@@ -60,6 +62,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
     if (state == AppLifecycleState.resumed) {
       ChatService().connectWebSocket();
       _loadConversations();
+      AppBadgeService.refresh();
     }
   }
 
@@ -88,6 +91,8 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
 
     ChatService().messageStream.listen((msg) {
       if (!mounted) return;
+      // New message changed the unread total → update the launcher-icon badge.
+      AppBadgeService.refresh();
       final idx = _conversations.indexWhere((c) => c.id == msg.conversationId);
       if (idx == -1) {
         _loadConversations();
@@ -1332,6 +1337,8 @@ class _ChatRow extends StatelessWidget {
 
   String _cleanPreview(BuildContext context, String raw) {
     if (raw.isEmpty) return 'No messages yet'.tr(context);
+    final shared = SharedPost.tryParse(raw);
+    if (shared != null) return shared.previewLabel;
     if (raw.contains('[Encrypted Message]') ||
         raw.startsWith('{"ct":') ||
         raw.startsWith('{"ct" :')) {

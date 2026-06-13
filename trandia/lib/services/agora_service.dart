@@ -7,7 +7,15 @@ import 'api_service.dart';
 
 const String kAgoraAppId = '4acf66a0e7e246fe80064783ec2bb879';
 
-enum CallType  { voice, video }
+class _AgoraTokenConfig {
+  final String token;
+  final String appId;
+
+  const _AgoraTokenConfig({required this.token, required this.appId});
+}
+
+enum CallType { voice, video }
+
 enum CallState { idle, connecting, connected, ended }
 
 class AgoraService {
@@ -20,34 +28,40 @@ class AgoraService {
   RtcEngine? get rtcEngine => _engine;
 
   // State
-  CallState callState     = CallState.idle;
+  CallState callState = CallState.idle;
   CallType? currentCallType;
-  String?   currentChannel;
-  int?      remoteUid;
-  bool      isMuted       = false;
-  bool      isSpeakerOn   = true;
-  bool      isCameraOff   = false;
-  bool      isFrontCamera = true;
+  String? currentChannel;
+  int? remoteUid;
+  bool isMuted = false;
+  bool isSpeakerOn = true;
+  bool isCameraOff = false;
+  bool isFrontCamera = true;
 
   // Callbacks
-  Function(int uid)?      onUserJoined;
-  Function(int uid)?      onUserOffline;
-  Function(CallState)?    onCallStateChanged;
+  Function(int uid)? onUserJoined;
+  Function(int uid)? onUserOffline;
+  Function(CallState)? onCallStateChanged;
   Function(String error)? onError;
 
   // ── Token fetch ──────────────────────────────────────────────
 
-  Future<String> _fetchToken(String channelName, {int uid = 0}) async {
+  Future<_AgoraTokenConfig> _fetchToken(
+    String channelName, {
+    int uid = 0,
+  }) async {
     try {
       final encodedChannel = Uri.encodeQueryComponent(channelName);
       final result = await ApiService.get(
         '/agora/token?channel=$encodedChannel&uid=$uid',
-        requiresAuth: false,
+        requiresAuth: true,
         bypassCache: true,
       );
       final token = result['token'] as String? ?? '';
-      developer.log('[Agora] Token ${token.isEmpty ? 'disabled' : 'OK len=${token.length}'}');
-      return token;
+      final appId = result['app_id'] as String? ?? kAgoraAppId;
+      developer.log(
+        '[Agora] Token ${token.isEmpty ? 'disabled' : 'OK len=${token.length}'}',
+      );
+      return _AgoraTokenConfig(token: token, appId: appId);
     } catch (e) {
       developer.log('[Agora] Token fetch failed: $e');
       rethrow;
@@ -67,60 +81,69 @@ class AgoraService {
   // We create a new RtcEngine on every call and release it on end.
   // This avoids ALL state-carry-over bugs between calls.
 
-  Future<RtcEngine> _createEngine() async {
+  Future<RtcEngine> _createEngine(String appId) async {
     // Release any previous engine first
     if (_engine != null) {
-      try { await _engine!.release(); } catch (_) {}
+      try {
+        await _engine!.release();
+      } catch (_) {}
       _engine = null;
     }
 
     final engine = createAgoraRtcEngine();
-    await engine.initialize(const RtcEngineContext(
-      appId: kAgoraAppId,
-      channelProfile: ChannelProfileType.channelProfileCommunication,
-    ));
+    await engine.initialize(
+      RtcEngineContext(
+        appId: appId,
+        channelProfile: ChannelProfileType.channelProfileCommunication,
+      ),
+    );
 
-    engine.registerEventHandler(RtcEngineEventHandler(
-      onJoinChannelSuccess: (RtcConnection conn, int elapsed) {
-        developer.log('[Agora] Joined: ${conn.channelId}');
-        // Set speakerphone after joining — calling it before joinChannel causes
-        // ERR_ADM_INIT_PLAYOUT on many Android devices.
-        if (currentCallType == CallType.voice) {
-          engine.setEnableSpeakerphone(isSpeakerOn);
-        }
-        callState = CallState.connecting;
-        onCallStateChanged?.call(callState);
-      },
-      onUserJoined: (RtcConnection conn, int uid, int elapsed) {
-        developer.log('[Agora] Remote joined: $uid');
-        remoteUid = uid;
-        callState = CallState.connected;
-        onCallStateChanged?.call(callState);
-        onUserJoined?.call(uid);
-      },
-      onUserOffline: (RtcConnection conn, int uid, UserOfflineReasonType reason) {
-        developer.log('[Agora] Remote offline: $uid');
-        remoteUid = null;
-        onUserOffline?.call(uid);
-      },
-      onLeaveChannel: (RtcConnection conn, RtcStats stats) {
-        developer.log('[Agora] Left channel');
-        callState = CallState.ended;
-        onCallStateChanged?.call(callState);
-      },
-      onError: (ErrorCodeType err, String msg) {
-        developer.log('[Agora] Error: ${err.index} - $msg');
-        onError?.call('${err.index}: $msg');
-      },
-      onTokenPrivilegeWillExpire: (RtcConnection conn, String token) {
-        developer.log('[Agora] Token expiring soon');
-        final channel = conn.channelId ?? currentChannel;
-        if (channel == null) return;
-        _fetchToken(channel, uid: conn.localUid ?? 0)
-            .then(engine.renewToken)
-            .catchError((e) => developer.log('[Agora] Token renew failed: $e'));
-      },
-    ));
+    engine.registerEventHandler(
+      RtcEngineEventHandler(
+        onJoinChannelSuccess: (RtcConnection conn, int elapsed) {
+          developer.log('[Agora] Joined: ${conn.channelId}');
+          // Set speakerphone after joining — calling it before joinChannel causes
+          // ERR_ADM_INIT_PLAYOUT on many Android devices.
+          if (currentCallType == CallType.voice) {
+            engine.setEnableSpeakerphone(isSpeakerOn);
+          }
+          callState = CallState.connecting;
+          onCallStateChanged?.call(callState);
+        },
+        onUserJoined: (RtcConnection conn, int uid, int elapsed) {
+          developer.log('[Agora] Remote joined: $uid');
+          remoteUid = uid;
+          callState = CallState.connected;
+          onCallStateChanged?.call(callState);
+          onUserJoined?.call(uid);
+        },
+        onUserOffline:
+            (RtcConnection conn, int uid, UserOfflineReasonType reason) {
+              developer.log('[Agora] Remote offline: $uid');
+              remoteUid = null;
+              onUserOffline?.call(uid);
+            },
+        onLeaveChannel: (RtcConnection conn, RtcStats stats) {
+          developer.log('[Agora] Left channel');
+          callState = CallState.ended;
+          onCallStateChanged?.call(callState);
+        },
+        onError: (ErrorCodeType err, String msg) {
+          developer.log('[Agora] Error: ${err.index} - $msg');
+          onError?.call('${err.index}: $msg');
+        },
+        onTokenPrivilegeWillExpire: (RtcConnection conn, String token) {
+          developer.log('[Agora] Token expiring soon');
+          final channel = conn.channelId ?? currentChannel;
+          if (channel == null) return;
+          _fetchToken(channel, uid: conn.localUid ?? 0)
+              .then((config) => engine.renewToken(config.token))
+              .catchError(
+                (e) => developer.log('[Agora] Token renew failed: $e'),
+              );
+        },
+      ),
+    );
 
     _engine = engine;
     return engine;
@@ -133,28 +156,28 @@ class AgoraService {
     if (!granted) throw Exception('Microphone permission denied');
     if (uid <= 0) throw Exception('Invalid Agora uid');
 
-    final token  = await _fetchToken(channelName, uid: uid);
-    final engine = await _createEngine();
+    final config = await _fetchToken(channelName, uid: uid);
+    final engine = await _createEngine(config.appId);
 
     currentCallType = CallType.voice;
-    currentChannel  = channelName;
-    isMuted         = false;
-    isSpeakerOn     = true;
+    currentChannel = channelName;
+    isMuted = false;
+    isSpeakerOn = true;
 
     // Voice only — disable video explicitly
     await engine.enableAudio();
     await engine.disableVideo();
 
     await engine.joinChannel(
-      token:     token,
+      token: config.token,
       channelId: channelName,
-      uid:       uid,
-      options:   const ChannelMediaOptions(
-        clientRoleType:         ClientRoleType.clientRoleBroadcaster,
-        autoSubscribeAudio:     true,
-        autoSubscribeVideo:     false,
+      uid: uid,
+      options: const ChannelMediaOptions(
+        clientRoleType: ClientRoleType.clientRoleBroadcaster,
+        autoSubscribeAudio: true,
+        autoSubscribeVideo: false,
         publishMicrophoneTrack: true,
-        publishCameraTrack:     false,
+        publishCameraTrack: false,
       ),
     );
 
@@ -169,29 +192,37 @@ class AgoraService {
     if (!granted) throw Exception('Camera/Microphone permission denied');
     if (uid <= 0) throw Exception('Invalid Agora uid');
 
-    final token  = await _fetchToken(channelName, uid: uid);
-    final engine = await _createEngine();
+    final config = await _fetchToken(channelName, uid: uid);
+    final engine = await _createEngine(config.appId);
 
     currentCallType = CallType.video;
-    currentChannel  = channelName;
-    isMuted         = false;
-    isCameraOff     = false;
-    isFrontCamera   = true;
+    currentChannel = channelName;
+    isMuted = false;
+    isCameraOff = false;
+    isFrontCamera = true;
 
     await engine.enableAudio();
     await engine.enableVideo();
+    await engine.setVideoEncoderConfiguration(
+      const VideoEncoderConfiguration(
+        dimensions: VideoDimensions(width: 1280, height: 720),
+        frameRate: 30,
+        bitrate: 1710,
+        orientationMode: OrientationMode.orientationModeAdaptive,
+      ),
+    );
     await engine.startPreview();
 
     await engine.joinChannel(
-      token:     token,
+      token: config.token,
       channelId: channelName,
-      uid:       uid,
-      options:   const ChannelMediaOptions(
-        clientRoleType:         ClientRoleType.clientRoleBroadcaster,
-        autoSubscribeAudio:     true,
-        autoSubscribeVideo:     true,
+      uid: uid,
+      options: const ChannelMediaOptions(
+        clientRoleType: ClientRoleType.clientRoleBroadcaster,
+        autoSubscribeAudio: true,
+        autoSubscribeVideo: true,
         publishMicrophoneTrack: true,
-        publishCameraTrack:     true,
+        publishCameraTrack: true,
       ),
     );
 
@@ -241,20 +272,22 @@ class AgoraService {
       await eng.release();
     } catch (e) {
       developer.log('[Agora] leaveCall error: $e');
-      try { await eng.release(); } catch (_) {}
+      try {
+        await eng.release();
+      } catch (_) {}
     } finally {
-      callState       = CallState.idle;
-      currentChannel  = null;
+      callState = CallState.idle;
+      currentChannel = null;
       currentCallType = null;
-      remoteUid       = null;
-      isMuted         = false;
-      isSpeakerOn     = true;
-      isCameraOff     = false;
-      isFrontCamera   = true;
-      onUserJoined        = null;
-      onUserOffline       = null;
-      onCallStateChanged  = null;
-      onError             = null;
+      remoteUid = null;
+      isMuted = false;
+      isSpeakerOn = true;
+      isCameraOff = false;
+      isFrontCamera = true;
+      onUserJoined = null;
+      onUserOffline = null;
+      onCallStateChanged = null;
+      onError = null;
     }
   }
 

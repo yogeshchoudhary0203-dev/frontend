@@ -25,6 +25,7 @@ import '../utils/error_dialog.dart';
 import 'chat_screen.dart';
 import 'user_profile_screen.dart';
 import 'single_post_screen.dart';
+import '../widgets/profile/profile_video_thumbnail.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 /// ─── BUG FIX: _startChat ────────────────────────────────────────────────────
@@ -1233,7 +1234,9 @@ class _DiscoverGridState extends State<_DiscoverGrid> {
 
   Future<void> _load() async {
     try {
-      final res = await PostService.instance.getFeed(limit: 21);
+      // Explore feed: personalised discovery (non-followed, interest + behaviour
+      // matched), not the home feed. Refreshes server-side on every open.
+      final res = await PostService.instance.getExploreFeed(limit: 21);
       if (mounted) setState(() { _posts = res.posts; _loading = false; });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
@@ -1314,11 +1317,6 @@ class _DiscoverTileView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isVideo = post.isVideo;
-    // Videos: prefer thumbnail; fall back to media URL. Images: media URL.
-    final imageUrl =
-        (isVideo && post.thumbnailUrl != null && post.thumbnailUrl!.isNotEmpty)
-            ? post.thumbnailUrl!
-            : post.mediaUrl;
 
     final placeholderColor = dark
         ? Colors.white.withValues(alpha: 0.05)
@@ -1340,17 +1338,31 @@ class _DiscoverTileView extends StatelessWidget {
             color: placeholderColor,
           ),
           child: Stack(fit: StackFit.expand, children: [
-            CachedNetworkImage(
-              imageUrl: imageUrl,
-              fit: BoxFit.cover,
-              fadeInDuration: const Duration(milliseconds: 200),
-              placeholder: (_, __) => Container(color: placeholderColor),
-              errorWidget: (_, __, ___) => Container(
-                color: placeholderColor,
-                child: Icon(Icons.image_not_supported_outlined,
-                    size: 20, color: GlassTokens.sub(dark)),
-              ),
-            ),
+            if (!isVideo)
+              CachedNetworkImage(
+                imageUrl: post.mediaUrl,
+                fit: BoxFit.cover,
+                fadeInDuration: const Duration(milliseconds: 200),
+                placeholder: (_, __) => Container(color: placeholderColor),
+                errorWidget: (_, __, ___) => Container(
+                  color: placeholderColor,
+                  child: Icon(Icons.image_not_supported_outlined,
+                      size: 20, color: GlassTokens.sub(dark)),
+                ),
+              )
+            else if (post.thumbnailUrl != null && post.thumbnailUrl!.isNotEmpty)
+              // Server thumbnail if present; auto-generate on failure.
+              CachedNetworkImage(
+                imageUrl: post.thumbnailUrl!,
+                fit: BoxFit.cover,
+                fadeInDuration: const Duration(milliseconds: 200),
+                placeholder: (_, __) => Container(color: placeholderColor),
+                errorWidget: (_, __, ___) =>
+                    ProfileVideoThumbnailTile(videoUrl: post.mediaUrl),
+              )
+            else
+              // No server thumbnail → generate from the video itself.
+              ProfileVideoThumbnailTile(videoUrl: post.mediaUrl),
             // Subtle top sheen for depth
             Container(
               decoration: BoxDecoration(

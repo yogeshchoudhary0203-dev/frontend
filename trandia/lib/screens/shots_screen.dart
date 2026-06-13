@@ -25,8 +25,11 @@ import '../l10n/app_localizations.dart';
 import '../services/post_service.dart';
 import '../services/user_service.dart';
 import '../services/video_controller_pool.dart';
+import '../services/report_service.dart';
+import '../widgets/report_sheet.dart';
 import '../models/quiz_model.dart';
 import '../services/quiz_service.dart';
+import '../services/learn_service.dart';
 import '../services/fcm_service.dart';
 import '../services/auth_service.dart';
 import 'glass_common.dart';
@@ -59,6 +62,17 @@ class ShotData {
     required this.comments,
     required this.shares,
   });
+}
+
+/// Per-video skill-score tracker (Learn feed only). Accumulates the highest
+/// watch threshold reached + engagements for ONE viewing session, then is sent
+/// as a single fire-and-forget /learn/event when the user swipes away.
+class _LeTrack {
+  bool t40 = false;
+  bool t70 = false;
+  bool t100 = false;
+  double lastFrac = 0.0; // last position fraction — used to detect a loop restart
+  final Set<String> engagements = <String>{};
 }
 
 /// Format a raw count into a compact string (128000 → "128K").
@@ -128,6 +142,10 @@ class _ShotsScreenState extends State<ShotsScreen>
   final Map<String, Set<int>> _firedThresholds = {};
   // videoId → wall-clock start time (for watchDurationSeconds)
   final Map<String, DateTime> _watchStartTimes = {};
+
+  // ── Skill-Score learn-event tracking ──────────────────────────
+  // videoId → thresholds reached (40/70/100) + engagements for this view.
+  final Map<String, _LeTrack> _leTracks = {};
   // Background poll after quiz is triggered
   Timer? _quizFallbackTimer;   // single fallback check — NOT a polling loop
   Timer? _quizTimeoutTimer;    // absolute max wait — 90 s
@@ -198,6 +216,8 @@ class _ShotsScreenState extends State<ShotsScreen>
 
   @override
   void dispose() {
+    // Flush the last watched learn video's skill-score event on exit.
+    if (_feed == ShotsFeed.learn) _fireLearnEvent(_curIdx);
     appRouteObserver.unsubscribe(this);
     FcmService.setQuizReadyHandler(null); // deregister quiz handler
     _quizFallbackTimer?.cancel();
@@ -285,6 +305,8 @@ class _ShotsScreenState extends State<ShotsScreen>
       _liked[idx] = nowLiked;
       _likesDelta[idx] = (_likesDelta[idx] ?? 0) + (nowLiked ? 1 : -1);
     });
+
+    if (nowLiked) _recordEngagement(idx, 'like');
 
     try {
       if (nowLiked) {
@@ -381,6 +403,16 @@ class _ShotsScreenState extends State<ShotsScreen>
     final dur = ctrl.value.duration.inMilliseconds;
     if (dur == 0) return;
     final pct = (ctrl.value.position.inMilliseconds / dur * 100).toInt();
+
+    // Skill-Score thresholds (40/70/100) + rewatch (loop restart) detection.
+    final le = _leTracks.putIfAbsent(post.id, () => _LeTrack());
+    final frac = pct / 100.0;
+    if (pct >= 40) le.t40 = true;
+    if (pct >= 70) le.t70 = true;
+    if (pct >= 99) le.t100 = true;
+    if (le.lastFrac >= 0.8 && frac <= 0.15) le.engagements.add('rewatch');
+    le.lastFrac = frac;
+
     final fired = _firedThresholds.putIfAbsent(post.id, () => {});
 
     if (pct >= 35 && !fired.contains(35)) {
@@ -427,6 +459,33 @@ class _ShotsScreenState extends State<ShotsScreen>
         }
       }
     } catch (_) {}
+  }
+
+  // ── Skill-Score learn-event helpers ───────────────────────────
+
+  /// Record a user engagement (like/save/share/comment) on the video at [idx]
+  /// for the next skill-score event. Learn feed only.
+  void _recordEngagement(int idx, String type) {
+    if (_feed != ShotsFeed.learn) return;
+    if (idx < 0 || idx >= _posts.length) return;
+    _leTracks.putIfAbsent(_posts[idx].id, () => _LeTrack()).engagements.add(type);
+  }
+
+  /// Fire ONE fire-and-forget skill-score event for the video at [idx] with the
+  /// highest watch-% reached + engagements made, then clear its tracker.
+  /// Backend dedups per (user, video), so re-firing on revisit is safe.
+  void _fireLearnEvent(int idx) {
+    if (idx < 0 || idx >= _posts.length) return;
+    final le = _leTracks.remove(_posts[idx].id);
+    if (le == null) return;
+    final watchPercent = le.t100 ? 100 : (le.t70 ? 70 : (le.t40 ? 40 : 0));
+    final engagements = le.engagements.toList();
+    if (watchPercent == 0 && engagements.isEmpty) return;
+    LearnService.sendEvent(
+      contentId: _posts[idx].id,
+      watchPercent: watchPercent,
+      engagements: engagements,
+    );
   }
 
   // ── Quiz ready handling — push-first, single fallback, NO polling loop ──
@@ -504,6 +563,11 @@ class _ShotsScreenState extends State<ShotsScreen>
   void _onPageChanged(int idx) {
     HapticFeedback.selectionClick();
 
+    // Report skill-score for the video we're leaving (learn feed).
+    if (_feed == ShotsFeed.learn && _curIdx != idx) {
+      _fireLearnEvent(_curIdx);
+    }
+
     setState(() {
       _curIdx = idx;
       _expanded = false;
@@ -534,6 +598,8 @@ class _ShotsScreenState extends State<ShotsScreen>
 
   void _setFeed(ShotsFeed f) {
     if (f == _feed) return;
+    // Flush the current learn video's skill-score event before switching.
+    if (_feed == ShotsFeed.learn) _fireLearnEvent(_curIdx);
     HapticFeedback.selectionClick();
     _pool.controllerAt(_curIdx)?.pause();
     _quizFallbackTimer?.cancel();
@@ -546,6 +612,7 @@ class _ShotsScreenState extends State<ShotsScreen>
       _nudgePending = false;
       _firedThresholds.clear();
       _watchStartTimes.clear();
+      _leTracks.clear();
       _pendingQuizId = null;
       _quizBannerShown = false;
     });
@@ -819,12 +886,16 @@ class _ShotsScreenState extends State<ShotsScreen>
                 saved: _saved[_curIdx] ?? false,
                 spin: _spin,
                 onLike: () => _onLikeTap(_curIdx),
-                onSave: () => setState(
-                  () => _saved[_curIdx] = !(_saved[_curIdx] ?? false),
-                ),
+                onSave: () {
+                  final nowSaved = !(_saved[_curIdx] ?? false);
+                  setState(() => _saved[_curIdx] = nowSaved);
+                  if (nowSaved) _recordEngagement(_curIdx, 'save');
+                },
+                onShare: () => _recordEngagement(_curIdx, 'share'),
                 post: _posts[_curIdx],
                 onCommentPosted: (newCount) {
                   setState(() => _commentsCount[_curIdx] = newCount);
+                  _recordEngagement(_curIdx, 'comment');
                 },
               ),
             ),
@@ -1409,6 +1480,7 @@ class _RightRail extends StatelessWidget {
   final AnimationController spin;
   final VoidCallback onLike;
   final VoidCallback onSave;
+  final VoidCallback? onShare;
   final PostModel post;
   final void Function(int newCount)? onCommentPosted;
   const _RightRail({
@@ -1418,6 +1490,7 @@ class _RightRail extends StatelessWidget {
     required this.spin,
     required this.onLike,
     required this.onSave,
+    this.onShare,
     required this.post,
     this.onCommentPosted,
   });
@@ -1482,7 +1555,10 @@ class _RightRail extends StatelessWidget {
           icon: Icons.near_me_rounded,
           size: 28,
           count: data.shares,
-          onTap: () => ShareHelper.showShareBottomSheet(context, post),
+          onTap: () {
+            onShare?.call();
+            ShareHelper.showShareBottomSheet(context, post);
+          },
         ),
         const SizedBox(height: 18),
         _BareCustomIcon(
@@ -1491,7 +1567,15 @@ class _RightRail extends StatelessWidget {
           onTap: onSave,
         ),
         const SizedBox(height: 18),
-        _BareIcon(icon: Icons.more_horiz, size: 26, onTap: () {}),
+        _BareIcon(
+          icon: Icons.more_horiz,
+          size: 26,
+          onTap: () => showReportSheet(
+            context,
+            targetType: ReportService.targetPost,
+            targetId: post.id,
+          ),
+        ),
         const SizedBox(height: 12),
         _AudioDisc(seed: data.avatarSeed, spin: spin),
       ],

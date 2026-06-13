@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -71,6 +72,9 @@ class CryptographyService {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
+  // Guards against concurrent initKeys() calls generating/restoring twice.
+  Future<String>? _initInFlight;
+
   // ── Key Generation & Serialization ───────────────────────────
 
   /// Generate a brand new RSA 2048-bit keypair on the device.
@@ -80,19 +84,79 @@ class CryptographyService {
     return compute(generateRSAKeyPairIsolate, null);
   }
 
-  /// Initialize E2EE keys locally. Generates if not present, then returns public key.
-  Future<String> initKeys() async {
-    var pub = await _secureStorage.read(key: _kPublicKeyPref);
-    var priv = await _secureStorage.read(key: _kPrivateKeyPref);
+  /// Ensure this device has the account's E2EE keypair, and return the public key.
+  ///
+  /// Resolution order (this is what makes chats survive a device switch):
+  ///   1. Local secure storage  → use it (fast path, no network).
+  ///   2. Server keypair backup → restore it, so we can decrypt existing history.
+  ///   3. Neither exists        → generate a fresh pair and back it up.
+  ///
+  /// Concurrent callers share a single in-flight future so we never generate
+  /// two different keypairs on the same fresh device.
+  Future<String> initKeys() {
+    final inFlight = _initInFlight;
+    if (inFlight != null) return inFlight;
+    final future = _initKeysInternal();
+    _initInFlight = future;
+    return future.whenComplete(() => _initInFlight = null);
+  }
 
-    if (pub == null || priv == null) {
-      final pair = await generateRSAKeyPair();
-      pub = pair['public']!;
-      priv = pair['private']!;
-      await _secureStorage.write(key: _kPublicKeyPref, value: pub);
-      await _secureStorage.write(key: _kPrivateKeyPref, value: priv);
+  Future<String> _initKeysInternal() async {
+    final pub = await _secureStorage.read(key: _kPublicKeyPref);
+    final priv = await _secureStorage.read(key: _kPrivateKeyPref);
+
+    // 1. Local keys present → done.
+    if (pub != null && pub.isNotEmpty && priv != null && priv.isNotEmpty) {
+      return pub;
     }
-    return pub;
+
+    // 2. No local keys (new device / reinstall) → try server backup.
+    try {
+      final backup = await _fetchKeypairBackup();
+      final remotePub = backup?['public_key'] as String?;
+      final remotePriv = backup?['private_key'] as String?;
+      if (remotePub != null && remotePub.isNotEmpty &&
+          remotePriv != null && remotePriv.isNotEmpty) {
+        await _secureStorage.write(key: _kPublicKeyPref, value: remotePub);
+        await _secureStorage.write(key: _kPrivateKeyPref, value: remotePriv);
+        developer.log('[CryptographyService] Restored keypair from server backup ✓');
+        return remotePub;
+      }
+    } catch (e) {
+      developer.log('[CryptographyService] Keypair restore failed (will generate): $e');
+    }
+
+    // 3. No backup anywhere → generate fresh and back it up for future devices.
+    final pair = await generateRSAKeyPair();
+    final newPub = pair['public']!;
+    final newPriv = pair['private']!;
+    await _secureStorage.write(key: _kPublicKeyPref, value: newPub);
+    await _secureStorage.write(key: _kPrivateKeyPref, value: newPriv);
+    unawaited(_uploadKeypairBackup(newPub, newPriv));
+    developer.log('[CryptographyService] Generated new keypair + backup ✓');
+    return newPub;
+  }
+
+  /// Fetch the account's keypair backup from the server (null when none / not logged in).
+  Future<Map<String, dynamic>?> _fetchKeypairBackup() async {
+    final token = await ApiService.getToken();
+    if (token == null) return null;
+    return ApiService.get('/users/me/keypair', requiresAuth: true, bypassCache: true);
+  }
+
+  /// Upload the keypair backup (private key is encrypted at rest server-side).
+  Future<void> _uploadKeypairBackup(String publicKey, String privateKey) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return;
+      await ApiService.put(
+        '/users/me/keypair',
+        {'public_key': publicKey, 'private_key': privateKey},
+        requiresAuth: true,
+      );
+    } catch (e) {
+      developer.log('[CryptographyService] keypair backup upload failed: $e');
+    }
   }
 
   Future<String?> getLocalPublicKey() async {
@@ -206,34 +270,47 @@ class CryptographyService {
     return utf8.decode(decryptedBytes);
   }
 
-  /// Checks if the local public key is registered in MongoDB, and uploads it if missing or different.
+  /// Ensure the account's keypair is both present locally AND backed up on the
+  /// server, so any future device can restore it. Safe to call on every app open.
+  ///
+  /// Handles three cases:
+  ///   • Fresh device  → initKeys() restores/generates; this just confirms sync.
+  ///   • Legacy user   → has local keys but no server backup → uploads the backup
+  ///                     so their NEXT device can read history.
+  ///   • Up to date    → no-op.
   Future<void> ensurePublicKeyRegistered() async {
     try {
-      // 1. Initialize local keys and get public key base64 string
+      // 1. Make sure this device has the keypair (restores from backup if needed).
       final localPub = await initKeys();
+      final localPriv = await getLocalPrivateKey();
 
-      // 2. Fetch our profile from backend to check registered public key
       final token = await ApiService.getToken();
       if (token == null) return; // not logged in yet
 
-      // Get me profile
-      final response = await ApiService.get('/users/me', requiresAuth: true);
-      final registeredPub = response['public_key'] as String?;
+      // 2. Check what the server currently holds.
+      Map<String, dynamic>? backup;
+      try {
+        backup = await ApiService.get('/users/me/keypair',
+            requiresAuth: true, bypassCache: true);
+      } catch (_) {
+        backup = null;
+      }
+      final serverPub = backup?['public_key'] as String?;
+      final serverPriv = backup?['private_key'] as String?;
 
-      // 3. If not registered or different, publish it to backend
-      if (registeredPub != localPub) {
-        developer.log('[CryptographyService] Registering new public key to backend...');
-        await ApiService.put(
-          '/users/me/public-key',
-          {'public_key': localPub},
-          requiresAuth: true,
-        );
-        developer.log('[CryptographyService] Public key registered successfully ✓');
+      // 3. (Re)upload the backup when it is missing or out of sync with this
+      //    device's keys. The backup PUT also stores the public key.
+      final needsBackup = serverPriv == null ||
+          serverPriv.isEmpty ||
+          serverPub != localPub;
+      if (needsBackup && localPriv != null && localPriv.isNotEmpty) {
+        await _uploadKeypairBackup(localPub, localPriv);
+        developer.log('[CryptographyService] Keypair backup synced ✓');
       } else {
-        developer.log('[CryptographyService] Public key already registered matches local key ✓');
+        developer.log('[CryptographyService] Keypair backup already in sync ✓');
       }
     } catch (e) {
-      developer.log('[CryptographyService] Failed to ensure public key registration: $e');
+      developer.log('[CryptographyService] Failed to ensure keypair registration: $e');
     }
   }
 }

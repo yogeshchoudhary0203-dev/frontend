@@ -134,12 +134,38 @@ class PostService {
   }) async {
     final path = cursor != null
         ? '/posts/?cursor=$cursor&limit=$limit'
-        : '/posts/?limit=$limit';
+        : '/posts/?limit=$limit${refresh ? '&refresh=1' : ''}';
 
     final data = await ApiService.get(
       path,
       requiresAuth: true,
       bypassCache: refresh || cursor != null, // don't cache paginated pages
+    );
+    final rawPosts = (data['posts'] as List?) ?? [];
+    final posts = rawPosts
+        .whereType<Map<String, dynamic>>()
+        .map(PostModel.fromJson)
+        .toList();
+    return (posts: posts, nextCursor: data['next_cursor'] as String?);
+  }
+
+  // ── Explore (search-screen Discover grid) ──────────────────────────────────
+  // Personalised discovery: NON-followed content matched to the user's interests
+  // + what they actually watch. Fresh on every open (server re-ranks).
+
+  Future<({List<PostModel> posts, String? nextCursor})> getExploreFeed({
+    String? cursor,
+    int limit = 21,
+    bool refresh = false,
+  }) async {
+    final path = cursor != null
+        ? '/posts/explore/?cursor=$cursor&limit=$limit'
+        : '/posts/explore/?limit=$limit${refresh ? '&refresh=1' : ''}';
+
+    final data = await ApiService.get(
+      path,
+      requiresAuth: true,
+      bypassCache: refresh || cursor != null,
     );
     final rawPosts = (data['posts'] as List?) ?? [];
     final posts = rawPosts
@@ -258,7 +284,7 @@ class PostService {
   }) async {
     final query = cursor != null
         ? 'section=$section&cursor=$cursor&limit=$limit'
-        : 'section=$section&limit=$limit';
+        : 'section=$section&limit=$limit${refresh ? '&refresh=1' : ''}';
     final data = await ApiService.get(
       '/posts/shots/?$query',
       requiresAuth: true,

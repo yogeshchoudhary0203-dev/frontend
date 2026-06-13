@@ -6,6 +6,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import '../../services/post_service.dart';
 import '../../services/video_controller_pool.dart';
 import '../shared/home_shared.dart';
+import '../profile/profile_video_thumbnail.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FeedVideoPool
@@ -241,14 +242,15 @@ class _VideoCardState extends State<VideoCard> {
                 imageUrl: thumbnailUrl,
                 fit: BoxFit.cover,
                 placeholder: (_, __) => const ColoredBox(color: Color(0xFF111111)),
-                errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFF111111)),
+                // No server thumbnail on error → generate from the video itself.
+                errorWidget: (_, __, ___) =>
+                    ProfileVideoThumbnailTile(videoUrl: widget.post.mediaUrl),
               )
             else
-              Container(
+              // No server thumbnail → auto-generate a poster from the video.
+              ColoredBox(
                 color: const Color(0xFF111111),
-                child: const Center(
-                  child: Icon(Icons.play_circle_outline_rounded, color: Colors.white24, size: 44),
-                ),
+                child: ProfileVideoThumbnailTile(videoUrl: widget.post.mediaUrl),
               ),
 
             // ── Video layer ──────────────────────────────────────

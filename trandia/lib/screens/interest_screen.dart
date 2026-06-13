@@ -5,6 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
+import '../widgets/dob_picker_dialog.dart';
+import 'auth/parent_consent_screen.dart';
+import 'intro_slides.dart';
 import 'home/home_screen.dart';
 
 class InterestGateScreen extends StatefulWidget {
@@ -17,7 +22,9 @@ class InterestGateScreen extends StatefulWidget {
 class _InterestGateScreenState extends State<InterestGateScreen> {
   static const _lastShownKey = 'interest_screen_last_shown_at';
   static const _selectedKey = 'interest_screen_selected';
-  static const _cooldown = Duration(hours: 24);
+  static const _dobCompletedKey = 'dob_completed';
+  static const _cooldown = Duration(hours: 12);
+  static const _minSelection = 3;
 
   final Set<String> _selected = <String>{};
   bool _checking = true;
@@ -49,17 +56,145 @@ class _InterestGateScreenState extends State<InterestGateScreen> {
     final lastShown = prefs.getInt(_lastShownKey);
     final shouldShow = lastShown == null ||
         DateTime.now().difference(
-              DateTime.fromMillisecondsSinceEpoch(lastShown),
-            ) >=
-            _cooldown;
+          DateTime.fromMillisecondsSinceEpoch(lastShown),
+        ) >=
+        _cooldown;
 
     if (!mounted) return;
+    
+    // Age gate is checked against the BACKEND (per-account), so any login —
+    // Google or email — by a user who hasn't set their DOB is asked, even on a
+    // shared or reinstalled device. Falls back to the local flag only offline.
+    bool dobCompleted;
+    try {
+      final me = await ApiService.get('/users/me',
+          requiresAuth: true, bypassCache: true);
+      final dob = me['date_of_birth'];
+      dobCompleted = dob != null && dob is String && dob.isNotEmpty;
+      await prefs.setBool(_dobCompletedKey, dobCompleted);
+    } catch (_) {
+      dobCompleted = prefs.getBool(_dobCompletedKey) ?? false;
+    }
+    if (!mounted) return;
+    
+    // Age gate FIRST — every user must confirm DOB (and, if a minor, parental
+    // consent) before using the app, including existing users after an update.
+    if (!dobCompleted) {
+      _showDobPopup();
+      return;
+    }
+
     if (!shouldShow) {
       _openHome();
       return;
     }
 
     setState(() => _checking = false);
+  }
+
+  int _ageFromDob(DateTime dob) {
+    final now = DateTime.now();
+    int age = now.year - dob.year;
+    if (now.month < dob.month ||
+        (now.month == dob.month && now.day < dob.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  Future<void> _showDobPopup() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+
+    final date = await showDialog<DateTime>(
+      context: context,
+      barrierColor: Colors.black54,
+      barrierDismissible: false,
+      builder: (_) => DobPickerDialog(
+        initialDate: DateTime(now.year - 18, now.month, now.day),
+        firstDate: DateTime(now.year - 100),
+        lastDate: now,
+      ),
+    );
+
+    if (!mounted) return;
+
+    // No date chosen — leave the flag unset so we re-prompt next open.
+    if (date == null) {
+      _openHome();
+      return;
+    }
+
+    final age = _ageFromDob(date);
+
+    // Under 13 → not allowed: block and sign out.
+    if (age < 13) {
+      await _showUnderageBlockAndLogout();
+      return;
+    }
+
+    // 13–17 → must verify a parent/guardian's phone for consent.
+    String group = 'adult';
+    String? parentPhone;
+    if (age < 18) {
+      parentPhone = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => const ParentConsentScreen()),
+      );
+      if (!mounted) return;
+      if (parentPhone == null || parentPhone.isEmpty) {
+        // Consent not completed — re-prompt next open.
+        _openHome();
+        return;
+      }
+      group = 'minor';
+    }
+
+    // Persist to the backend (working endpoint) + remember locally.
+    try {
+      await ApiService.post(
+        '/users/me/age-consent',
+        {
+          'date_of_birth': date.toIso8601String().split('T').first,
+          'age_group': group,
+          if (parentPhone != null) 'parent_phone': parentPhone,
+          if (parentPhone != null) 'parental_consent': true,
+        },
+        requiresAuth: true,
+      );
+      await prefs.setBool(_dobCompletedKey, true);
+    } catch (_) {}
+
+    if (!mounted) return;
+    _openHome();
+  }
+
+  Future<void> _showUnderageBlockAndLogout() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text("You're not old enough"),
+        content: const Text(
+          'You must be at least 13 years old to use Trandia. '
+          'Your session will now end.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    try {
+      await AuthService.logout();
+    } catch (_) {}
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const IntroSlidesScreen()),
+      (_) => false,
+    );
   }
 
   void _toggle(String label) {
@@ -74,23 +209,28 @@ class _InterestGateScreenState extends State<InterestGateScreen> {
   }
 
   Future<void> _continue() async {
-    if (_saving || _selected.isEmpty) return;
+    if (_saving || _selected.length < _minSelection) return;
     setState(() => _saving = true);
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_selectedKey, _selected.toList()..sort());
-    await prefs.setInt(_lastShownKey, DateTime.now().millisecondsSinceEpoch);
-
-    if (!mounted) return;
-    _openHome();
-  }
-
-  Future<void> _skip() async {
-    if (_saving) return;
-    setState(() => _saving = true);
+    final selected = _selected.toList()..sort();
 
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_selectedKey, selected);
     await prefs.setInt(_lastShownKey, DateTime.now().millisecondsSinceEpoch);
+
+    // Sync to the backend so the home-feed algorithm gets the interest signal.
+    // Best-effort: never block entry to the app on a network hiccup — the local
+    // copy persists and the next 12h cycle retries. Keys are lowercased to match
+    // the backend interest catalog.
+    try {
+      await ApiService.put(
+        '/users/me/interests',
+        {'interests': selected.map((e) => e.toLowerCase()).toList()},
+        requiresAuth: true,
+      );
+    } catch (_) {
+      // offline / transient — proceed into the app anyway
+    }
 
     if (!mounted) return;
     _openHome();
@@ -165,14 +305,6 @@ class _InterestGateScreenState extends State<InterestGateScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: _TextAction(
-                                label: 'Skip',
-                                color: t.muted,
-                                onTap: _skip,
-                              ),
-                            ),
                             const Spacer(),
                             _GlassPanel(
                               t: t,
@@ -202,7 +334,7 @@ class _InterestGateScreenState extends State<InterestGateScreen> {
                                             ),
                                             const SizedBox(height: 6),
                                             Text(
-                                              'Select topics you want to see more on Trandia.',
+                                              'Pick at least 3 topics you want to see more of on Trandia.',
                                               style: GoogleFonts.manrope(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w500,
@@ -233,12 +365,15 @@ class _InterestGateScreenState extends State<InterestGateScreen> {
                                   const SizedBox(height: 22),
                                   _PrimaryButton(
                                     t: t,
-                                    enabled: _selected.isNotEmpty && !_saving,
+                                    enabled:
+                                        _selected.length >= _minSelection && !_saving,
                                     label: _saving
                                         ? 'Saving...'
-                                        : _selected.isEmpty
-                                            ? 'Select at least one'
-                                            : 'Continue',
+                                        : _selected.length >= _minSelection
+                                            ? 'Continue'
+                                            : _selected.isEmpty
+                                                ? 'Select at least $_minSelection'
+                                                : 'Select ${_minSelection - _selected.length} more',
                                     onTap: _continue,
                                   ),
                                 ],
@@ -492,33 +627,3 @@ class _PrimaryButton extends StatelessWidget {
   }
 }
 
-class _TextAction extends StatelessWidget {
-  const _TextAction({
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        child: Text(
-          label,
-          style: GoogleFonts.manrope(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
-        ),
-      ),
-    );
-  }
-}

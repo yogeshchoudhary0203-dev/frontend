@@ -3,15 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../interest_screen.dart';
 import '../../services/auth_service.dart';
-import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
+import '../../l10n/app_localizations.dart';
 import '../../utils/error_dialog.dart';
+import '../glass_common.dart';
 
 class EmailVerificationPendingScreen extends StatefulWidget {
   final String email;
   final String name;
   final String username;
   final String password;
+  final DateTime? dob;
+  final String? ageGroup;
+  final String? parentPhone;
 
   const EmailVerificationPendingScreen({
     super.key,
@@ -19,6 +23,9 @@ class EmailVerificationPendingScreen extends StatefulWidget {
     required this.name,
     required this.username,
     required this.password,
+    this.dob,
+    this.ageGroup,
+    this.parentPhone,
   });
 
   @override
@@ -95,7 +102,25 @@ class _EmailVerificationPendingScreenState
         name: widget.name,
         username: widget.username,
         password: widget.password,
+        dateOfBirth: widget.dob,
       );
+      // Persist DOB + (for 13–17 minors) the verified parental consent now that
+      // the account exists. Best-effort — never blocks signup completion.
+      if (widget.dob != null) {
+        try {
+          await ApiService.post(
+            '/users/me/age-consent',
+            {
+              'date_of_birth':
+                  widget.dob!.toIso8601String().split('T').first,
+              if (widget.ageGroup != null) 'age_group': widget.ageGroup,
+              if (widget.parentPhone != null) 'parent_phone': widget.parentPhone,
+              if (widget.parentPhone != null) 'parental_consent': true,
+            },
+            requiresAuth: true,
+          );
+        } catch (_) {}
+      }
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,

@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/chat_model.dart';
 import 'api_service.dart';
 import 'cryptography_service.dart';
 import 'auth_service.dart';
 import 'local_db.dart';
+import 'media_upload_service.dart';
 
 /// Singleton chat service — WebSocket + REST.
 class ChatService {
@@ -20,19 +24,30 @@ class ChatService {
   Timer? _reconnectTimer;
   int _reconnectDelay = 1; // seconds, doubles each attempt
 
-  final _messageCtrl      = StreamController<ChatMessage>.broadcast();
-  final _typingCtrl       = StreamController<Map<String, dynamic>>.broadcast();
-  final _reactionCtrl     = StreamController<Map<String, dynamic>>.broadcast();
-  final _notificationCtrl = StreamController<Map<String, dynamic>>.broadcast();
-  final _callCtrl         = StreamController<Map<String, dynamic>>.broadcast();
-  final _presenceCtrl     = StreamController<Map<String, dynamic>>.broadcast();
-  final _deletedCtrl      = StreamController<Map<String, dynamic>>.broadcast();
+  // Not final — recreated in dispose() so the singleton stays usable after a
+  // logout → login cycle without an app restart (closed controllers can't re-add).
+  StreamController<ChatMessage>      _messageCtrl      = StreamController.broadcast();
+  StreamController<Map<String, dynamic>> _typingCtrl       = StreamController.broadcast();
+  StreamController<Map<String, dynamic>> _reactionCtrl     = StreamController.broadcast();
+  StreamController<Map<String, dynamic>> _notificationCtrl = StreamController.broadcast();
+  StreamController<Map<String, dynamic>> _callCtrl         = StreamController.broadcast();
+  StreamController<Map<String, dynamic>> _presenceCtrl     = StreamController.broadcast();
+  StreamController<Map<String, dynamic>> _deletedCtrl      = StreamController.broadcast();
+  StreamController<Map<String, dynamic>> _viewOnceCtrl     = StreamController.broadcast();
 
   // Tracks which user IDs are currently online (updated via WS presence events)
   final Set<String> _onlineUserIds = {};
 
   // In-memory messages cache: convId → list (most-recent first)
   final Map<String, List<ChatMessage>> _msgCache = {};
+
+  // Resolved recipient public keys, so we never send a message that the
+  // recipient can't decrypt just because the chat was opened without their key.
+  final Map<String, String> _pubKeyCache = {};
+
+  // Outbox of encrypted payloads that couldn't be sent (WS down). Flushed on
+  // reconnect so a brief disconnect never silently drops a message.
+  final List<String> _outbox = [];
 
   // Typing throttle — only send 1 event per 2 seconds
   DateTime? _lastTypingSent;
@@ -48,6 +63,7 @@ class ChatService {
   Stream<Map<String, dynamic>>   get callStream         => _callCtrl.stream;
   Stream<Map<String, dynamic>>   get presenceStream     => _presenceCtrl.stream;
   Stream<Map<String, dynamic>>   get deletedStream      => _deletedCtrl.stream;
+  Stream<Map<String, dynamic>>   get viewOnceStream     => _viewOnceCtrl.stream;
   Set<String> get onlineUserIds => Set.unmodifiable(_onlineUserIds);
   bool get isConnected => _channel != null;
 
@@ -58,18 +74,15 @@ class ChatService {
     _isConnecting = true;
 
     try {
-      final results = await Future.wait([
-        AuthService.getCurrentUserId(),
-        CryptographyService().initKeys(),
-        CryptographyService().getLocalPrivateKey(),
-        ApiService.getToken(),
-      ]);
-      _myUserId        = results[0];
-      _localPublicKey  = results[1];
-      _localPrivateKey = results[2];
-      final token      = results[3];
-
+      final token = await ApiService.getToken();
       if (token == null) { _isConnecting = false; return; }
+
+      _myUserId = await AuthService.getCurrentUserId();
+      // initKeys() must finish BEFORE we read the private key — on a fresh device
+      // it restores the keypair from the server backup. Reading concurrently
+      // (the old Future.wait) could grab a null private key mid-restore.
+      _localPublicKey  = await CryptographyService().initKeys();
+      _localPrivateKey = await CryptographyService().getLocalPrivateKey();
 
       final wsUri = Uri.parse('$wsUrl/chat/ws?token=$token');
       developer.log('[ChatService] Connecting WebSocket: $wsUri');
@@ -85,6 +98,9 @@ class ChatService {
         onError: _onWsError,
         cancelOnError: false,
       );
+
+      // Connection is live — flush anything queued while we were offline.
+      _flushOutbox();
     } catch (e) {
       developer.log('[ChatService] WebSocket connect failed: $e');
       _channel = null;
@@ -118,6 +134,32 @@ class ChatService {
           if (msgId.isNotEmpty) {
             _msgCache[convId]?.removeWhere((m) => m.id == msgId);
             _deletedCtrl.add({'message_id': msgId, 'conversation_id': convId});
+          }
+
+        // ── View-once viewed event ──────────────────────────────
+        case 'view_once_viewed':
+          final msgId  = data['message_id'] as String? ?? '';
+          final convId = data['conversation_id'] as String? ?? '';
+          final viewedBy = List<String>.from(data['view_once_viewed_by'] as List? ?? []);
+          final mediaErased = data['media_erased'] as bool? ?? false;
+          if (msgId.isNotEmpty) {
+            // Update in-memory cache
+            final cached = _msgCache[convId];
+            if (cached != null) {
+              final idx = cached.indexWhere((m) => m.id == msgId);
+              if (idx != -1) {
+                cached[idx] = cached[idx].copyWithViewOnce(
+                  viewOnceViewedBy: viewedBy,
+                  clearMediaUrl: mediaErased,
+                );
+              }
+            }
+            _viewOnceCtrl.add({
+              'message_id': msgId,
+              'conversation_id': convId,
+              'view_once_viewed_by': viewedBy,
+              'media_erased': mediaErased,
+            });
           }
 
         case 'typing':
@@ -210,8 +252,24 @@ class ChatService {
     _callCtrl.close();
     _presenceCtrl.close();
     _deletedCtrl.close();
+    _viewOnceCtrl.close();
     _onlineUserIds.clear();
     _msgCache.clear();
+    _pubKeyCache.clear();
+    _outbox.clear();
+    clearCachedKeys();
+
+    // Recreate the controllers so this singleton can be reused after a
+    // logout → login cycle without restarting the app (a closed broadcast
+    // controller throws on the next .add()).
+    _messageCtrl      = StreamController.broadcast();
+    _typingCtrl       = StreamController.broadcast();
+    _reactionCtrl     = StreamController.broadcast();
+    _notificationCtrl = StreamController.broadcast();
+    _callCtrl         = StreamController.broadcast();
+    _presenceCtrl     = StreamController.broadcast();
+    _deletedCtrl      = StreamController.broadcast();
+    _viewOnceCtrl     = StreamController.broadcast();
   }
 
   // ── Call Signaling ───────────────────────────────────────────
@@ -266,26 +324,40 @@ class ChatService {
     DateTime? createdAt,
     String? replyToId,
     String? replyToText,
+    // ── View-once media (optional) ──────────────────────────
+    String? mediaUrl,
+    String? mediaType,
+    String? mediaPublicId,
+    bool isViewOnce = false,
   }) async {
-    if (_channel == null) {
-      developer.log('[ChatService] sendMessage: WS not connected');
-      return;
-    }
-
     try {
       await _ensureKeysLoaded();
 
+      // For view-once media messages, the text is a placeholder — we still
+      // go through the E2E encryption pipeline so the structure is consistent,
+      // but the real content is the media_url (not encrypted).
       final aesKey        = CryptographyService().generateRandomAESKey();
       final encryptedText = CryptographyService().encryptAES(text, aesKey);
 
       final Map<String, String> encryptedAesKeys = {};
+
+      // Encrypt the AES key for every participant. If a participant's public key
+      // wasn't carried on the conversation object (chat opened from a profile,
+      // search result, story, etc.), fetch it now — this is exactly what stops
+      // the recipient from receiving a blank/undecryptable message.
       for (final p in participants) {
-        if (p.publicKey != null && p.publicKey!.isNotEmpty) {
+        final pub = await _publicKeyFor(p);
+        if (pub != null && pub.isNotEmpty) {
           encryptedAesKeys[p.id] =
-              CryptographyService().encryptAESKeyWithRSA(aesKey, p.publicKey!);
+              CryptographyService().encryptAESKeyWithRSA(aesKey, pub);
+        } else {
+          developer.log(
+              '[ChatService] No public key for ${p.id} — recipient could not decrypt');
         }
       }
 
+      // Always include a copy encrypted for ourselves so all of our own devices
+      // can read the message too.
       if (_myUserId != null &&
           _localPublicKey != null &&
           _localPublicKey!.isNotEmpty &&
@@ -294,17 +366,74 @@ class ChatService {
             CryptographyService().encryptAESKeyWithRSA(aesKey, _localPublicKey!);
       }
 
-      _channel!.sink.add(jsonEncode({
+      final payload = jsonEncode({
         'type':               'message',
         'conversation_id':    conversationId,
         'text':               encryptedText,
         'client_created_at':  (createdAt ?? DateTime.now()).toUtc().toIso8601String(),
         'encrypted_aes_keys': encryptedAesKeys,
-        if (replyToId != null)   'reply_to_id':   replyToId,
-        if (replyToText != null) 'reply_to_text': replyToText,
-      }));
+        if (replyToId != null)   'reply_to_id':    replyToId,
+        if (replyToText != null) 'reply_to_text':  replyToText,
+        // ── Media ──────────────────────────────────────────────
+        if (mediaUrl != null)      'media_url':       mediaUrl,
+        if (mediaType != null)     'media_type':      mediaType,
+        if (mediaPublicId != null) 'media_public_id': mediaPublicId,
+        if (isViewOnce)            'is_view_once':    true,
+      });
+      _sendOrQueue(payload);
     } catch (e) {
       developer.log('[ChatService] Error encrypting and sending message: $e');
+    }
+  }
+
+  /// Resolve a participant's RSA public key, fetching + caching it when the
+  /// conversation object didn't carry one. Returns null only if the user has
+  /// no registered key (they have never opened the app with E2EE).
+  Future<String?> _publicKeyFor(UserProfile p) async {
+    if (p.publicKey != null && p.publicKey!.isNotEmpty) {
+      _pubKeyCache[p.id] = p.publicKey!;
+      return p.publicKey;
+    }
+    if (p.id == _myUserId) return _localPublicKey;
+    final cached = _pubKeyCache[p.id];
+    if (cached != null && cached.isNotEmpty) return cached;
+    try {
+      final res = await ApiService.get('/users/${p.id}', requiresAuth: true);
+      final pub = res['public_key'] as String?;
+      if (pub != null && pub.isNotEmpty) {
+        _pubKeyCache[p.id] = pub;
+        return pub;
+      }
+    } catch (e) {
+      developer.log('[ChatService] public key fetch for ${p.id} failed: $e');
+    }
+    return null;
+  }
+
+  /// Send a payload immediately when connected; otherwise queue it and trigger a
+  /// (re)connect so it flushes the moment the socket is back. No message lost.
+  void _sendOrQueue(String payload) {
+    final ch = _channel;
+    if (ch != null) {
+      try {
+        ch.sink.add(payload);
+        return;
+      } catch (_) {/* fall through to queue */}
+    }
+    _outbox.add(payload);
+    connectWebSocket();
+  }
+
+  void _flushOutbox() {
+    if (_outbox.isEmpty || _channel == null) return;
+    final pending = List<String>.from(_outbox);
+    _outbox.clear();
+    for (final p in pending) {
+      try {
+        _channel!.sink.add(p);
+      } catch (_) {
+        _outbox.add(p); // still failing — keep for the next reconnect
+      }
     }
   }
 
@@ -588,6 +717,11 @@ class ChatService {
         text: plainText, createdAt: msg.createdAt, readBy: msg.readBy,
         encryptedAesKeys: msg.encryptedAesKeys, reactions: msg.reactions,
         replyToId: msg.replyToId, replyToText: msg.replyToText,
+        mediaUrl: msg.mediaUrl,
+        mediaType: msg.mediaType,
+        mediaPublicId: msg.mediaPublicId,
+        isViewOnce: msg.isViewOnce,
+        viewOnceViewedBy: msg.viewOnceViewedBy,
       );
     } catch (e) {
       developer.log('[ChatService] Decryption error: $e');
@@ -611,6 +745,11 @@ class ChatService {
     text: '', createdAt: msg.createdAt, readBy: msg.readBy,
     encryptedAesKeys: msg.encryptedAesKeys, reactions: msg.reactions,
     replyToId: msg.replyToId, replyToText: msg.replyToText,
+    mediaUrl: msg.mediaUrl,
+    mediaType: msg.mediaType,
+    mediaPublicId: msg.mediaPublicId,
+    isViewOnce: msg.isViewOnce,
+    viewOnceViewedBy: msg.viewOnceViewedBy,
   );
 
   String? decryptLastMessage(
@@ -674,6 +813,44 @@ class ChatService {
     ).timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) {
       throw ApiException('Failed to delete conversation (${res.statusCode})');
+    }
+  }
+
+  // ── View-once media ──────────────────────────────────────────
+
+  /// Upload a file (photo or video) to the chat CDN folder.
+  /// Returns a map with keys: url, public_id, format, media_type ("image"|"video")
+  Future<Map<String, dynamic>> uploadChatMedia(File file) async {
+    final mimeType = lookupMimeType(file.path) ?? 'application/octet-stream';
+    final isVideo  = mimeType.startsWith('video/');
+    final mediaType = isVideo ? 'video' : 'image';
+
+    final result = isVideo
+        ? await MediaUploadService.instance.uploadVideo(file, folder: MediaFolder.chats)
+        : await MediaUploadService.instance.uploadImage(file, folder: MediaFolder.chats);
+
+    return {
+      'url':        result.url,
+      'public_id':  result.publicId,
+      'media_type': mediaType,
+    };
+  }
+
+  /// Tell the server this view-once message has been viewed by the current user.
+  Future<void> markViewOnceViewed(
+    String conversationId,
+    String messageId,
+  ) async {
+    final token = await ApiService.getToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/chat/$conversationId/messages/$messageId/view-once'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      developer.log('[ChatService] markViewOnceViewed failed (${res.statusCode})');
     }
   }
 }

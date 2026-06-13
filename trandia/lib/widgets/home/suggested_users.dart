@@ -156,7 +156,7 @@ class _FollowerSuggestionsTabState extends State<FollowerSuggestionsTab> {
                         child: isBusy
                             ? SizedBox(width: 15, height: 15,
                                 child: CircularProgressIndicator(strokeWidth: 1.6, color: isFollowing ? fg : cardBg))
-                            : Text(isFollowing ? 'Following'.tr(context) : 'Follow Karo'.tr(context), maxLines: 1, overflow: TextOverflow.ellipsis,
+                            : Text(isFollowing ? 'Following'.tr(context) : 'Follow'.tr(context), maxLines: 1, overflow: TextOverflow.ellipsis,
                                 style: TextStyle(color: isFollowing ? fg.op(0.88) : cardBg, fontSize: 13, fontWeight: FontWeight.w800)),
                       ),
                     ),

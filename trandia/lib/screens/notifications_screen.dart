@@ -12,6 +12,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/api_service.dart';
+import '../services/app_badge_service.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
 import '../services/follow_state.dart';
@@ -169,16 +170,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String _filter = 'All';
 
   List<NfItem> _items = [];
+  final Set<String> _seenIds = <String>{};
   bool _loading = true;
   bool _error = false;
   StreamSubscription? _fcmSub;
   StreamSubscription? _wsNotifSub;
 
-  // Pagination
+  // Cursor pagination keeps the feed fast even for very large notification
+  // histories. Offset/skip pagination gets slower as the account ages.
   static const int _pageSize = 40;
   bool _isLoadingMore = false;
   bool _hasMore = true;
-  int _skip = 0;
+  String? _nextCursor;
+  int _fetchGeneration = 0;
+  int _realtimeGeneration = 0;
 
   @override
   void initState() {
@@ -203,7 +208,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _fetchNotifications() async {
-    setState(() { _loading = true; _error = false; _skip = 0; _hasMore = true; });
+    final generation = ++_fetchGeneration;
+    final realtimeAtStart = _realtimeGeneration;
+    final idsAtStart = _items
+        .map((item) => item.id)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    setState(() {
+      _loading = true;
+      _error = false;
+      _hasMore = true;
+      _nextCursor = null;
+      _seenIds
+        ..clear()
+        ..addAll(_items.map((item) => item.id).where((id) => id.isNotEmpty));
+    });
     try {
       final data = await ApiService.getList(
         '/notifications?limit=$_pageSize',
@@ -212,10 +231,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       final items = data
           .map((d) => NfItem.fromJson(d as Map<String, dynamic>))
           .toList();
-      if (mounted) {
+      if (mounted && generation == _fetchGeneration) {
         setState(() {
-          _items = items;
-          _skip = items.length;
+          _seenIds.clear();
+          final realtimeArrivals = _realtimeGeneration == realtimeAtStart
+              ? <NfItem>[]
+              : _items
+                  .where((item) =>
+                      item.id.isNotEmpty && !idsAtStart.contains(item.id))
+                  .toList();
+          _items = _mergeFreshPage([...realtimeArrivals, ...items]);
+          _nextCursor = _lastCursorFrom(items);
           _hasMore = items.length == _pageSize;
           _loading = false;
         });
@@ -230,10 +256,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _fetchMoreNotifications() async {
     if (_isLoadingMore || !_hasMore) return;
+    final cursor = _nextCursor;
+    if (cursor == null || cursor.isEmpty) {
+      setState(() => _hasMore = false);
+      return;
+    }
+
     setState(() => _isLoadingMore = true);
     try {
       final data = await ApiService.getList(
-        '/notifications?skip=$_skip&limit=$_pageSize',
+        '/notifications?cursor=${Uri.encodeComponent(cursor)}&limit=$_pageSize',
         requiresAuth: true,
       );
       final newItems = data
@@ -242,9 +274,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (mounted) {
         setState(() {
           for (final item in newItems) {
-            if (!_isDuplicate(item.id)) _items.add(item);
+            if (_remember(item.id)) _items.add(item);
           }
-          _skip += newItems.length;
+          _nextCursor = _lastCursorFrom(newItems) ?? _nextCursor;
           _hasMore = newItems.length == _pageSize;
           _isLoadingMore = false;
         });
@@ -255,12 +287,35 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  /// Returns true if this notification id already exists in the list.
-  /// An empty id is NEVER treated as duplicate — it would suppress all
-  /// notifications from older backend versions that didn't send an id.
-  bool _isDuplicate(String id) {
-    if (id.isEmpty) return false;
-    return _items.any((item) => item.id == id);
+  List<NfItem> _mergeFreshPage(List<NfItem> page) {
+    final merged = <NfItem>[];
+    for (final item in page) {
+      if (_remember(item.id)) merged.add(item);
+    }
+    return merged;
+  }
+
+  String? _lastCursorFrom(List<NfItem> items) {
+    for (var i = items.length - 1; i >= 0; i--) {
+      final id = items[i].id;
+      if (id.isNotEmpty) return id;
+    }
+    return null;
+  }
+
+  /// Returns true the first time a notification id is seen.
+  /// Empty ids are accepted so older backend payloads still render.
+  bool _remember(String id) {
+    if (id.isEmpty) return true;
+    return _seenIds.add(id);
+  }
+
+  void _prependRealtime(NfItem item) {
+    if (!_remember(item.id)) return;
+    setState(() {
+      _realtimeGeneration++;
+      _items.insert(0, item);
+    });
   }
 
   /// Listen for FCM foreground messages and WebSocket events.
@@ -272,7 +327,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (msgType == null) return;
 
       final String notifId = msg.data['id'] ?? '';
-      if (_isDuplicate(notifId)) return;
 
       final newItem = NfItem(
         id: notifId,
@@ -283,7 +337,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         unread: true,
       );
       if (mounted) {
-        setState(() { _items.insert(0, newItem); });
+        _prependRealtime(newItem);
       }
     });
 
@@ -291,9 +345,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _wsNotifSub = ChatService().notificationStream.listen((data) {
       try {
         final newItem = NfItem.fromJson(data);
-        if (_isDuplicate(newItem.id)) return;
         if (mounted) {
-          setState(() { _items.insert(0, newItem); });
+          _prependRealtime(newItem);
         }
       } catch (e) {
         debugPrint('[Notifications] WS parse error: $e');
@@ -315,11 +368,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _markAllRead() async {
     try {
       await ApiService.put('/notifications/read-all', {}, requiresAuth: true);
+      // Notifications cleared → update the launcher-icon badge.
+      AppBadgeService.refresh();
       if (mounted) {
         setState(() {
           _items = _items.map((n) => NfItem(
             id: n.id, kind: n.kind, name: n.name, text: n.text,
-            time: n.time, fromUserId: n.fromUserId, thumb: n.thumb, unread: false,
+            time: n.time, fromUserId: n.fromUserId, fromPicture: n.fromPicture,
+            thumb: n.thumb, unread: false, requestId: n.requestId,
+            collabStatus: n.collabStatus,
           )).toList();
         });
       }
@@ -335,7 +392,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (index == -1) return;
 
     final removed = _items[index];
-    setState(() { _items.removeAt(index); });
+    setState(() {
+      _items.removeAt(index);
+      if (item.id.isNotEmpty) _seenIds.remove(item.id);
+    });
 
     try {
       await ApiService.delete('/notifications/${item.id}', requiresAuth: true);
@@ -343,7 +403,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       debugPrint('[Notifications] delete error: $e');
       if (!mounted) return;
       final restoreIndex = index >= _items.length ? _items.length : index;
-      setState(() { _items.insert(restoreIndex, removed); });
+      setState(() {
+        if (_remember(removed.id)) _items.insert(restoreIndex, removed);
+      });
       showErrorDialog(context, message: 'Could not delete notification'.tr(context));
     }
   }

@@ -5,12 +5,14 @@ import '../l10n/app_localizations.dart';
 import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../services/auth_service.dart';
+import '../services/api_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'glass_common.dart';
 import 'edit_profile_screen.dart';
-import 'parental_control_screen.dart';
 import 'intro_slides.dart';
 import 'notification_settings_screen.dart';
 import 'saved_posts_screen.dart';
+import 'archive_screen.dart';
 import 'app_lock_screen.dart';
 import '../services/app_lock_service.dart';
 import 'trandia_marketplace_screen.dart';
@@ -19,6 +21,7 @@ import 'trandia_marketplace_dashboard_screen.dart';
 import 'find_collaborate_screen.dart';
 import 'chat_color_settings_screen.dart';
 import '../services/theme_manager.dart';
+import 'badges_screen.dart';
 
 // Search item model ────────────────────────────────────────────────────────────
 class _SearchItem {
@@ -238,6 +241,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _openFindCollaborate(BuildContext ctx) {
     final dark = Theme.of(ctx).brightness == Brightness.dark;
     _openScreenSmoothly(ctx, FindCollaborateScreen(dark: dark));
+  }
+
+  void _openBadges(BuildContext ctx) {
+    final dark = Theme.of(ctx).brightness == Brightness.dark;
+    _openScreenSmoothly(ctx, BadgesScreen(dark: dark));
   }
 
   Future<void> _openCreatorMarketplaceFlow(BuildContext ctx) async {
@@ -739,15 +747,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: 'English, Hindi, Hinglish',
       ),
       _SearchItem(
-        icon: Icons.supervised_user_circle,
-        title: 'Parental Control',
-        subtitle: 'Screen time and content filters',
-        onTap: () => _openScreenSmoothly(
-          ctx,
-          ParentalControlScreen(dark: dark),
-        ),
-      ),
-      _SearchItem(
         icon: Icons.bookmark_border_rounded,
         title: 'Saved',
         subtitle: 'Posts and collections',
@@ -757,7 +756,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.archive_outlined,
         title: 'Archive',
         subtitle: 'Stories and hidden posts',
-        onTap: () => _openDummy(ctx),
+        onTap: () => _openScreenSmoothly(ctx, ArchiveScreen(dark: dark)),
+      ),
+      _SearchItem(
+        icon: Icons.military_tech_outlined,
+        title: 'Badges',
+        subtitle: 'Achievements, milestones and secret badges',
+        onTap: () => _openBadges(ctx),
       ),
       _SearchItem(
         icon: Icons.help_outline_rounded,
@@ -1069,21 +1074,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
         ),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _openScreenSmoothly(
-            context,
-            ParentalControlScreen(dark: dark),
-          ),
-          child: _BaseRow(
-            dark: dark,
-            icon: Icons.supervised_user_circle,
-            title: 'Parental Control',
-            subtitle: '',
-            trailing: Icon(Icons.chevron_right_rounded,
-                color: GlassTokens.sub(dark), size: 24),
-          ),
-        ),
         const SizedBox(height: 16),
         _SectionTitle('MORE'.tr(context), color: sub),
         _SectionCard(
@@ -1101,12 +1091,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => _openDummy(context),
+              onTap: () => _openScreenSmoothly(context, ArchiveScreen(dark: dark)),
               child: _SettingRow(
                 dark: dark,
                 icon: Icons.archive_outlined,
                 title: 'Archive',
                 subtitle: 'Stories and hidden posts',
+              ),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openBadges(context),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.military_tech_outlined,
+                title: 'Badges',
+                subtitle: 'Achievements, milestones \u0026 secret badges',
               ),
             ),
             GestureDetector(
@@ -1119,10 +1119,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'Support and app info',
               ),
             ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => launchUrl(
+                Uri.parse(
+                    'https://yogeshchoudhary0203-dev.github.io/privacy-policy/privacy-policy.html'),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.privacy_tip_outlined,
+                title: 'Privacy Policy',
+                subtitle: 'How we handle your data',
+              ),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => launchUrl(
+                Uri.parse(
+                    'https://yogeshchoudhary0203-dev.github.io/privacy-policy/Trandia_Terms_of_Use.html'),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: _SettingRow(
+                dark: dark,
+                icon: Icons.description_outlined,
+                title: 'Terms of Use',
+                subtitle: 'Rules for using Trandia',
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
         _LogoutButton(dark: dark),
+        const SizedBox(height: 6),
+        _DeleteAccountButton(dark: dark),
       ],
     );
   }
@@ -1704,6 +1734,165 @@ class _LogoutButtonState extends State<_LogoutButton> {
                 ),
         ),
       ),
+    );
+  }
+}
+
+
+// ── Delete account button (Google Play data-deletion compliance) ──────────────
+
+class _DeleteAccountButton extends StatefulWidget {
+  final bool dark;
+  const _DeleteAccountButton({required this.dark});
+
+  @override
+  State<_DeleteAccountButton> createState() => _DeleteAccountButtonState();
+}
+
+class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
+  bool _loading = false;
+
+  Future<void> _handleDelete() async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final canDelete =
+              controller.text.trim().toUpperCase() == 'DELETE';
+          return AlertDialog(
+            backgroundColor:
+                widget.dark ? const Color(0xFF1C1C1F) : Colors.white,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20)),
+            title: Text(
+              'Delete account?',
+              style: manrope(
+                  size: 17,
+                  weight: FontWeight.w800,
+                  color: GlassTokens.fg(widget.dark)),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This permanently deletes your account, posts, chats and all '
+                  'your data. This cannot be undone.\n\nType DELETE to confirm.',
+                  style: manrope(
+                      size: 14,
+                      weight: FontWeight.w500,
+                      color: GlassTokens.sub(widget.dark)),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: controller,
+                  onChanged: (_) => setLocal(() {}),
+                  autocorrect: false,
+                  textCapitalization: TextCapitalization.characters,
+                  style: manrope(
+                      size: 14,
+                      weight: FontWeight.w700,
+                      color: GlassTokens.fg(widget.dark)),
+                  decoration: InputDecoration(
+                    hintText: 'DELETE',
+                    hintStyle: manrope(
+                        size: 14,
+                        weight: FontWeight.w600,
+                        color: GlassTokens.sub(widget.dark)),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                          color: GlassTokens.sub(widget.dark)
+                              .withValues(alpha: 0.3)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.redAccent),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(
+                  'Cancel',
+                  style: manrope(
+                      size: 14,
+                      weight: FontWeight.w700,
+                      color: GlassTokens.sub(widget.dark)),
+                ),
+              ),
+              TextButton(
+                onPressed:
+                    canDelete ? () => Navigator.pop(ctx, true) : null,
+                child: Text(
+                  'Delete',
+                  style: manrope(
+                      size: 14,
+                      weight: FontWeight.w700,
+                      color: canDelete
+                          ? Colors.redAccent
+                          : GlassTokens.sub(widget.dark)),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _loading = true);
+    try {
+      await ApiService.delete('/users/me', requiresAuth: true);
+      try {
+        await AuthService.logout();
+      } catch (_) {}
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const IntroSlidesScreen()),
+        (route) => false,
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Text('Could not delete account. Please try again.'),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: _loading ? null : _handleDelete,
+      child: _loading
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(Colors.redAccent),
+              ),
+            )
+          : Text(
+              'Delete Account',
+              style: manrope(
+                  size: 13,
+                  weight: FontWeight.w700,
+                  color: Colors.redAccent.withValues(alpha: 0.85)),
+            ),
     );
   }
 }

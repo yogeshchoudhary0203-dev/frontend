@@ -163,6 +163,15 @@ class _FollowersScreenState extends State<FollowersScreen> {
   late FollowersTab _tab = widget.initialTab;
   String _query = '';
 
+  // Authoritative totals shown in the top bar + segmented tabs. Seeded from the
+  // profile (which serves live counts) so this screen matches the profile
+  // exactly, and kept in sync on in-list follow toggles. We must NOT show
+  // `_followers.length` / `_following.length` here — those are only the loaded
+  // page (≤ pageSize), which is smaller than the real total and grows as you
+  // scroll, causing the mismatch/jumping vs. the profile screen.
+  late final int _totalFollowers = widget.totalFollowers;
+  late int _totalFollowing = widget.totalFollowing;
+
   List<UserProfile> _followers = [];
   List<UserProfile> _following = [];
   bool _isLoading = true;
@@ -273,6 +282,11 @@ class _FollowersScreenState extends State<FollowersScreen> {
 
     // Optimistically update local state
     setState(() {
+      // Following/unfollowing a row user changes *my* following total. (My
+      // followers total is never affected by my own follow actions.)
+      _totalFollowing += originalState ? -1 : 1;
+      if (_totalFollowing < 0) _totalFollowing = 0;
+
       _followers = _followers.map((u) {
         if (u.id == targetId) {
           return UserProfile(
@@ -316,6 +330,9 @@ class _FollowersScreenState extends State<FollowersScreen> {
     if (!success && mounted) {
       // Revert on failure
       setState(() {
+        _totalFollowing += originalState ? 1 : -1;
+        if (_totalFollowing < 0) _totalFollowing = 0;
+
         _followers = _followers.map((u) {
           if (u.id == targetId) {
             return UserProfile(
@@ -475,8 +492,8 @@ class _FollowersScreenState extends State<FollowersScreen> {
               dark: dark,
               handle: widget.userHandle.isNotEmpty ? '@${widget.userHandle}' : 'Profile',
               subtitle: _tab == FollowersTab.followers
-                  ? '${_fmt(_isLoading ? widget.totalFollowers : _followers.length)} followers'
-                  : '${_fmt(_isLoading ? widget.totalFollowing : _following.length)} following',
+                  ? '${_fmt(_totalFollowers)} followers'
+                  : '${_fmt(_totalFollowing)} following',
               onBack: () => Navigator.of(context).maybePop(),
             ),
           ),
@@ -489,8 +506,8 @@ class _FollowersScreenState extends State<FollowersScreen> {
             child: _SegmentedTabs(
               dark: dark,
               active: _tab,
-              followerCount: _fmt(_isLoading ? widget.totalFollowers : _followers.length),
-              followingCount: _fmt(_isLoading ? widget.totalFollowing : _following.length),
+              followerCount: _fmt(_totalFollowers),
+              followingCount: _fmt(_totalFollowing),
               onChange: (t) => setState(() => _tab = t),
             ),
           ),

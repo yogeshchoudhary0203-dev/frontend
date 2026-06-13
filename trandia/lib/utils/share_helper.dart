@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,10 +6,15 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/chat_model.dart';
 import '../services/post_service.dart';
 import '../services/share_service.dart';
+import '../services/auth_service.dart';
+import '../services/chat_service.dart';
+import '../services/user_service.dart';
 import '../screens/glass_common.dart';
 import '../l10n/app_localizations.dart';
+import 'shared_post.dart';
 
 class ShareHelper {
   ShareHelper._();
@@ -48,12 +54,90 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
   String _shareUrl = '';
   bool _loadingUrl = true;
 
+  // ── "Send to a Trandia user" state ─────────────────────────────────────────
+  String? _myUserId;
+  List<UserProfile> _recentUsers = [];      // from CACHED conversations (no DB hit)
+  List<UserProfile> _results = [];          // live search results
+  String _query = '';
+  bool _searchingUsers = false;
+  Timer? _debounce;
+  final TextEditingController _searchCtrl = TextEditingController();
+  final Set<String> _sending = {};          // userIds currently being sent to
+  final Set<String> _sentTo = {};           // userIds the post was sent to
+
   @override
   void initState() {
     super.initState();
     // Pre-populate with fallback immediately, then replace with smart URL
     _shareUrl = _buildFallbackUrl();
     _fetchSmartUrl();
+    _loadRecentUsers();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Recent chat partners pulled from the LOCAL conversations cache — this is
+  /// the "don't hit the database again" path the list is seeded from.
+  Future<void> _loadRecentUsers() async {
+    try {
+      _myUserId = await AuthService.getCurrentUserId();
+      final convs = await ChatService().getConversations();
+      final seen = <String>{};
+      final users = <UserProfile>[];
+      for (final c in convs) {
+        if (c.isGroup) continue;
+        final u = c.getOtherParticipant(_myUserId ?? '');
+        if (u.id.isEmpty || u.id == _myUserId) continue;
+        if (seen.add(u.id)) users.add(u);
+      }
+      if (mounted) setState(() => _recentUsers = users);
+    } catch (_) {/* leave recents empty — search still works */}
+  }
+
+  void _onSearchChanged(String value) {
+    _query = value.trim();
+    _debounce?.cancel();
+    if (_query.isEmpty) {
+      setState(() {
+        _results = [];
+        _searchingUsers = false;
+      });
+      return;
+    }
+    setState(() => _searchingUsers = true);
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      final q = _query;
+      final res = await UserService.searchUsers(q);
+      if (!mounted || q != _query) return;
+      setState(() {
+        _results = res.where((u) => u.id != _myUserId).toList();
+        _searchingUsers = false;
+      });
+    });
+  }
+
+  Future<void> _sendToUser(UserProfile u) async {
+    if (_sentTo.contains(u.id) || _sending.contains(u.id)) return;
+    HapticFeedback.lightImpact();
+    setState(() => _sending.add(u.id));
+    try {
+      final convId = await ChatService().startConversation(u.username);
+      await ChatService()
+          .sendMessage(convId, SharedPost.fromPost(post).encode(), [u]);
+      if (mounted) {
+        setState(() {
+          _sending.remove(u.id);
+          _sentTo.add(u.id);
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _sending.remove(u.id));
+    }
   }
 
   String _buildFallbackUrl() {
@@ -252,8 +336,10 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
               )
             ],
           ),
-          padding: const EdgeInsets.only(top: 10, bottom: 30),
-          child: Column(
+          padding: EdgeInsets.only(
+              top: 10, bottom: 30 + MediaQuery.of(context).viewInsets.bottom),
+          child: SingleChildScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Drag Handle
@@ -297,6 +383,38 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
                 ),
               ),
               const SizedBox(height: 12),
+
+              // ── Send to a Trandia user (in-app DM) ──────────────
+              _buildSendToSection(context, textPrimary, borderColor),
+
+              // Divider before the external-app share row
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                          height: 1, color: textPrimary.withValues(alpha: 0.08)),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        'Share to'.tr(context),
+                        style: manrope(
+                          size: 11,
+                          weight: FontWeight.w700,
+                          color: textPrimary.withValues(alpha: 0.45),
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Container(
+                          height: 1, color: textPrimary.withValues(alpha: 0.08)),
+                    ),
+                  ],
+                ),
+              ),
 
               // Smart link loading indicator
               if (_loadingUrl)
@@ -405,6 +523,168 @@ class _ShareSheetContentState extends State<_ShareSheetContent> {
               ),
             ],
           ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── "Send to" section: search field + horizontal user rail ───────────────
+  Widget _buildSendToSection(
+      BuildContext context, Color textPrimary, Color borderColor) {
+    final searching = _query.isNotEmpty;
+    final list = searching ? _results : _recentUsers;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Search field
+          Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: textPrimary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: borderColor.withValues(alpha: 0.6)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.search_rounded,
+                    size: 18, color: textPrimary.withValues(alpha: 0.5)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: _onSearchChanged,
+                    cursorColor: textPrimary,
+                    style: manrope(
+                        size: 13.5, weight: FontWeight.w500, color: textPrimary),
+                    decoration: InputDecoration(
+                      isCollapsed: true,
+                      border: InputBorder.none,
+                      hintText: 'Search Trandia users'.tr(context),
+                      hintStyle: manrope(
+                          size: 13.5,
+                          weight: FontWeight.w500,
+                          color: textPrimary.withValues(alpha: 0.4)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // User rail
+          SizedBox(
+            height: 90,
+            child: _searchingUsers
+                ? Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: textPrimary.withValues(alpha: 0.4)),
+                    ),
+                  )
+                : list.isEmpty
+                    ? Center(
+                        child: Text(
+                          searching
+                              ? 'No users found'.tr(context)
+                              : 'No recent chats'.tr(context),
+                          style: manrope(
+                              size: 12,
+                              weight: FontWeight.w500,
+                              color: textPrimary.withValues(alpha: 0.4)),
+                        ),
+                      )
+                    : ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: list.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 6),
+                        itemBuilder: (_, i) =>
+                            _buildUserChip(context, list[i], i, textPrimary),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserChip(
+      BuildContext context, UserProfile u, int index, Color textPrimary) {
+    final sent = _sentTo.contains(u.id);
+    final sending = _sending.contains(u.id);
+
+    return GestureDetector(
+      onTap: sent ? null : () => _sendToUser(u),
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 66,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              children: [
+                Opacity(
+                  opacity: sent ? 0.55 : 1.0,
+                  child: UserAvatar(
+                    pictureUrl: u.picture,
+                    name: u.name,
+                    size: 52,
+                    dark: isDark,
+                    index: index,
+                  ),
+                ),
+                if (sending)
+                  Positioned.fill(
+                    child: Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: textPrimary),
+                      ),
+                    ),
+                  ),
+                if (sent)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF22C55E),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: isDark ? Colors.black : Colors.white,
+                            width: 1.5),
+                      ),
+                      child: const Icon(Icons.check_rounded,
+                          size: 12, color: Colors.white),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              sent ? 'Sent'.tr(context) : (u.name.isNotEmpty ? u.name : '@${u.username}'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: manrope(
+                size: 10.5,
+                weight: FontWeight.w600,
+                color: textPrimary.withValues(alpha: 0.85),
+                letterSpacing: -0.1,
+              ),
+            ),
+          ],
         ),
       ),
     );

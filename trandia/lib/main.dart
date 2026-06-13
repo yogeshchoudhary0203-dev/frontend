@@ -3,20 +3,22 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
-import 'screens/home/home_screen.dart';
 import 'screens/interest_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/intro_slides.dart';
 import 'screens/app_lock_screen.dart';
 import 'services/api_service.dart';
+import 'services/app_badge_service.dart';
 import 'services/auth_service.dart';
 import 'services/app_lock_service.dart';
 import 'services/fcm_service.dart';
 import 'services/local_db.dart';
 import 'services/deep_link_service.dart';
+import 'services/receive_sharing_service.dart';
 import 'l10n/app_localizations.dart';
 import 'services/theme_manager.dart';
 import 'utils/web_utils.dart';
@@ -30,6 +32,15 @@ export 'utils/navigator_key.dart' show navigatorKey;
 Future<void> _bgMessageHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('[FCM] background: ${message.notification?.title}');
+
+  // Grow the launcher-icon badge while the app is backgrounded/killed.
+  // Android only: on iOS the system sets the badge from the push's aps.badge
+  // field (sent by the backend), so bumping here would double-count.
+  final type = message.data['type'] as String?;
+  if (type == 'quiz_ready' || type == 'welcome') return; // silent / non-counting
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    await AppBadgeService.bump();
+  }
 }
 
 void main() async {
@@ -92,6 +103,7 @@ class _TrandiaAppState extends State<TrandiaApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _languageController.load();
     DeepLinkService.instance.init();
+    ReceiveSharingService.instance.init();
     _checkInitialNotification();
   }
 
@@ -100,6 +112,7 @@ class _TrandiaAppState extends State<TrandiaApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _languageController.dispose();
     DeepLinkService.instance.dispose();
+    ReceiveSharingService.instance.dispose();
     super.dispose();
   }
 
@@ -239,16 +252,20 @@ class _StartupRouterState extends State<_StartupRouter> {
             dark: dark,
             onVerified: () {
               AppLockService.lockShown = false;
+              // Route through the interest gate (instant local 12h check) so the
+              // every-12h interest prompt fires on normal app opens too.
               navigatorKey.currentState?.pushReplacement(
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                MaterialPageRoute(builder: (_) => const InterestGateScreen()),
               );
             },
           ),
         ),
       );
     } else {
+      // Route through the interest gate (instant local 12h check) so the
+      // every-12h interest prompt fires on normal app opens too.
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const InterestGateScreen()),
       );
     }
   }

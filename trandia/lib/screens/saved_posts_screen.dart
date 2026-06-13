@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'glass_common.dart';
 import '../l10n/app_localizations.dart';
 import '../services/post_service.dart';
+import '../widgets/profile/profile_video_thumbnail.dart';
 import 'single_post_screen.dart';
 
 class SavedPostsScreen extends StatefulWidget {
@@ -251,9 +252,6 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
             }
             final post = _posts[index];
             final isVideo = post.isVideo;
-            final imageUrl = isVideo && post.thumbnailUrl != null
-                ? post.thumbnailUrl!
-                : post.mediaUrl;
 
             return GestureDetector(
               onTap: () async {
@@ -277,18 +275,36 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
-                          color: widget.dark
-                              ? Colors.white.withValues(alpha: 0.03)
-                              : Colors.black.withValues(alpha: 0.03),
-                        ),
-                        errorWidget: (_, __, ___) => const Center(
-                          child: Icon(Icons.broken_image_outlined, size: 20),
-                        ),
-                      ),
+                      if (!isVideo)
+                        CachedNetworkImage(
+                          imageUrl: post.mediaUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(
+                            color: widget.dark
+                                ? Colors.white.withValues(alpha: 0.03)
+                                : Colors.black.withValues(alpha: 0.03),
+                          ),
+                          errorWidget: (_, __, ___) => const Center(
+                            child: Icon(Icons.broken_image_outlined, size: 20),
+                          ),
+                        )
+                      else if (post.thumbnailUrl != null &&
+                          post.thumbnailUrl!.isNotEmpty)
+                        // Server thumbnail if present; auto-generate on failure.
+                        CachedNetworkImage(
+                          imageUrl: post.thumbnailUrl!,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(
+                            color: widget.dark
+                                ? Colors.white.withValues(alpha: 0.03)
+                                : Colors.black.withValues(alpha: 0.03),
+                          ),
+                          errorWidget: (_, __, ___) =>
+                              ProfileVideoThumbnailTile(videoUrl: post.mediaUrl),
+                        )
+                      else
+                        // No server thumbnail → generate from the video itself.
+                        ProfileVideoThumbnailTile(videoUrl: post.mediaUrl),
                       if (isVideo)
                         Positioned(
                           top: 6,

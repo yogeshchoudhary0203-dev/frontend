@@ -7,6 +7,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import '../../services/fcm_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/app_badge_service.dart';
 import '../../services/user_service.dart';
 import '../../models/chat_model.dart';
 import '../call_screens.dart';
@@ -184,36 +185,16 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
     setState(() => _loadingSuggestions = true);
     try {
-      final myId = _myUserId ?? await AuthService.getCurrentUserId();
-      if (myId == null || myId.isEmpty) return;
-
-      final myFollowers = await UserService.getFollowers(myId, limit: 8);
-      if (myFollowers.isEmpty) return;
-
-      final skipIds = <String>{
-        myId,
-        ...myFollowers.map((user) => user.id),
-      };
-      final followerLists = await Future.wait(
-        myFollowers.take(6).map(
-              (user) => UserService.getFollowers(user.id, limit: 5),
-            ),
-      );
-
-      final byId = <String, UserProfile>{};
-      for (final users in followerLists) {
-        for (final user in users) {
-          if (user.id.isEmpty || skipIds.contains(user.id)) continue;
-          if (user.username.isEmpty) continue;
-          byId.putIfAbsent(user.id, () => user);
-        }
-      }
-
+      // Fresh, randomized real users from the backend (MongoDB $sample) — a
+      // different set every load, and it works even for brand-new users who
+      // don't have any followers yet (the old friends-of-friends logic returned
+      // the same fixed people, and nothing at all for new accounts).
+      final suggestions = await UserService.getSuggestedUsers(limit: 10);
       if (!mounted) return;
       setState(() {
         _suggestedUsers
           ..clear()
-          ..addAll(byId.values.take(10));
+          ..addAll(suggestions.where((u) => u.username.isNotEmpty));
       });
     } catch (_) {
     } finally {
@@ -260,6 +241,10 @@ class _HomeScreenState extends State<HomeScreen>
     // are no more pages.  Never block when running from stale local cache
     // (_feedFullyLoaded stays false until a real API response arrives).
     if (!refresh && _feedFullyLoaded && _posts.isNotEmpty) return;
+
+    // Pull-to-refresh also rotates the "Suggested for you" tab to a fresh
+    // random set of real users (runs in parallel, doesn't block the feed).
+    if (refresh) unawaited(_loadFollowerSuggestions());
 
     // -- Stale-while-revalidate for first page (not pagination, not pull-refresh) --
     final isFirstPage = !refresh && _nextCursor == null && _posts.isEmpty;
@@ -409,6 +394,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _loadUnreadCount() async {
+    // Keep the launcher-icon badge in sync whenever we recompute unread counts
+    // (app open, returning from chat). Server is authoritative (msgs + notifs).
+    unawaited(AppBadgeService.refresh());
     try {
       final myUserId = await AuthService.getCurrentUserId();
       final convs = await ChatService().getConversations();

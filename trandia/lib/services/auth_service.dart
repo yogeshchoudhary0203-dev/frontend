@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'api_service.dart';
+import 'app_badge_service.dart';
 import 'chat_service.dart';
 import 'fcm_service.dart';
 import 'local_db.dart';
@@ -160,6 +161,7 @@ class AuthService {
     required String name,
     required String username,
     required String password,
+    DateTime? dateOfBirth,
   }) async {
     // Get the current Firebase user (whose email is now verified)
     final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -188,6 +190,9 @@ class AuthService {
       'username': username,
       'password': password,
     };
+    if (dateOfBirth != null) {
+      body['date_of_birth'] = dateOfBirth.toIso8601String().split('T').first;
+    }
     if (fcmToken != null) body['fcm_token'] = fcmToken;
 
     final data = await ApiService.post('/auth/signup', body);
@@ -363,6 +368,7 @@ class AuthService {
       final LocalDb db = LocalDb.instance;
       await db.clearAll();
     } catch (_) {}
+    try { await AppBadgeService.clear(); } catch (_) {}
     try { ChatService().dispose(); } catch (_) {}
     try { await FirebaseAuth.instance.signOut(); } catch (_) {}
     if (!kIsWeb) {

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_badge_service.dart';
 
 // ── Constants ─────────────────────────────────────────────────
 const _kChannelId        = 'trandia_v4';
@@ -330,6 +331,10 @@ class FcmService {
         debugPrint('[FCM] suppressed — master notifications off');
         return;
       }
+
+      // A user-facing push arrived while the app is open — keep the launcher
+      // icon badge in sync with the real unread total.
+      unawaited(AppBadgeService.refresh());
 
       // Follow
       if (msgType == 'follow') {

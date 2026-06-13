@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
 import '../models/chat_model.dart';
+import '../models/archived_media_model.dart';
 import 'api_service.dart';
 import 'follow_state.dart';
+
 
 class UserService {
   // ── Follow / Unfollow / Status ───────────────────────────────────────────
@@ -18,7 +20,12 @@ class UserService {
       ).timeout(const Duration(seconds: 10));
       developer.log('followUser $targetId → ${res.statusCode}');
       final ok = res.statusCode == 200;
-      if (ok) FollowState.set(targetId, true);
+      if (ok) {
+        FollowState.set(targetId, true);
+        // My following_count just changed → drop the cached profile so the next
+        // profile open shows the fresh, accurate count instead of a stale one.
+        invalidateProfileCache();
+      }
       return ok;
     } catch (e) {
       developer.log('followUser error: $e');
@@ -36,7 +43,12 @@ class UserService {
       ).timeout(const Duration(seconds: 10));
       developer.log('unfollowUser $targetId → ${res.statusCode}');
       final ok = res.statusCode == 200;
-      if (ok) FollowState.set(targetId, false);
+      if (ok) {
+        FollowState.set(targetId, false);
+        // My following_count just changed → drop the cached profile so the next
+        // profile open shows the fresh, accurate count instead of a stale one.
+        invalidateProfileCache();
+      }
       return ok;
     } catch (e) {
       developer.log('unfollowUser error: $e');
@@ -414,4 +426,68 @@ class UserService {
       return [];
     }
   }
+
+  // ── Media Archiving ──────────────────────────────────────────────────────────
+
+  static Future<bool> archiveMedia(String messageId) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.post(
+        Uri.parse('$baseUrl/users/me/archive'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'message_id': messageId}),
+      ).timeout(const Duration(seconds: 10));
+      developer.log('archiveMedia $messageId → ${res.statusCode}');
+      return res.statusCode == 200;
+    } catch (e) {
+      developer.log('archiveMedia error: $e');
+      return false;
+    }
+  }
+
+  static Future<List<ArchivedMedia>> getArchivedMedia() async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return [];
+      final res = await http.get(
+        Uri.parse('$baseUrl/users/me/archive'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+      developer.log('getArchivedMedia → ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final List decoded = jsonDecode(res.body) as List;
+        return decoded.map((e) => ArchivedMedia.fromJson(e as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (e) {
+      developer.log('getArchivedMedia error: $e');
+      return [];
+    }
+  }
+
+  static Future<bool> deleteArchivedMedia(String archiveId) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) return false;
+      final res = await http.delete(
+        Uri.parse('$baseUrl/users/me/archive/$archiveId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      developer.log('deleteArchivedMedia $archiveId → ${res.statusCode}');
+      return res.statusCode == 200;
+    } catch (e) {
+      developer.log('deleteArchivedMedia error: $e');
+      return false;
+    }
+  }
 }
+

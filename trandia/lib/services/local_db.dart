@@ -346,5 +346,10 @@ class LocalDb {
     'reactions':        m.reactions.map((k, v) => MapEntry(k, v)),
     'reply_to_id':      m.replyToId,
     'reply_to_text':    m.replyToText,
+    'media_url':        m.mediaUrl,
+    'media_type':       m.mediaType,
+    'media_public_id':  m.mediaPublicId,
+    'is_view_once':     m.isViewOnce,
+    'view_once_viewed_by': m.viewOnceViewedBy,
   };
 }

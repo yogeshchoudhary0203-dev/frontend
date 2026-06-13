@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../services/post_service.dart';
 import 'user_profile_backdrop.dart';
+import 'profile_video_thumbnail.dart';
 
 class UserProfilePostsSection extends StatelessWidget {
   const UserProfilePostsSection({
@@ -160,9 +161,6 @@ class UserProfilePostTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isVideo = post.mediaType == 'video';
-    final imageUrl = isVideo && post.thumbnailUrl != null
-        ? post.thumbnailUrl!
-        : post.mediaUrl;
 
     final aPct = t.dark ? (22 - (i % 5) * 3) : (92 - (i % 5) * 4);
     final bPct = (aPct - (t.dark ? 12 : 18))
@@ -186,11 +184,22 @@ class UserProfilePostTile extends StatelessWidget {
         ),
         child: Stack(children: [
           Positioned.fill(
-            child: Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox(),
-            ),
+            child: !isVideo
+                ? Image.network(
+                    post.mediaUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox(),
+                  )
+                : (post.thumbnailUrl != null && post.thumbnailUrl!.isNotEmpty)
+                    // Server thumbnail if present; auto-generate on failure.
+                    ? Image.network(
+                        post.thumbnailUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            ProfileVideoThumbnailTile(videoUrl: post.mediaUrl),
+                      )
+                    // No server thumbnail → generate from the video itself.
+                    : ProfileVideoThumbnailTile(videoUrl: post.mediaUrl),
           ),
           if (isVideo)
             Positioned(

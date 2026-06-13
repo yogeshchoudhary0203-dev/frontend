@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import '../services/comment_service.dart';
 import '../services/user_service.dart';
 import '../services/api_service.dart';
+import '../services/report_service.dart';
+import '../widgets/report_sheet.dart';
 import '../models/chat_model.dart';
 import '../utils/error_dialog.dart';
 import 'glass_common.dart';
@@ -736,7 +738,14 @@ class _CommentsScreenState extends State<CommentsScreen>
 
     return Padding(
       padding: EdgeInsets.only(bottom: isReply ? 6 : 12),
-      child: GlassSurface(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPress: () => showReportSheet(
+          context,
+          targetType: ReportService.targetComment,
+          targetId: comment.id,
+        ),
+        child: GlassSurface(
         dark:    widget.dark,
         radius:  isReply ? 14 : 18,
         padding: EdgeInsets.all(isReply ? 10 : 12),
@@ -902,6 +911,7 @@ class _CommentsScreenState extends State<CommentsScreen>
             ],
           ],
         ),
+      ),
       ),
     );
   }

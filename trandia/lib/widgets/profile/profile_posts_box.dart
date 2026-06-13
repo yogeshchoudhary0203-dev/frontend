@@ -5,9 +5,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../screens/glass_common.dart';
 import '../../services/post_service.dart';
+import '../../services/user_service.dart';
+import '../../models/archived_media_model.dart';
 import 'profile_video_thumbnail.dart';
+
 
 /// Wider tonal range tile gradient.
 LinearGradient profileTileGradient(bool dark, int i) {
@@ -45,7 +49,7 @@ LinearGradient profileTileGradient(bool dark, int i) {
 
 // ── Posts box (glass surface wrapping the grid) ────────────────
 
-class ProfilePostsBox extends StatelessWidget {
+class ProfilePostsBox extends StatefulWidget {
   final bool dark;
   final Color fg;
   final Color sub;
@@ -68,9 +72,242 @@ class ProfilePostsBox extends StatelessWidget {
   });
 
   @override
+  State<ProfilePostsBox> createState() => _ProfilePostsBoxState();
+}
+
+class _ProfilePostsBoxState extends State<ProfilePostsBox> {
+  String _activeTab = 'Posts';
+  List<ArchivedMedia> _archives = [];
+  bool _archivesLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadArchivesCount();
+  }
+
+  Future<void> _loadArchivesCount() async {
+    try {
+      final res = await UserService.getArchivedMedia();
+      if (mounted) {
+        setState(() {
+          _archives = res;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadArchives() async {
+    setState(() => _archivesLoading = true);
+    try {
+      final res = await UserService.getArchivedMedia();
+      if (mounted) {
+        setState(() {
+          _archives = res;
+          _archivesLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _archivesLoading = false);
+    }
+  }
+
+  Widget _buildTabButton(String tabName, int count) {
+    final isSelected = _activeTab == tabName;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _activeTab = tabName;
+        });
+        if (tabName == 'Archive') {
+          _loadArchives();
+        } else {
+          _loadArchivesCount();
+        }
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                tabName,
+                style: manrope(
+                  size: 15,
+                  weight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  color: isSelected ? widget.fg : widget.sub,
+                  letterSpacing: -0.15,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? widget.fg.withValues(alpha: 0.12)
+                      : widget.sub.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
+                  style: manrope(
+                    size: 10.5,
+                    weight: FontWeight.w700,
+                    color: isSelected ? widget.fg : widget.sub,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: 2,
+            width: 32,
+            decoration: BoxDecoration(
+              color: isSelected ? widget.fg : Colors.transparent,
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFullscreenArchiveViewer(BuildContext context, ArchivedMedia item) {
+    final isVideo = item.mediaType == 'video';
+    
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.9),
+      barrierDismissible: true,
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+          child: Container(
+            decoration: BoxDecoration(
+              color: widget.dark ? Colors.black.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: widget.dark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isVideo ? 'Archived Video' : 'Archived Photo',
+                        style: manrope(
+                          size: 15,
+                          weight: FontWeight.w700,
+                          color: GlassTokens.fg(widget.dark),
+                        ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: () async {
+                              final confirm = await showDialog<bool>(
+                                context: ctx,
+                                builder: (c) => AlertDialog(
+                                  title: const Text('Delete from Archive?'),
+                                  content: const Text('Are you sure you want to permanently delete this media from your archive?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(c, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(c, true),
+                                      child: const Text('Delete', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                final deleted = await UserService.deleteArchivedMedia(item.id);
+                                if (deleted && mounted) {
+                                  Navigator.pop(ctx);
+                                  _loadArchives();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Removed from Archive'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              margin: const EdgeInsets.only(right: 12),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.redAccent.withValues(alpha: 0.1),
+                              ),
+                              child: const Icon(Icons.delete_forever_rounded, size: 20, color: Colors.redAccent),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(ctx),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: widget.dark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                              ),
+                              child: Icon(Icons.close_rounded, size: 18, color: GlassTokens.fg(widget.dark)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Media Content
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: isVideo
+                          ? _ArchiveVideoPlayer(url: item.mediaUrl)
+                          : CachedNetworkImage(
+                              imageUrl: item.mediaUrl,
+                              fit: BoxFit.contain,
+                              placeholder: (_, __) => const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                              errorWidget: (_, __, ___) => const Center(
+                                child: Text('Could not load image'),
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GlassSurface(
-      dark: dark,
+      dark: widget.dark,
       radius: 28,
       padding: const EdgeInsets.all(10),
       blurSigma: 28,
@@ -78,71 +315,140 @@ class ProfilePostsBox extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 14),
             child: Row(
               children: [
-                Text(
-                  'Posts',
-                  style: manrope(
-                    size: 14,
-                    weight: FontWeight.w800,
-                    color: fg,
-                    letterSpacing: -0.14,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '${posts.length}',
-                  style: manrope(
-                    size: 12,
-                    weight: FontWeight.w700,
-                    color: sub,
-                    letterSpacing: -0.12,
-                  ),
-                ),
+                _buildTabButton('Posts', widget.posts.length),
+                const SizedBox(width: 24),
+                _buildTabButton('Archive', _archives.length),
               ],
             ),
           ),
-          if (isLoading)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(fg),
-                  strokeWidth: 2,
-                ),
-              ),
-            )
-          else if (posts.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                child: Text(
-                  'No posts yet',
-                  style: manrope(size: 14, weight: FontWeight.w500, color: sub),
-                ),
-              ),
-            )
-          else ...[
-            ProfilePostsGrid(
-              dark: dark,
-              posts: posts,
-              myUserId: myUserId,
-              onPostDeleted: onPostDeleted,
-            ),
-            if (isLoadingMore)
+          if (_activeTab == 'Posts') ...[
+            if (widget.isLoading)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 32),
                 child: Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(fg),
-                      strokeWidth: 2,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(widget.fg),
+                    strokeWidth: 2,
+                  ),
+                ),
+              )
+            else if (widget.posts.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: Text(
+                    'No posts yet',
+                    style: manrope(size: 14, weight: FontWeight.w500, color: widget.sub),
+                  ),
+                ),
+              )
+            else ...[
+              ProfilePostsGrid(
+                dark: widget.dark,
+                posts: widget.posts,
+                myUserId: widget.myUserId,
+                onPostDeleted: widget.onPostDeleted,
+              ),
+              if (widget.isLoadingMore)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(widget.fg),
+                        strokeWidth: 2,
+                      ),
                     ),
                   ),
                 ),
+            ],
+          ] else ...[
+            if (_archivesLoading)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(widget.fg),
+                    strokeWidth: 2,
+                  ),
+                ),
+              )
+            else if (_archives.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: Text(
+                    'No archived media yet',
+                    style: manrope(size: 14, weight: FontWeight.w500, color: widget.sub),
+                  ),
+                ),
+              )
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: EdgeInsets.zero,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: _archives.length,
+                itemBuilder: (context, i) {
+                  final item = _archives[i];
+                  final isVideo = item.mediaType == 'video';
+                  return GestureDetector(
+                    onTap: () {
+                      _showFullscreenArchiveViewer(context, item);
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: profileTileGradient(widget.dark, i),
+                        ),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            if (isVideo)
+                              Container(
+                                color: Colors.black26,
+                                child: const Center(
+                                  child: Icon(Icons.videocam_rounded, color: Colors.white, size: 28),
+                                ),
+                              )
+                            else
+                              CachedNetworkImage(
+                                imageUrl: item.mediaUrl,
+                                fit: BoxFit.cover,
+                                placeholder: (_, __) => Container(color: Colors.black12),
+                                errorWidget: (_, __, ___) => const Center(child: Icon(Icons.broken_image)),
+                              ),
+                            if (isVideo)
+                              Positioned(
+                                top: 6,
+                                right: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.black.withValues(alpha: 0.4),
+                                  ),
+                                  child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 10),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
           ],
         ],
@@ -150,6 +456,7 @@ class ProfilePostsBox extends StatelessWidget {
     );
   }
 }
+
 
 // ── 3-column grid ──────────────────────────────────────────────
 
@@ -957,3 +1264,66 @@ class _OptionTile extends StatelessWidget {
     );
   }
 }
+
+
+class _ArchiveVideoPlayer extends StatefulWidget {
+  final String url;
+  const _ArchiveVideoPlayer({required this.url});
+
+  @override
+  State<_ArchiveVideoPlayer> createState() => _ArchiveVideoPlayerState();
+}
+
+class _ArchiveVideoPlayerState extends State<_ArchiveVideoPlayer> {
+  late VideoPlayerController _controller;
+  bool _initialized = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() {
+            _initialized = true;
+          });
+          _controller.play();
+          _controller.setLooping(true);
+        }
+      }).catchError((error) {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+          });
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasError) {
+      return const Center(child: Text("Could not play video", style: TextStyle(color: Colors.white)));
+    }
+    if (!_initialized) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    return AspectRatio(
+      aspectRatio: _controller.value.aspectRatio,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          VideoPlayer(_controller),
+          VideoProgressIndicator(_controller, allowScrubbing: true, colors: const VideoProgressColors(playedColor: Colors.white)),
+        ],
+      ),
+    );
+  }
+}
+

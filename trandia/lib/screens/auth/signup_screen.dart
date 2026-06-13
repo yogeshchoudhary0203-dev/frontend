@@ -10,15 +10,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'email_verification_pending_screen.dart';
+import 'parent_consent_screen.dart';
+import '../glass_common.dart';
 import '../interest_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/error_dialog.dart';
+import '../../widgets/dob_picker_dialog.dart';
 
 // ── Username check status ─────────────────────────────────────────────────────
 enum _UStatus { idle, typing, loading, available, taken, error }
@@ -34,8 +39,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _usernameController = TextEditingController();
   final _emailController    = TextEditingController();
   final _passwordController = TextEditingController();
+  final _phoneController    = TextEditingController();
   bool _obscurePassword     = true;
   bool _isLoading           = false;
+
+  // ── Age verification state ──────────────────────────────────────────────────
+  DateTime? _selectedDob;
+  int? _calculatedAge;
+  bool _showAgeStep = true;
+  bool _showPhoneStep = false;
+  bool _showEmailStep = false;
 
   // ── Username availability state ─────────────────────────────────────────────
   _UStatus _uStatus        = _UStatus.idle;
@@ -44,6 +57,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Timer?   _uDebounce;
   // In-memory cache: username → available bool
   final Map<String, bool> _uCache = {};
+
+  // ── Phone auth state ────────────────────────────────────────────────────────
+  String? _verificationId;
+  int? _resendToken;
+  bool _isSendingOtp = false;
+  bool _isVerifyingOtp = false;
+  int _otpResendTimer = 0;
+  Timer? _otpCountdownTimer;
 
   @override
   void dispose() {
@@ -192,48 +213,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
     showErrorDialog(context, message: message);
   }
 
-  Future<DateTime?> _showDobPicker(BuildContext context, _GlassTheme t) async {
+  Future<DateTime?> _showDobPicker(BuildContext context) async {
     final now = DateTime.now();
-    final initialDate = DateTime(now.year - 18, now.month, now.day);
-    final firstDate = DateTime(now.year - 100);
-    final lastDate = now;
 
-    return await showDatePicker(
+    return await showDialog<DateTime>(
       context: context,
-      initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: lastDate,
-      helpText: 'SELECT YOUR DATE OF BIRTH'.tr(context),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: t.dark
-                ? ColorScheme.dark(
-                    primary: t.fg,
-                    onPrimary: t.bgStops.last,
-                    surface: t.bgStops.first,
-                    onSurface: t.fg,
-                    secondary: t.muted,
-                  )
-                : ColorScheme.light(
-                    primary: t.fg,
-                    onPrimary: t.bgStops.last,
-                    surface: t.bgStops.first,
-                    onSurface: t.fg,
-                    secondary: t.muted,
-                  ),
-            dialogTheme: DialogThemeData(
-              backgroundColor: t.bgStops.first,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: t.fg,
-              ),
-            ),
-          ),
-          child: child!,
-        );
-      },
+      barrierColor: Colors.black54,
+      builder: (_) => DobPickerDialog(
+        initialDate: DateTime(now.year - 18, now.month, now.day),
+        firstDate: DateTime(now.year - 100),
+        lastDate: now,
+      ),
     );
   }
 
@@ -264,10 +254,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
-    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final t = _GlassTheme.of(isDark);
-    final dob = await _showDobPicker(context, t);
+    final dob = await _showDobPicker(context);
     if (dob == null) return;
+
+    // Age gate: block <13, require verified parent consent for 13–17, 18+ as-is.
+    final gate = await _runAgeGate(dob);
+    if (gate == null || !mounted) return;
 
     setState(() => _isLoading = true);
     try {
@@ -277,18 +269,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => EmailVerificationPendingScreen(
-            email: email, name: name, username: username, password: password,
+            email: email, name: name, username: username, password: password, dob: dob,
+            ageGroup: gate.group,
+            parentPhone: gate.parentPhone,
           ),
         ),
       );
-    } on FirebaseAuthException catch (e) {
+} on FirebaseAuthException catch (e) {
       switch (e.code) {
         case 'email-already-in-use':
-          _showError('This email is already registered. Please sign in.'); break;
+          _showError('This email is already registered. Please sign in.');
+          break;
         case 'invalid-email':
-          _showError('Please enter a valid email address.'); break;
+          _showError('Please enter a valid email address.');
+          break;
         case 'weak-password':
-          _showError('Password is too weak. Use at least 6 characters.'); break;
+          _showError('Password is too weak. Use at least 6 characters.');
+          break;
         default:
           _showError(e.message ?? 'Something went wrong. Try again.');
       }
@@ -302,21 +299,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _handleGoogleSignUp() async {
-    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final t = _GlassTheme.of(isDark);
-    final dob = await _showDobPicker(context, t);
+    final dob = await _showDobPicker(context);
     if (dob == null) return;
+
+    // Age gate: block <13, require verified parent consent for 13–17, 18+ as-is.
+    final gate = await _runAgeGate(dob);
+    if (gate == null || !mounted) return;
 
     setState(() => _isLoading = true);
     try {
       final result = await AuthService.loginWithGoogle();
       if (result == null) return;
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const InterestGateScreen()),
-        (_) => false,
-      );
+      _saveAgeConsentToBackend(dob, gate).then((_) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const InterestGateScreen()),
+          (_) => false,
+        );
+      });
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (_) {
@@ -324,6 +325,79 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  int _ageFromDob(DateTime dob) {
+    final now = DateTime.now();
+    int age = now.year - dob.year;
+    if (now.month < dob.month ||
+        (now.month == dob.month && now.day < dob.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  /// Age gate, run right after the DOB is chosen.
+  /// Returns null = do NOT proceed (under-13 blocked, or consent cancelled).
+  /// Otherwise returns the age group and, for 13–17 minors, the verified
+  /// parent phone number.
+  Future<({String group, String? parentPhone})?> _runAgeGate(DateTime dob) async {
+    final age = _ageFromDob(dob);
+    if (age < 13) {
+      await _showUnderageBlock();
+      return null;
+    }
+    if (age < 18) {
+      final parentPhone = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => const ParentConsentScreen()),
+      );
+      if (!mounted) return null;
+      if (parentPhone == null || parentPhone.isEmpty) return null;
+      return (group: 'minor', parentPhone: parentPhone);
+    }
+    return (group: 'adult', parentPhone: null);
+  }
+
+  Future<void> _showUnderageBlock() async {
+    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1C1C1F) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text("You're not old enough"),
+        content: const Text(
+          'You must be at least 13 years old to use Trandia. '
+          'You can join once you meet the minimum age.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveAgeConsentToBackend(
+    DateTime dob,
+    ({String group, String? parentPhone}) gate,
+  ) async {
+    try {
+      await ApiService.post(
+        '/users/me/age-consent',
+        {
+          'date_of_birth': dob.toIso8601String().split('T').first,
+          'age_group': gate.group,
+          if (gate.parentPhone != null) 'parent_phone': gate.parentPhone,
+          if (gate.parentPhone != null) 'parental_consent': true,
+        },
+        requiresAuth: true,
+      );
+    } catch (_) {}
   }
 
   @override
@@ -468,12 +542,42 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                           const SizedBox(height: 18),
                           Center(
-                            child: Text(
-                              'By creating an account, you agree to our\nTerms of Service and Privacy Policy.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 11, color: t.muted, height: 1.6,
+                            child: Text.rich(
+                              TextSpan(
+                                style: TextStyle(
+                                  fontSize: 11, color: t.muted, height: 1.6,
+                                ),
+                                children: [
+                                  const TextSpan(
+                                    text: 'By creating an account, you confirm you are at '
+                                        'least 13 years old and agree to our\n'),
+                                  TextSpan(
+                                    text: 'Terms of Service',
+                                    style: const TextStyle(
+                                        decoration: TextDecoration.underline),
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = () => launchUrl(
+                                            Uri.parse(
+                                                'https://yogeshchoudhary0203-dev.github.io/privacy-policy/Trandia_Terms_of_Use.html'),
+                                            mode: LaunchMode.externalApplication,
+                                          ),
+                                  ),
+                                  const TextSpan(text: ' and '),
+                                  TextSpan(
+                                    text: 'Privacy Policy',
+                                    style: const TextStyle(
+                                        decoration: TextDecoration.underline),
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = () => launchUrl(
+                                            Uri.parse(
+                                                'https://yogeshchoudhary0203-dev.github.io/privacy-policy/privacy-policy.html'),
+                                            mode: LaunchMode.externalApplication,
+                                          ),
+                                  ),
+                                  const TextSpan(text: '.'),
+                                ],
                               ),
+                              textAlign: TextAlign.center,
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -1232,6 +1336,186 @@ class _GoogleGlyphPainter extends CustomPainter {
       ..cubicTo(6.9 * s, 42.2 * s, 14.8 * s, 47.5 * s, 24 * s, 47.5 * s)
       ..close(), paint);
   }
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Glass-style Date of Birth Picker Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+class _DobPickerDialog extends StatefulWidget {
+  final DateTime initialDate;
+  final DateTime firstDate;
+  final DateTime lastDate;
+
+  const _DobPickerDialog({
+    required this.initialDate,
+    required this.firstDate,
+    required this.lastDate,
+  });
+
+  @override
+  State<_DobPickerDialog> createState() => _DobPickerDialogState();
+}
+
+class _DobPickerDialogState extends State<_DobPickerDialog> {
+  late DateTime _selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = widget.initialDate;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = GlassTokens.fg(isDark);
+    final muted = GlassTokens.sub(isDark);
+    final bg = isDark ? const Color(0xFF1C1C1F) : const Color(0xFFFFFFFF);
+    final border = isDark ? const Color(0xFF2A2A2E) : const Color(0xFFE5E5E5);
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: border, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.3)
+                  : const Color(0xFF14161E).withValues(alpha: 0.12),
+              blurRadius: 30,
+              offset: const Offset(0, 12),
+              spreadRadius: -8,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Date of Birth'.tr(context),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: fg,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Please select your birth date'.tr(context),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: muted,
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 200,
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  colorScheme: isDark
+                      ? const ColorScheme.dark(
+                          primary: Color(0xFF6C63FF),
+                          onPrimary: Colors.white,
+                          surface: Color(0xFF1C1C1F),
+                          onSurface: Colors.white,
+                        )
+                      : const ColorScheme.light(
+                          primary: Color(0xFF6C63FF),
+                          onPrimary: Colors.white,
+                          surface: Color(0xFFFFFFFF),
+                          onSurface: Color(0xFF0E1124),
+                        ),
+                  dialogBackgroundColor: bg,
+                ),
+                child: CalendarDatePicker(
+                  initialDate: _selectedDate,
+                  firstDate: widget.firstDate,
+                  lastDate: widget.lastDate,
+                  onDateChanged: (date) => _selectedDate = date,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _DialogButton(
+                    isDark: isDark,
+                    label: 'Cancel',
+                    onTap: () => Navigator.pop(context),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _DialogButton(
+                    isDark: isDark,
+                    label: 'Confirm',
+                    isPrimary: true,
+                    onTap: () => Navigator.pop(context, _selectedDate),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogButton extends StatelessWidget {
+  final bool isDark;
+  final String label;
+  final bool isPrimary;
+  final VoidCallback onTap;
+
+  const _DialogButton({
+    required this.isDark,
+    required this.label,
+    required this.onTap,
+    this.isPrimary = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = GlassTokens.fg(isDark);
+    final bg = isDark ? const Color(0xFF2A2A2E) : const Color(0xFFF4F4F4);
+    final primaryBg = const Color(0xFF6C63FF);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: isPrimary ? primaryBg : bg,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label.tr(context),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isPrimary ? Colors.white : fg,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

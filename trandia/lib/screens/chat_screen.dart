@@ -13,14 +13,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/chat_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/app_badge_service.dart';
 import '../services/chat_service.dart';
 import '../services/fcm_service.dart';
 import '../services/agora_service.dart';
 import '../services/block_service.dart';
+import '../services/report_service.dart';
+import '../widgets/report_sheet.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/error_dialog.dart';
+import '../utils/shared_post.dart';
+import '../widgets/chat/shared_post_card.dart';
 import 'glass_common.dart';
 import 'call_screens.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../services/user_service.dart';
+
 
 // ── Quick emoji choices ───────────────────────────────────────
 const _kQuickEmojis = ['❤️', '😂', '😮', '😢', '🔥', '👏', '🎉', '💯', '👍', '🥺'];
@@ -142,6 +152,7 @@ class _ChatScreenState extends State<ChatScreen>
   late StreamSubscription<Map<String, dynamic>> _typingSub;
   late StreamSubscription<Map<String, dynamic>> _reactionSub;
   late StreamSubscription<Map<String, dynamic>> _deletedSub;
+  late StreamSubscription<Map<String, dynamic>> _viewOnceSub;
   final Set<String> _animatingIds = {};
 
   final Set<String> _pendingIds = {};
@@ -301,12 +312,31 @@ class _ChatScreenState extends State<ChatScreen>
         _pendingIds.remove(msgId);
       });
     });
+
+    _viewOnceSub = ChatService().viewOnceStream.listen((event) {
+      if (!mounted) return;
+      if (event['conversation_id'] != widget.conversation.id) return;
+      final msgId = event['message_id'] as String;
+      final viewedBy = List<String>.from(event['view_once_viewed_by'] as List? ?? []);
+      final mediaErased = event['media_erased'] as bool? ?? false;
+      setState(() {
+        final idx = _messages.indexWhere((m) => m.id == msgId);
+        if (idx != -1) {
+          _messages[idx] = _messages[idx].copyWithViewOnce(
+            viewOnceViewedBy: viewedBy,
+            clearMediaUrl: mediaErased,
+          );
+        }
+      });
+    });
   }
 
   @override
   void dispose() {
     // Clear active conversation so notifications resume for this chat
     FcmService.setActiveConversation(null);
+    // This conversation was just read → its unread reset; refresh the icon badge.
+    AppBadgeService.refresh();
     _entranceCtrl.dispose();
     _textController.dispose();
     _scrollController.dispose();
@@ -314,6 +344,7 @@ class _ChatScreenState extends State<ChatScreen>
     _typingSub.cancel();
     _reactionSub.cancel();
     _deletedSub.cancel();
+    _viewOnceSub.cancel();
     _typingTimer?.cancel();
     super.dispose();
   }
@@ -442,10 +473,16 @@ class _ChatScreenState extends State<ChatScreen>
       reactions: confirmed.reactions,
       replyToId: pending.replyToId,
       replyToText: pending.replyToText,
+      mediaUrl: confirmed.mediaUrl,
+      mediaType: confirmed.mediaType,
+      mediaPublicId: confirmed.mediaPublicId,
+      isViewOnce: confirmed.isViewOnce,
+      viewOnceViewedBy: confirmed.viewOnceViewedBy,
     );
   }
 
   bool _isDisplayableMessage(ChatMessage msg) {
+    if (msg.isViewOnce) return true;
     final text = msg.text.trim();
     if (text.isEmpty) return false;
     if (text.startsWith('[Decryption error:') ||
@@ -501,6 +538,192 @@ class _ChatScreenState extends State<ChatScreen>
       createdAt: sentAt, replyToId: replyTo?.id, replyToText: replyTo?.text,
     );
   }
+
+  void _showAttachmentOptions() {
+    final fg = GlassTokens.fg(widget.dark);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: widget.dark
+                        ? const Color(0xFF1C1C1E).withValues(alpha: 0.92)
+                        : Colors.white.withValues(alpha: 0.96),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: widget.dark
+                          ? Colors.white.withValues(alpha: 0.10)
+                          : Colors.black.withValues(alpha: 0.06),
+                      width: 0.8,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: widget.dark ? 0.5 : 0.10),
+                        blurRadius: 20, offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _SheetTile(
+                        dark: widget.dark,
+                        icon: Icons.image_rounded,
+                        label: 'Send Photo',
+                        fg: fg,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _pickAndSendMedia(ImageSource.gallery, isVideo: false, isViewOnce: false);
+                        },
+                      ),
+                      Divider(
+                        height: 1, indent: 56,
+                        color: widget.dark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.06),
+                      ),
+                      _SheetTile(
+                        dark: widget.dark,
+                        icon: Icons.image_outlined,
+                        label: 'Send Photo (View Once)',
+                        fg: fg,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _pickAndSendMedia(ImageSource.gallery, isVideo: false, isViewOnce: true);
+                        },
+                      ),
+                      Divider(
+                        height: 1, indent: 56,
+                        color: widget.dark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.06),
+                      ),
+                      _SheetTile(
+                        dark: widget.dark,
+                        icon: Icons.video_camera_back_rounded,
+                        label: 'Send Video',
+                        fg: fg,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _pickAndSendMedia(ImageSource.gallery, isVideo: true, isViewOnce: false);
+                        },
+                      ),
+                      Divider(
+                        height: 1, indent: 56,
+                        color: widget.dark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.06),
+                      ),
+                      _SheetTile(
+                        dark: widget.dark,
+                        icon: Icons.video_camera_front_outlined,
+                        label: 'Send Video (View Once)',
+                        fg: fg,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _pickAndSendMedia(ImageSource.gallery, isVideo: true, isViewOnce: true);
+                        },
+                      ),
+
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickAndSendMedia(ImageSource source, {required bool isVideo, bool isViewOnce = false}) async {
+    final picker = ImagePicker();
+    XFile? pickedFile;
+    try {
+      if (isVideo) {
+        pickedFile = await picker.pickVideo(source: source);
+      } else {
+        pickedFile = await picker.pickImage(source: source);
+      }
+    } catch (e) {
+      if (mounted) {
+        showErrorDialog(context, message: 'Could not pick media: $e');
+      }
+      return;
+    }
+
+    if (pickedFile == null) return;
+    final file = File(pickedFile.path);
+
+    // Show loading spinner
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // 1. Upload to CDN via ChatService().uploadChatMedia
+      final uploadResult = await ChatService().uploadChatMedia(file);
+      final mediaUrl = uploadResult['url'] as String;
+      final mediaPublicId = uploadResult['public_id'] as String;
+      final mediaType = uploadResult['media_type'] as String; // "image" or "video"
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // 2. Send message
+      final sentAt = DateTime.now();
+      final tempId = 'temp_${sentAt.millisecondsSinceEpoch}';
+
+      final optimistic = ChatMessage(
+        id: tempId,
+        conversationId: widget.conversation.id,
+        senderId: widget.myUserId,
+        text: '[MEDIA]',
+        createdAt: sentAt,
+        readBy: [widget.myUserId],
+        mediaUrl: mediaUrl,
+        mediaType: mediaType,
+        mediaPublicId: mediaPublicId,
+        isViewOnce: isViewOnce,
+        viewOnceViewedBy: isViewOnce ? [widget.myUserId] : const [],
+      );
+
+      setState(() {
+        _messages.insert(0, optimistic);
+        _pendingIds.add(tempId);
+      });
+
+      HapticFeedback.lightImpact();
+
+      await ChatService().sendMessage(
+        widget.conversation.id,
+        '[MEDIA]',
+        widget.conversation.participants,
+        createdAt: sentAt,
+        mediaUrl: mediaUrl,
+        mediaType: mediaType,
+        mediaPublicId: mediaPublicId,
+        isViewOnce: isViewOnce,
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // close loading
+        showErrorDialog(context, message: 'Could not send media: $e');
+      }
+    }
+  }
+
 
   void _showBlockedDialog(String username) {
     final dark = widget.dark;
@@ -707,6 +930,24 @@ class _ChatScreenState extends State<ChatScreen>
                               setState(() => _replyingTo = msg);
                             },
                           ),
+                          if (msg.mediaUrl != null && !msg.isViewOnce) ...[
+                            Divider(
+                              height: 1, indent: 56,
+                              color: widget.dark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.06),
+                            ),
+                            _SheetTile(
+                              dark: widget.dark,
+                              icon: Icons.archive_outlined,
+                              label: 'Archive to Profile',
+                              fg: fg,
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                _archiveMessageMedia(msg);
+                              },
+                            ),
+                          ],
                           if (isMe) ...[
                             Divider(
                               height: 1, indent: 56,
@@ -725,6 +966,28 @@ class _ChatScreenState extends State<ChatScreen>
                               },
                             ),
                           ],
+                          if (!isMe) ...[
+                            Divider(
+                              height: 1, indent: 56,
+                              color: widget.dark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.06),
+                            ),
+                            _SheetTile(
+                              dark: widget.dark,
+                              icon: Icons.outlined_flag_rounded,
+                              label: 'Report',
+                              fg: Colors.red,
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                showReportSheet(
+                                  context,
+                                  targetType: ReportService.targetUser,
+                                  targetId: msg.senderId,
+                                );
+                              },
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -737,6 +1000,37 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+
+  Future<void> _archiveMessageMedia(ChatMessage msg) async {
+    if (msg.mediaUrl == null) return;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Archiving media...'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    final success = await UserService.archiveMedia(msg.id);
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Saved to your Archive successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to archive media (already archived or invalid message).'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
 
   // ── Agora Call Methods ─────────────────────────────────────────
   // Flow: send call_invite (callee sees IncomingCallScreen) → open call screen here ("Ringing…")
@@ -991,6 +1285,18 @@ class _ChatScreenState extends State<ChatScreen>
                           onReact: (emoji) => _onReact(msg, emoji),
                           customSenderColor: _customSenderColor,
                           customReceiverColor: _customReceiverColor,
+                          onViewOnceOpened: () {
+                            setState(() {
+                              final idx = _messages.indexWhere((element) => element.id == msg.id);
+                              if (idx != -1) {
+                                final updatedViewedBy = List<String>.from(_messages[idx].viewOnceViewedBy)..add(widget.myUserId);
+                                _messages[idx] = _messages[idx].copyWithViewOnce(
+                                  viewOnceViewedBy: updatedViewedBy,
+                                  clearMediaUrl: true, // clear immediately locally
+                                );
+                              }
+                            });
+                          },
                         ),
                       ),
                     ),
@@ -1151,6 +1457,7 @@ class _ChatScreenState extends State<ChatScreen>
                       dark: widget.dark, icon: Icons.add_rounded,
                       size: 38, iconSize: 22,
                       bg: widget.dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
+                      onTap: _showAttachmentOptions,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1304,6 +1611,7 @@ class _Bubble extends StatelessWidget {
   final void Function(String emoji) onReact;
   final Color? customSenderColor;
   final Color? customReceiverColor;
+  final VoidCallback? onViewOnceOpened;
 
   const _Bubble({
     required this.m, required this.isMe, required this.dark,
@@ -1311,6 +1619,7 @@ class _Bubble extends StatelessWidget {
     this.isPending = false,
     this.customSenderColor,
     this.customReceiverColor,
+    this.onViewOnceOpened,
   });
 
   @override
@@ -1354,7 +1663,7 @@ class _Bubble extends StatelessWidget {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  _bubbleBox(dark, radius, sub, fg),
+                  _bubbleBox(context, dark, radius, sub, fg),
 
                   // ── Instagram-style reaction chips ─────────
                   if (visibleReactions.isNotEmpty)
@@ -1460,7 +1769,22 @@ class _Bubble extends StatelessWidget {
     );
   }
 
-  Widget _bubbleBox(bool dark, BorderRadius radius, Color sub, Color fg) {
+  Widget _bubbleBox(BuildContext context, bool dark, BorderRadius radius, Color sub, Color fg) {
+    if (m.isViewOnce) {
+      return _buildViewOnceBubble(context, dark, radius, sub, fg);
+    }
+
+    if (m.mediaUrl != null) {
+      return _buildNormalMediaBubble(context, dark, radius, sub, fg);
+    }
+
+    // Shared post/reel → render as an Instagram-style card (no DB hit; the
+    // payload carries everything the card needs).
+    final shared = SharedPost.tryParse(m.text);
+    if (shared != null) {
+      return SharedPostCard(post: shared, isMe: isMe, dark: dark);
+    }
+
     if (isMe) {
       final bgColor = customSenderColor ?? (dark ? Colors.white : const Color(0xFF0A0A0A));
       final textCol = bgColor.computeLuminance() > 0.5 ? Colors.black : Colors.white;
@@ -1510,6 +1834,409 @@ class _Bubble extends StatelessWidget {
     );
   }
 
+  Widget _buildNormalMediaBubble(BuildContext context, bool dark, BorderRadius radius, Color sub, Color fg) {
+    final isVideo = m.mediaType == 'video';
+    
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: dark ? 0.35 : 0.08),
+            blurRadius: 12, offset: const Offset(0, 4), spreadRadius: -4,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Media thumbnail
+            GestureDetector(
+              onTap: () {
+                _showFullscreenMedia(context, dark);
+              },
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.35,
+                  maxWidth: MediaQuery.of(context).size.width * 0.65,
+                ),
+                child: isVideo
+                    ? _buildVideoThumbnail(m.mediaUrl!)
+                    : CachedNetworkImage(
+                        imageUrl: m.mediaUrl!,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          height: 200,
+                          width: 200,
+                          color: dark ? Colors.white12 : Colors.black12,
+                          child: const Center(child: CircularProgressIndicator()),
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          height: 150,
+                          width: 150,
+                          color: dark ? Colors.white12 : Colors.black12,
+                          child: const Center(child: Icon(Icons.broken_image, size: 40)),
+                        ),
+                      ),
+              ),
+            ),
+            
+            // Video Play Button
+            if (isVideo)
+              Positioned(
+                child: GestureDetector(
+                  onTap: () => _showFullscreenMedia(context, dark),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.5),
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
+                  ),
+                ),
+              ),
+
+            // Archive Overlay Icon (Top Right)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: () async {
+                  HapticFeedback.lightImpact();
+                  final success = await UserService.archiveMedia(m.id);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(success ? 'Saved to Archive!' : 'Already archived or error'),
+                        backgroundColor: success ? Colors.green : Colors.redAccent,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.45),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+                  ),
+                  child: const Icon(Icons.archive_rounded, color: Colors.white, size: 18),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoThumbnail(String url) {
+    return Container(
+      width: 200,
+      height: 200,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF1E1E24), Color(0xFF0F0F12)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.videocam_rounded, color: Colors.white60, size: 38),
+            SizedBox(height: 8),
+            Text('Play Video', style: TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullscreenMedia(BuildContext context, bool dark) {
+    if (m.mediaUrl == null) return;
+    
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.9),
+      barrierDismissible: true,
+      builder: (ctx) => _FullscreenMediaViewer(
+        mediaUrl: m.mediaUrl!,
+        mediaType: m.mediaType ?? 'image',
+        dark: dark,
+      ),
+    );
+  }
+
+
+  Widget _buildViewOnceBubble(BuildContext context, bool dark, BorderRadius radius, Color sub, Color fg) {
+    final isVideo = m.mediaType == 'video';
+    final hasViewed = m.viewOnceViewedBy.contains(myUserId) || m.mediaUrl == null;
+
+    final bgColor = isMe
+        ? (customSenderColor ?? (dark ? Colors.white : const Color(0xFF0A0A0A)))
+        : (customReceiverColor ?? (dark ? const Color(0xFF242424).withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.95)));
+
+    final textCol = isMe
+        ? (bgColor.computeLuminance() > 0.5 ? Colors.black : Colors.white)
+        : (customReceiverColor != null
+            ? (bgColor.computeLuminance() > 0.5 ? Colors.black : Colors.white)
+            : GlassTokens.fg(dark));
+
+    final displayIcon = isVideo ? Icons.videocam_rounded : Icons.image_rounded;
+    final label = hasViewed
+        ? (isVideo ? 'Opened Video' : 'Opened Photo')
+        : (isVideo ? 'View Once Video' : 'View Once Photo');
+
+    final contentColor = hasViewed ? textCol.withValues(alpha: 0.5) : textCol;
+
+    return GestureDetector(
+      onTap: () {
+        if (hasViewed) return;
+        _showViewOnceMedia(context, dark);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: radius,
+          border: isMe
+              ? null
+              : Border.all(
+                  color: dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04)),
+          boxShadow: [
+            BoxShadow(
+              color: dark
+                  ? Colors.black.withValues(alpha: 0.4)
+                  : const Color(0xFF14161E).withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+              spreadRadius: -4,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasViewed ? Icons.lock_open_rounded : displayIcon,
+              color: contentColor,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: manrope(
+                size: 14,
+                weight: FontWeight.w600,
+                color: contentColor,
+                letterSpacing: -0.07,
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (!hasViewed)
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: textCol.withValues(alpha: 0.15),
+                ),
+                child: Text(
+                  '1',
+                  style: manrope(
+                    size: 10,
+                    weight: FontWeight.w800,
+                    color: textCol,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showViewOnceMedia(BuildContext context, bool dark) {
+    if (m.mediaUrl == null) return;
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.8),
+      barrierDismissible: true,
+      builder: (ctx) => _ViewOnceViewerDialog(
+        mediaUrl: m.mediaUrl!,
+        mediaType: m.mediaType ?? 'image',
+        dark: dark,
+      ),
+    ).then((_) {
+      // Notify server on exit
+      ChatService().markViewOnceViewed(m.conversationId, m.id);
+      // Trigger callback to update local state instantly
+      if (onViewOnceOpened != null) {
+        onViewOnceOpened!();
+      }
+    });
+  }
+
+}
+
+// ─────────────────────────────────────────────────────────────
+// View Once Viewer Dialog & Player
+// ─────────────────────────────────────────────────────────────
+
+class _ViewOnceViewerDialog extends StatelessWidget {
+  final String mediaUrl;
+  final String mediaType;
+  final bool dark;
+
+  const _ViewOnceViewerDialog({
+    required this.mediaUrl,
+    required this.mediaType,
+    required this.dark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isVideo = mediaType == 'video';
+
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: dark ? Colors.black.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: dark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isVideo ? 'View Once Video' : 'View Once Photo',
+                      style: manrope(
+                        size: 15,
+                        weight: FontWeight.w700,
+                        color: GlassTokens.fg(dark),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: dark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                        ),
+                        child: Icon(Icons.close_rounded, size: 18, color: GlassTokens.fg(dark)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Media Content
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: isVideo
+                        ? _ViewOnceVideoPlayer(url: mediaUrl)
+                        : CachedNetworkImage(
+                            imageUrl: mediaUrl,
+                            fit: BoxFit.contain,
+                            placeholder: (_, __) => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                            errorWidget: (_, __, ___) => const Center(
+                              child: Text('Could not load image'),
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ViewOnceVideoPlayer extends StatefulWidget {
+  final String url;
+  const _ViewOnceVideoPlayer({required this.url});
+
+  @override
+  State<_ViewOnceVideoPlayer> createState() => _ViewOnceVideoPlayerState();
+}
+
+class _ViewOnceVideoPlayerState extends State<_ViewOnceVideoPlayer> {
+  late VideoPlayerController _controller;
+  bool _initialized = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() {
+            _initialized = true;
+          });
+          _controller.play();
+          _controller.setLooping(true);
+        }
+      }).catchError((error) {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+          });
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasError) {
+      return const Center(child: Text("Could not play video", style: TextStyle(color: Colors.white)));
+    }
+    if (!_initialized) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    return AspectRatio(
+      aspectRatio: _controller.value.aspectRatio,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          VideoPlayer(_controller),
+          VideoProgressIndicator(_controller, allowScrubbing: true, colors: const VideoProgressColors(playedColor: Colors.white)),
+        ],
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1878,3 +2605,97 @@ class _SwipeToReplyState extends State<SwipeToReply> with SingleTickerProviderSt
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Fullscreen Media Viewer
+// ─────────────────────────────────────────────────────────────
+
+class _FullscreenMediaViewer extends StatelessWidget {
+  final String mediaUrl;
+  final String mediaType;
+  final bool dark;
+
+  const _FullscreenMediaViewer({
+    required this.mediaUrl,
+    required this.mediaType,
+    required this.dark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isVideo = mediaType == 'video';
+
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: dark ? Colors.black.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: dark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isVideo ? 'Video Preview' : 'Photo Preview',
+                      style: manrope(
+                        size: 15,
+                        weight: FontWeight.w700,
+                        color: GlassTokens.fg(dark),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: dark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                        ),
+                        child: Icon(Icons.close_rounded, size: 18, color: GlassTokens.fg(dark)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Media Content
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: isVideo
+                        ? _ViewOnceVideoPlayer(url: mediaUrl) // Reuse the same video player
+                        : CachedNetworkImage(
+                            imageUrl: mediaUrl,
+                            fit: BoxFit.contain,
+                            placeholder: (_, __) => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                            errorWidget: (_, __, ___) => const Center(
+                              child: Text('Could not load image'),
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

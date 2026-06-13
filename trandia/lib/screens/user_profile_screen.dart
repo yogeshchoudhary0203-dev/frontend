@@ -16,6 +16,8 @@ import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/post_service.dart';
 import '../services/block_service.dart';
+import '../services/report_service.dart';
+import '../widgets/report_sheet.dart';
 import '../models/chat_model.dart';
 import '../utils/error_dialog.dart';
 import 'chat_screen.dart';
@@ -205,6 +207,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onTap: () {
               Navigator.pop(ctx);
               _handleBlock();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.outlined_flag_rounded, color: Colors.redAccent),
+            title: const Text(
+              'Report User',
+              style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
+            ),
+            onTap: () {
+              Navigator.pop(ctx);
+              showReportSheet(
+                context,
+                targetType: ReportService.targetUser,
+                targetId: widget.userId,
+              );
             },
           ),
           const SizedBox(height: 8),

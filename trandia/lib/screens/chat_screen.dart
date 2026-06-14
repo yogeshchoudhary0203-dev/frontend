@@ -10,6 +10,8 @@ import 'dart:ui';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
+import '../services/coachmark_service.dart';
 import 'package:flutter/services.dart';
 import '../models/chat_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -162,10 +164,31 @@ class _ChatScreenState extends State<ChatScreen>
   bool _isLoadingOlderMessages = false;
   bool _hasOlderMessages = true;
 
+  final GlobalKey _coachChatInputKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('Chat');
     _loadCustomBubbleColors();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      CoachmarkService.showTour(
+        context,
+        tourId: 'chat_v1',
+        isDark: widget.dark,
+        steps: [
+          CoachStep(
+            key: _coachChatInputKey,
+            title: 'Send a message',
+            body: 'Type here and hit send. Tap + to share photos or files. '
+                'Your chats are end-to-end encrypted.',
+            align: ContentAlign.top,
+            radius: 24,
+          ),
+        ],
+      );
+    });
 
     // ── Setup entrance animation ────────────────────────────
     _entranceCtrl = AnimationController(
@@ -1451,7 +1474,7 @@ class _ChatScreenState extends State<ChatScreen>
                         : const Color(0xFF14161E).withValues(alpha: 0.20),
                     blurRadius: 30, offset: const Offset(0, -10), spreadRadius: -16,
                   ),
-                  child: Row(children: [
+                  child: KeyedSubtree(key: _coachChatInputKey, child: Row(children: [
                     const SizedBox(width: 2),
                     GlassCircleButton(
                       dark: widget.dark, icon: Icons.add_rounded,
@@ -1487,7 +1510,7 @@ class _ChatScreenState extends State<ChatScreen>
                       ),
                     ),
                     const SizedBox(width: 2),
-                  ]),
+                  ])),
                 ),
               ),
             ],

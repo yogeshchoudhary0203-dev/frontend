@@ -4,6 +4,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import '../../services/analytics_service.dart';
+import '../../services/coachmark_service.dart';
 import '../../services/fcm_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/auth_service.dart';
@@ -63,6 +65,14 @@ class _HomeScreenState extends State<HomeScreen>
   Rect   _islandRect   = Rect.zero;
   final  GlobalKey _islandKey = GlobalKey();
 
+  // -- First-run guided tour (coachmarks) ------------
+  final GlobalKey _coachInfinityKey = GlobalKey();
+  final GlobalKey _coachPostKey     = GlobalKey();
+  final GlobalKey _coachStarKey     = GlobalKey();
+  final GlobalKey _coachMsgKey      = GlobalKey();
+  final List<GlobalKey> _navItemKeys = List.generate(5, (_) => GlobalKey());
+  bool _homeTourTried = false;
+
   // -- Real-time notification listeners -------------
   StreamSubscription? _fcmNotifSub;
   StreamSubscription? _wsNotifSub;
@@ -90,6 +100,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('Home');
     _navCtrl = AnimationController(vsync: this,
         duration: const Duration(milliseconds: 450));
     for (int i = 0; i < 5; i++) {
@@ -256,6 +267,7 @@ class _HomeScreenState extends State<HomeScreen>
           _posts.addAll(cached);
           _feedError = false;
         });
+        _maybeShowHomeTour();
         // Then silently fetch fresh data in background
         _silentlyRefreshFeed();
         return;
@@ -281,6 +293,7 @@ class _HomeScreenState extends State<HomeScreen>
         _feedError = false;
         FeedVideoPool.grow(_posts);
       });
+      _maybeShowHomeTour();
       // Save first page to local DB for next cold open
       if ((refresh || isFirstPage) && result.posts.isNotEmpty) {
         unawaited(LocalDb.instance.saveFeedPosts(result.posts));
@@ -290,6 +303,132 @@ class _HomeScreenState extends State<HomeScreen>
     } finally {
       if (mounted) setState(() => _loadingFeed = false);
     }
+  }
+
+  /// First-run guided tour for the home hub. Auto-expands the nav so every
+  /// icon can be explained one-by-one, walks through the top bar, nav items
+  /// and control button, then closes the nav. Shown only on the first visit.
+  Future<void> _maybeShowHomeTour() async {
+    if (_homeTourTried || _posts.isEmpty) return;
+    _homeTourTried = true;
+
+    // Returning users: skip entirely (don't even flash the nav open).
+    if (await CoachmarkService.hasSeen('home_v2')) return;
+    if (!mounted) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Auto-expand the navbar so each icon is laid out and visible.
+    setState(() {
+      _navOpen = true;
+      _navHorizontal = false;
+    });
+    _navCtrl.forward(from: 0);
+
+    // Let the open animation settle before the tour measures the icons.
+    await Future.delayed(const Duration(milliseconds: 560));
+    if (!mounted) return;
+
+    void closeNav() {
+      if (!mounted) return;
+      setState(() => _navOpen = false);
+      _navCtrl.reverse();
+    }
+
+    final shown = await CoachmarkService.showTour(
+      context,
+      tourId: 'home_v2',
+      isDark: isDark,
+      onDone: closeNav,
+      steps: [
+        CoachStep(
+          key: _coachStarKey,
+          title: 'Your Skill Score ⭐',
+          body: 'Earn points by watching & posting educational (Learn) content. '
+              'Tap to see your score and progress by subject.',
+          align: ContentAlign.bottom,
+          shape: ShapeLightFocus.Circle,
+          radius: 22,
+        ),
+        CoachStep(
+          key: _coachMsgKey,
+          title: 'Messages',
+          body: 'Your chats live here — open conversations and send '
+              'end-to-end encrypted messages.',
+          align: ContentAlign.bottom,
+          shape: ShapeLightFocus.Circle,
+          radius: 22,
+        ),
+        CoachStep(
+          key: _islandKey,
+          title: 'Live updates',
+          body: 'Notifications, calls and activity appear here. Tap to expand '
+              'and see what\'s new.',
+          align: ContentAlign.bottom,
+          radius: 20,
+        ),
+        CoachStep(
+          key: _navItemKeys[0],
+          title: 'Home',
+          body: 'Your main feed — posts and reels from people you follow and '
+              'topics you like.',
+          align: ContentAlign.left,
+          shape: ShapeLightFocus.Circle,
+          radius: 26,
+        ),
+        CoachStep(
+          key: _navItemKeys[1],
+          title: 'Reels',
+          body: 'Watch short videos — both fun and Learn reels. Swipe up for '
+              'the next one.',
+          align: ContentAlign.left,
+          shape: ShapeLightFocus.Circle,
+          radius: 26,
+        ),
+        CoachStep(
+          key: _navItemKeys[2],
+          title: 'Create',
+          body: 'Post a photo or video — share to your feed or as a reel.',
+          align: ContentAlign.left,
+          shape: ShapeLightFocus.Circle,
+          radius: 26,
+        ),
+        CoachStep(
+          key: _navItemKeys[3],
+          title: 'Search',
+          body: 'Discover people, posts and topics across Trandia.',
+          align: ContentAlign.left,
+          shape: ShapeLightFocus.Circle,
+          radius: 26,
+        ),
+        CoachStep(
+          key: _navItemKeys[4],
+          title: 'Profile',
+          body: 'Your profile, posts, settings and privacy — all in one place.',
+          align: ContentAlign.left,
+          shape: ShapeLightFocus.Circle,
+          radius: 26,
+        ),
+        CoachStep(
+          key: _coachInfinityKey,
+          title: 'Your control button',
+          body: 'Tap to open or close this menu. Double-tap to instantly create '
+              'a reel, and long-press for the side layout.',
+          align: ContentAlign.top,
+          shape: ShapeLightFocus.Circle,
+          radius: 38,
+        ),
+        CoachStep(
+          key: _coachPostKey,
+          title: 'Like, comment & share',
+          body: 'React to any post with the icons below it — like, comment, '
+              'share or save. Scroll up for more.',
+          align: ContentAlign.bottom,
+          radius: 16,
+        ),
+      ],
+    );
+    if (!shown) closeNav();
   }
 
   /// Fetch fresh feed from API without showing a loading spinner.
@@ -785,7 +924,7 @@ class _HomeScreenState extends State<HomeScreen>
                   );
                 }
                 final post = _posts[postIdx];
-                return PostCard(
+                final card = PostCard(
                   key: ValueKey(post.id),
                   post: post,
                   isDark: isDark,
@@ -795,6 +934,10 @@ class _HomeScreenState extends State<HomeScreen>
                   postIndex: postIdx,
                   allPosts: _posts,
                 );
+                // Anchor the first-run "post actions" coachmark to the top post.
+                return postIdx == 0
+                    ? KeyedSubtree(key: _coachPostKey, child: card)
+                    : card;
               },
             ),
           ),
@@ -804,7 +947,9 @@ class _HomeScreenState extends State<HomeScreen>
 
           Align(alignment: Alignment.topLeft,
             child: Padding(padding: const EdgeInsets.only(top: 10, left: 14),
-              child: GestureDetector(
+              child: KeyedSubtree(
+                key: _coachStarKey,
+                child: GestureDetector(
                 onTap: () => _openStarScreen(isDark),
                 child: SizedBox(width: 30, height: 30,
                   child: Icon(
@@ -813,7 +958,7 @@ class _HomeScreenState extends State<HomeScreen>
                     color: isDark ? Colors.white : const Color(0xFF1A1A1A),
                   ),
                 ),
-              ))),
+              )))),
 
           Align(alignment: Alignment.topCenter,
             child: Padding(padding: const EdgeInsets.only(top: 8),
@@ -858,7 +1003,9 @@ class _HomeScreenState extends State<HomeScreen>
           // Message icon
           Align(alignment: Alignment.topRight,
             child: Padding(padding: const EdgeInsets.only(top: 10, right: 14),
-              child: GestureDetector(
+              child: KeyedSubtree(
+                key: _coachMsgKey,
+                child: GestureDetector(
                 onTap: _openChatScreen,
                 child: Stack(
                   clipBehavior: Clip.none,
@@ -898,7 +1045,7 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                   ],
                 ),
-              ))),
+              )))),
 
           // Navbar
           Positioned(
@@ -913,6 +1060,7 @@ class _HomeScreenState extends State<HomeScreen>
                   itemScales: _itemScales, itemOpacities: _itemOpacities,
                   userPicture: _myProfilePic,
                   userName: _myProfileName,
+                  itemKeys: _navItemKeys,
                   onTap: (i) {
                     setState(() => _activeNav = i);
                     if (i == 1) _openScreen(context, ShotsScreen(dark: isDark));
@@ -927,13 +1075,15 @@ class _HomeScreenState extends State<HomeScreen>
 
           // Infinity button
           Positioned(bottom: 30, right: 20,
-            child: InfinityBtn(
-              isDark: isDark,
-              isOpen: _navOpen,
-              onTap: _toggleNav,
-              onLongPress: _openHorizontalNav,
-              onDoubleTap: () => _openQuickReel(isDark),
-            )),
+            child: KeyedSubtree(
+              key: _coachInfinityKey,
+              child: InfinityBtn(
+                isDark: isDark,
+                isOpen: _navOpen,
+                onTap: _toggleNav,
+                onLongPress: _openHorizontalNav,
+                onDoubleTap: () => _openQuickReel(isDark),
+              ))),
         ])),
 
         // -- Dynamic Island expand overlay ------------------

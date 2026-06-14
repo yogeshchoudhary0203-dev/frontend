@@ -10,6 +10,8 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
+import '../services/coachmark_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/api_service.dart';
 import '../services/app_badge_service.dart';
@@ -184,10 +186,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String? _nextCursor;
   int _fetchGeneration = 0;
   int _realtimeGeneration = 0;
+  final GlobalKey _coachNotifDeleteKey = GlobalKey();
+  bool _notifTourTried = false;
 
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('Notifications');
     _scroll.addListener(_onScroll);
     _fetchNotifications();
     _listenForRealtimeNotifications();
@@ -245,6 +250,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           _hasMore = items.length == _pageSize;
           _loading = false;
         });
+        _maybeShowNotifTour();
       }
     } catch (e) {
       debugPrint('[Notifications] fetch error: $e');
@@ -252,6 +258,31 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         setState(() { _loading = false; _error = true; });
       }
     }
+  }
+
+  /// First-run coachmark pointing at the per-notification delete button.
+  /// Only fires when there is at least one notification to anchor to.
+  void _maybeShowNotifTour() {
+    if (_notifTourTried || _items.isEmpty) return;
+    _notifTourTried = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      CoachmarkService.showTour(
+        context,
+        tourId: 'notifications_v1',
+        isDark: widget.dark,
+        steps: [
+          CoachStep(
+            key: _coachNotifDeleteKey,
+            title: 'Manage notifications',
+            body: 'Tap the trash icon on any notification to delete it. Use the '
+                '✓ button at the top to mark everything as read.',
+            align: ContentAlign.bottom,
+            radius: 16,
+          ),
+        ],
+      );
+    });
   }
 
   Future<void> _fetchMoreNotifications() async {
@@ -573,7 +604,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             );
           }
-          return _DynamicIslandScrollCard(
+          final card = _DynamicIslandScrollCard(
             key: ValueKey(items[i].id.isEmpty ? i.toString() : items[i].id),
             controller: _scroll,
             index: i,
@@ -595,6 +626,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             ),
           );
+          // Anchor the delete coachmark to the first notification card.
+          return i == 0
+              ? KeyedSubtree(key: _coachNotifDeleteKey, child: card)
+              : card;
         },
       ),
     );

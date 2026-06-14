@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
 import 'package:flutter/services.dart';
 import '../models/quiz_model.dart';
 import '../services/quiz_service.dart';
@@ -39,6 +40,8 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('Quiz');
+    AnalyticsService.logEvent('quiz_opened');
     _pulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),

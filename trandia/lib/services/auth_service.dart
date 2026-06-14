@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'analytics_service.dart';
 import 'api_service.dart';
 import 'app_badge_service.dart';
 import 'chat_service.dart';
@@ -212,6 +214,8 @@ class AuthService {
       body: 'Hi $firstName, you\'re all set. Explore and connect with people.',
     );
 
+    unawaited(getUserId().then(AnalyticsService.setUser));
+    AnalyticsService.logEvent('sign_up', {'method': 'email'});
     return data;
   }
 
@@ -250,6 +254,8 @@ class AuthService {
       title: 'Welcome back, $firstName ✦',
       body: 'Great to have you back. Your feed is right where you left it.',
     );
+    unawaited(getUserId().then(AnalyticsService.setUser));
+    AnalyticsService.logEvent('login', {'method': 'email'});
     return data;
   }
 
@@ -288,6 +294,8 @@ class AuthService {
       title: 'Welcome to Trandia ✦',
       body: 'Hi $firstName, you\'re all set. Explore and connect with people.',
     );
+    unawaited(getUserId().then(AnalyticsService.setUser));
+    AnalyticsService.logEvent('login', {'method': 'google'});
     return data;
   }
 
@@ -369,6 +377,7 @@ class AuthService {
       await db.clearAll();
     } catch (_) {}
     try { await AppBadgeService.clear(); } catch (_) {}
+    try { await AnalyticsService.setUser(null); } catch (_) {}
     try { ChatService().dispose(); } catch (_) {}
     try { await FirebaseAuth.instance.signOut(); } catch (_) {}
     if (!kIsWeb) {

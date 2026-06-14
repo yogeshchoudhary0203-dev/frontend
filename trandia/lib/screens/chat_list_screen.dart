@@ -2,6 +2,8 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
+import '../services/coachmark_service.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
@@ -42,12 +44,33 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
   Set<String> _blockedIds = {};
   String _activeFilter = 'all'; // 'all' | 'locked' | 'archived' | 'blocked'
   bool _lockedTabUnlocked = false; // true once user has verified PIN in this session
+  final GlobalKey _coachBellKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('ChatList');
     WidgetsBinding.instance.addObserver(this);
     _initData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      CoachmarkService.showTour(
+        context,
+        tourId: 'messages_v1',
+        isDark: widget.dark,
+        steps: [
+          CoachStep(
+            key: _coachBellKey,
+            title: 'Message notifications',
+            body: 'Tap the bell to turn message alerts on or off. When it shows '
+                'a crossed-out bell, you won\'t get notified for new messages.',
+            align: ContentAlign.bottom,
+            shape: ShapeLightFocus.Circle,
+            radius: 22,
+          ),
+        ],
+      );
+    });
   }
 
   @override
@@ -344,7 +367,9 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                             color: fg,
                             letterSpacing: -0.34)),
                     const Spacer(),
-                    ValueListenableBuilder<bool>(
+                    KeyedSubtree(
+                      key: _coachBellKey,
+                      child: ValueListenableBuilder<bool>(
                       valueListenable: FcmService.chatNotifsNotifier,
                       builder: (_, notifsOn, __) => GlassCircleButton(
                         dark: widget.dark,
@@ -358,7 +383,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                           FcmService.setChatNotificationsEnabled(!FcmService.chatNotificationsEnabled);
                         },
                       ),
-                    ),
+                    )),
                   ]),
                 ),
               ),

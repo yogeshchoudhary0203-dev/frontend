@@ -9,6 +9,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
+import '../services/coachmark_service.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -216,12 +218,32 @@ class _SearchScreenState extends State<SearchScreen> {
   List<RecentItem> _recentItems = [];
   List<UserProfile> _suggestedUsers = [];
   bool _loadingSuggested = false;
+  final GlobalKey _coachSearchKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('Search');
     _loadSearchHistory();
     _loadSuggestedUsers();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final dark = Theme.of(context).brightness == Brightness.dark;
+      CoachmarkService.showTour(
+        context,
+        tourId: 'search_v1',
+        isDark: dark,
+        steps: [
+          CoachStep(
+            key: _coachSearchKey,
+            title: 'Find anything',
+            body: 'Search for people, posts and topics across Trandia from here.',
+            align: ContentAlign.bottom,
+            radius: 22,
+          ),
+        ],
+      );
+    });
   }
 
   Future<void> _loadSuggestedUsers() async {
@@ -517,12 +539,14 @@ class _SearchScreenState extends State<SearchScreen> {
                 onTap: () => Navigator.of(context).maybePop(),
               ),
               const SizedBox(width: 8),
-              Expanded(child: _SearchInputPill(
+              Expanded(child: KeyedSubtree(
+                key: _coachSearchKey,
+                child: _SearchInputPill(
                 dark: dark, value: _query,
                 placeholder: 'Search Trandia',
                 onChanged: _onSearchChanged,
                 onClear: () => _onSearchChanged(''),
-              )),
+              ))),
             ]),
           ),
         ),

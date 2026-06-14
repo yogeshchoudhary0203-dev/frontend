@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../l10n/app_localizations.dart';
+import '../services/coachmark_service.dart';
 import '../services/media_upload_service.dart';
 import '../services/post_service.dart';
 import 'glass_common.dart';
@@ -70,6 +71,7 @@ class _CpTopBar extends StatelessWidget {
   final VoidCallback? onRight;
 
   const _CpTopBar({
+    super.key,
     required this.dark,
     this.left,
     required this.title,
@@ -660,11 +662,30 @@ class _CreatePostDetailsScreenState extends State<CreatePostDetailsScreen> {
   late final TextEditingController _learnTopic = TextEditingController();
   late CpVideoSection _section;
   String _audience = 'Everyone';
+  final GlobalKey _coachShareKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _section = widget.initialSection;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      CoachmarkService.showTour(
+        context,
+        tourId: 'create_share_v1',
+        isDark: widget.dark,
+        steps: [
+          CoachStep(
+            key: _coachShareKey,
+            title: 'Almost done',
+            body: 'Add a caption (and a topic for Learn videos), then tap Share '
+                'to publish your post.',
+            align: ContentAlign.bottom,
+            radius: 14,
+          ),
+        ],
+      );
+    });
   }
 
   @override
@@ -697,6 +718,7 @@ class _CreatePostDetailsScreenState extends State<CreatePostDetailsScreen> {
         child: Column(
           children: [
             _CpTopBar(
+              key: _coachShareKey,
               dark: widget.dark,
               left: _cpIconBtn(
                 dark: widget.dark,

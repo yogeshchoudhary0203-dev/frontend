@@ -9,6 +9,7 @@
 
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
 import 'package:flutter/services.dart';
 import '../services/user_service.dart';
 import '../services/follow_state.dart';
@@ -82,6 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('UserProfile');
     _isFollowing = FollowState.get(widget.userId) ?? widget.initialFollowing;
     _scrollCtrl.addListener(_onScroll);
     FollowState.notifier.addListener(_onGlobalFollowChanged);

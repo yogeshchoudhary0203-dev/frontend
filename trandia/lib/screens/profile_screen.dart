@@ -3,6 +3,8 @@
 // Actual UI sections are in lib/widgets/profile/.
 
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
+import '../services/coachmark_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'glass_common.dart';
 import 'followers_screen.dart';
@@ -46,10 +48,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _profileScrollCtrl = ScrollController();
   String? _nextPostCursor;
   bool _isLoadingMorePosts = false;
+  final GlobalKey _coachProfileKey = GlobalKey();
+  bool _profileTourTried = false;
 
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('Profile');
     _profileScrollCtrl.addListener(_onProfileScroll);
     _loadProfile();
   }
@@ -121,6 +126,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isPrivateAccount = accountType == 'Private';
           _isLoading = false;
         });
+        _maybeShowProfileTour();
         if (cached == null || forceRefresh) _loadPosts(profile.id);
       } else {
         if (mounted) setState(() => _isLoading = false);
@@ -128,6 +134,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// First-run guided tour for the profile screen. Fires once the profile (and
+  /// thus the settings button) is on screen. Shown only on the first visit.
+  void _maybeShowProfileTour() {
+    if (_profileTourTried) return;
+    _profileTourTried = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      CoachmarkService.showTour(
+        context,
+        tourId: 'profile_v1',
+        isDark: widget.dark,
+        steps: [
+          CoachStep(
+            key: _coachProfileKey,
+            title: 'Settings & privacy',
+            body: 'Edit your profile, manage privacy, account and more from '
+                'here.',
+            align: ContentAlign.left,
+            shape: ShapeLightFocus.Circle,
+            radius: 24,
+          ),
+        ],
+      );
+    });
   }
 
   Future<void> _loadPosts(String userId) async {
@@ -452,7 +484,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ],
                             ),
                             const Spacer(),
-                            GlassCircleButton(
+                            KeyedSubtree(
+                              key: _coachProfileKey,
+                              child: GlassCircleButton(
                               dark: dark,
                               icon: Icons.settings_outlined,
                               iconSize: 19,
@@ -488,7 +522,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   (_) => _loadProfile(forceRefresh: true),
                                 );
                               },
-                            ),
+                            )),
                           ],
                         ),
                       ),

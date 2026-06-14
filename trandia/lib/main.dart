@@ -11,6 +11,7 @@ import 'screens/interest_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/intro_slides.dart';
 import 'screens/app_lock_screen.dart';
+import 'services/analytics_service.dart';
 import 'services/api_service.dart';
 import 'services/app_badge_service.dart';
 import 'services/auth_service.dart';
@@ -53,6 +54,10 @@ void main() async {
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     debugPrint('[Firebase] ✅ initialized');
+    // Product analytics (users / screens / feature usage). Fire-and-forget so
+    // it never delays startup; setUser is best-effort and self-heals on login.
+    unawaited(AnalyticsService.setEnabled(true));
+    unawaited(AuthService.getUserId().then(AnalyticsService.setUser));
   } catch (e) {
     debugPrint('[Firebase] ❌ $e');
   }
@@ -169,7 +174,7 @@ class _TrandiaAppState extends State<TrandiaApp> with WidgetsBindingObserver {
               debugShowCheckedModeBanner: false,
               title: 'Trandia',
               navigatorKey: navigatorKey,
-              navigatorObservers: [appRouteObserver],
+              navigatorObservers: [appRouteObserver, AnalyticsService.navigatorObserver()],
               theme: ThemeData(
                 brightness: Brightness.light,
                 scaffoldBackgroundColor: const Color(0xFFFFFFFF),

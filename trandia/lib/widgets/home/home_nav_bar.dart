@@ -15,11 +15,15 @@ class StaggeredNavbar extends StatelessWidget {
   final String? userPicture, userName;
   final ValueChanged<int> onTap;
 
+  /// Optional per-item keys (length 5) used to anchor first-run coachmarks to
+  /// individual nav icons. Purely additive — no effect on layout.
+  final List<GlobalKey>? itemKeys;
+
   const StaggeredNavbar({
     super.key,
     required this.isDark, required this.activeIndex, required this.isHorizontal,
     required this.animation, required this.itemScales, required this.itemOpacities,
-    this.userPicture, this.userName, required this.onTap,
+    this.userPicture, this.userName, required this.onTap, this.itemKeys,
   });
 
   @override
@@ -68,7 +72,7 @@ class StaggeredNavbar extends StatelessWidget {
                       final double offsetValue = (1.0 - scaleVal) * 28.0;
                       final Offset translateOffset = isHorizontal ? Offset(offsetValue, 0) : Offset(0, offsetValue);
                       final double angle = (1.0 - scaleVal) * -0.35;
-                      return ScaleTransition(scale: itemScales[i],
+                      final Widget item = ScaleTransition(scale: itemScales[i],
                         child: FadeTransition(opacity: itemOpacities[i],
                           child: Transform.translate(offset: translateOffset,
                             child: Transform.rotate(angle: angle,
@@ -87,6 +91,9 @@ class StaggeredNavbar extends StatelessWidget {
                                       size: const Size(24.0, 24.0),
                                       painter: _NavIconPainter(index: i, isDark: isDark, active: active))))),
                                 ))))));
+                      return (itemKeys != null && i < itemKeys!.length)
+                          ? KeyedSubtree(key: itemKeys![i], child: item)
+                          : item;
                     }),
                   ),
                 ),

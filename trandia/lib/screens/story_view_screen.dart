@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/chat_model.dart';
@@ -42,6 +43,8 @@ class _StoryViewScreenState extends State<StoryViewScreen>
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('StoryView');
+    AnalyticsService.logEvent('story_viewed');
     _groups = List.from(widget.groups);
     _groupIdx = widget.initialGroupIndex.clamp(0, _groups.length - 1);
     

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,8 @@ import '../../services/post_service.dart';
 import '../../utils/share_helper.dart';
 import '../shared/home_shared.dart';
 import 'video_card.dart';
+import '../report_sheet.dart';
+import '../../services/report_service.dart';
 
 // ═════════════════════════════════════════════════════
 //  POST CARD
@@ -76,13 +79,122 @@ class _PostCardState extends State<PostCard> {
     ));
   }
 
+  final GlobalKey _menuKey = GlobalKey();
+
+  /// Liquid-glass options box, anchored under the 3-dot button, with the rest
+  /// of the home screen blurred out behind it.
+  void _showPostMenu() {
+    HapticFeedback.selectionClick();
+    final p = widget.post;
+    final dark = widget.isDark;
+
+    final box = _menuKey.currentContext?.findRenderObject() as RenderBox?;
+    final pos = box?.localToGlobal(Offset.zero);
+    final top = (pos?.dy ?? 70) + (box?.size.height ?? 22) + 4;
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'post menu',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 160),
+      pageBuilder: (dctx, _, __) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.pop(dctx),
+        child: Stack(children: [
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                color: (dark ? Colors.black : Colors.white).withValues(alpha: 0.22),
+              ),
+            ),
+          ),
+          Positioned(
+            top: top,
+            right: 12,
+            child: GestureDetector(onTap: () {}, child: _menuBox(dark, p, dctx)),
+          ),
+        ]),
+      ),
+      transitionBuilder: (dctx, anim, _, child) => FadeTransition(
+        opacity: anim,
+        child: ScaleTransition(
+          scale: Tween(begin: 0.9, end: 1.0)
+              .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+          alignment: Alignment.topRight,
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _menuBox(bool dark, PostModel p, BuildContext dctx) {
+    final fg = dark ? Colors.white : const Color(0xFF0A0A0A);
+    final bg = dark
+        ? const Color(0xFF1C1C1F).withValues(alpha: 0.82)
+        : Colors.white.withValues(alpha: 0.92);
+    final brd = (dark ? Colors.white : Colors.black).withValues(alpha: 0.12);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          width: 196,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: brd, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: dark ? 0.5 : 0.15),
+                blurRadius: 30,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _menuItem(fg, Icons.outlined_flag_rounded, 'Report', () {
+              Navigator.pop(dctx);
+              showReportSheet(context,
+                  targetType: ReportService.targetPost, targetId: p.id);
+            }),
+            Divider(height: 1, color: brd),
+            _menuItem(fg, Icons.share_outlined, 'Share', () {
+              Navigator.pop(dctx);
+              ShareHelper.showShareBottomSheet(context, p);
+            }),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _menuItem(Color fg, IconData icon, String label, VoidCallback onTap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(children: [
+            Icon(icon, size: 19, color: fg.withValues(alpha: 0.85)),
+            const SizedBox(width: 12),
+            Text(label,
+                style: TextStyle(
+                    color: fg, fontSize: 14, fontWeight: FontWeight.w600)),
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p    = widget.post;
     final dark = widget.isDark;
     final Color border      = (dark ? Colors.white : Colors.black).op(0.12);
     final Color textPrimary = (dark ? Colors.white : Colors.black).op(0.90);
-    final Color textSub     = (dark ? Colors.white : Colors.black).op(0.45);
     final Color iconCol     = (dark ? Colors.white : Colors.black).op(0.80);
     final Color likedCol    = dark ? const Color(0xFFFF3040) : const Color(0xFFED4956);
     final avatarBg          = _avatarColor(p.userId);
@@ -110,7 +222,15 @@ class _PostCardState extends State<PostCard> {
               ]),
             ),
             const Spacer(),
-            Text(p.timeAgo, style: TextStyle(color: textSub, fontSize: 11)),
+            GestureDetector(
+              key: _menuKey,
+              behavior: HitTestBehavior.opaque,
+              onTap: _showPostMenu,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Icon(Icons.more_vert_rounded, size: 20, color: iconCol),
+              ),
+            ),
           ])),
 
         p.isVideo

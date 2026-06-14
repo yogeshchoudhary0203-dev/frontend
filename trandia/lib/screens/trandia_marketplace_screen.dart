@@ -19,6 +19,7 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
 import 'package:flutter/services.dart';
 import 'trandia_marketplace_profile_screen.dart';
 import '../services/marketplace_service.dart';
@@ -249,6 +250,7 @@ class _TrandiaMarketplaceScreenState extends State<TrandiaMarketplaceScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('Marketplace');
     _fetch('');
   }
 

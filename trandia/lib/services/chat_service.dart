@@ -7,6 +7,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:mime/mime.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/chat_model.dart';
+import 'analytics_service.dart';
 import 'api_service.dart';
 import 'cryptography_service.dart';
 import 'auth_service.dart';
@@ -331,6 +332,10 @@ class ChatService {
     bool isViewOnce = false,
   }) async {
     try {
+      // Feature-usage signal only — never logs message content (E2E/private).
+      AnalyticsService.logEvent('message_sent', {
+        'has_media': (mediaUrl != null).toString(),
+      });
       await _ensureKeysLoaded();
 
       // For view-once media messages, the text is a placeholder — we still

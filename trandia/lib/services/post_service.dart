@@ -1,3 +1,4 @@
+import 'analytics_service.dart';
 import 'api_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -215,6 +216,10 @@ class PostService {
         rethrow;
       }
     }
+    AnalyticsService.logEvent('post_created', {
+      'media_type': mediaType,
+      if (section != null) 'section': section,
+    });
     return PostModel.fromJson(data);
   }
 

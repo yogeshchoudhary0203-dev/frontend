@@ -22,6 +22,8 @@ import 'package:video_player/video_player.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/analytics_service.dart';
+import '../services/coachmark_service.dart';
 import '../services/post_service.dart';
 import '../services/user_service.dart';
 import '../services/video_controller_pool.dart';
@@ -114,6 +116,11 @@ class _ShotsScreenState extends State<ShotsScreen>
   bool _loading = false;
   bool _error = false;
 
+  // First-run guided tour (coachmarks).
+  final GlobalKey _coachRailKey = GlobalKey();
+  final GlobalKey _coachFeedToggleKey = GlobalKey();
+  bool _shotsTourTried = false;
+
   // ── Video controller pool ─────────────────────────────────────
   // Exactly 3 controllers alive at once (prev / cur / next).
   // The pool is the sole owner of every VideoPlayerController.
@@ -166,6 +173,7 @@ class _ShotsScreenState extends State<ShotsScreen>
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreen('Shots');
     _pool = VideoControllerPool(
       urlResolver: (i) => _posts[i].mediaUrl,
       itemCount: 0,
@@ -278,6 +286,7 @@ class _ShotsScreenState extends State<ShotsScreen>
       }
 
       setState(() {});
+      _maybeShowShotsTour();
 
       // Warm up first video immediately after a refresh.
       if (refresh && _posts.isNotEmpty && !_poolInitialized) {
@@ -290,6 +299,41 @@ class _ShotsScreenState extends State<ShotsScreen>
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// First-run guided tour for the reels screen — fires once a video and its
+  /// action rail are on screen. Shown only on the first visit.
+  void _maybeShowShotsTour() {
+    if (_shotsTourTried || _posts.isEmpty) return;
+    _shotsTourTried = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      CoachmarkService.showTour(
+        context,
+        tourId: 'shots_v2',
+        isDark: true, // reels screen is always dark
+        steps: [
+          CoachStep(
+            key: _coachFeedToggleKey,
+            title: 'Fun & Learn reels',
+            body: 'Switch between Fun and Learn here. Watch some Fun reels and '
+                'we\'ll nudge you toward Learn — then keep watching Learn reels '
+                'and Trandia auto-generates an AI quiz to test what you learned! '
+                'The camera (right) records a new reel.',
+            align: ContentAlign.bottom,
+            radius: 16,
+          ),
+          CoachStep(
+            key: _coachRailKey,
+            title: 'React & explore',
+            body: 'Like, comment, share or save a reel from here. Swipe up for '
+                'the next video, swipe down to go back.',
+            align: ContentAlign.left,
+            radius: 18,
+          ),
+        ],
+      );
+    });
   }
 
   // ── Like / Unlike (real API + optimistic UI) ─────────────────
@@ -842,12 +886,14 @@ class _ShotsScreenState extends State<ShotsScreen>
             top: topInset == 0 ? 14 : topInset + 10,
             left: 16,
             right: 16,
-            child: _TopBar(
+            child: KeyedSubtree(
+              key: _coachFeedToggleKey,
+              child: _TopBar(
               feed: _feed,
               onTap: _setFeed,
               onExit: () => Navigator.of(context).pop(),
               onCamera: _openShotsCamera,
-            ),
+            )),
           ),
 
           // ── Mute / unmute (top-right under camera) ─────────────
@@ -878,7 +924,9 @@ class _ShotsScreenState extends State<ShotsScreen>
             Positioned(
               right: 12,
               bottom: 70,
-              child: _RightRail(
+              child: KeyedSubtree(
+                key: _coachRailKey,
+                child: _RightRail(
                 data: curData,
                 liked:
                     _liked[_curIdx] ??
@@ -897,7 +945,7 @@ class _ShotsScreenState extends State<ShotsScreen>
                   setState(() => _commentsCount[_curIdx] = newCount);
                   _recordEngagement(_curIdx, 'comment');
                 },
-              ),
+              )),
             ),
 
           // ── Bottom-left: @handle + caption + 3-dot ─────────────
